@@ -1,0 +1,78 @@
+import type { Metadata } from "next";
+import { Navbar } from "@/components/site/navbar";
+import { Hero } from "@/components/site/hero";
+import { About, Categories, Designers, Events, Footer, Gallery, Marquee, Reviews, Visit } from "@/components/site/sections";
+import { SiteMotion } from "@/components/site/motion";
+
+export const metadata: Metadata = {
+  title: "JadePink — Multi-designer boutique · Thaltej, Ahmedabad",
+  description:
+    "JadePink (SJ Fashion) is a multi-designer boutique in Thaltej, Ahmedabad — heritage and luxury designer labels plus young, experimental designers. Clothing, footwear, jewellery, bridal. Open daily 10:30 AM–8 PM.",
+  alternates: { canonical: "https://jadepink.com/" },
+  openGraph: {
+    type: "website",
+    url: "https://jadepink.com/",
+    siteName: "JadePink",
+    title: "JadePink — Multi-designer boutique",
+    description: "Unique, handpicked heritage and luxury labels in Thaltej, Ahmedabad. Designing your fashion, every day 10:30 AM–8 PM.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "JadePink — Multi-designer boutique",
+    description: "Heritage, luxury and young experimental labels under one roof. Thaltej, Ahmedabad.",
+  },
+};
+
+const STORE_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "ClothingStore",
+  name: "JadePink — A Multi Designer Store",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "G-8 Harmony Icon, near Baghban Party Plot, Hebatpur Road, Thaltej",
+    addressLocality: "Ahmedabad",
+    addressRegion: "Gujarat",
+    postalCode: "380054",
+    addressCountry: "IN",
+  },
+  telephone: "+91-90812-88988",
+  email: "shivankari@jadepink.com",
+  openingHours: "Mo-Su 10:30-20:00",
+  aggregateRating: { "@type": "AggregateRating", ratingValue: "4.9", reviewCount: "2300" },
+};
+
+export default function PublicLanding() {
+  return (
+    <div className="site-light min-h-dvh">
+      <a
+        href="#collections"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[101] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-[#1d1d1f]"
+      >
+        Skip to content
+      </a>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STORE_JSONLD) }} />
+      <SiteMotion />
+      <Navbar />
+      <main>
+        <Hero />
+        <Marquee
+          items={[
+            "Multi-designer boutique, Ahmedabad",
+            "Heritage & luxury designer labels",
+            "Young, experimental designers",
+            "Bridal range · Everyday chic",
+            "Open every day, 10:30 AM – 8 PM",
+          ]}
+        />
+        <Categories />
+        <About />
+        <Designers />
+        <Gallery />
+        <Events />
+        <Reviews />
+        <Visit />
+      </main>
+      <Footer />
+    </div>
+  );
+}
