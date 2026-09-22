@@ -1,63 +1,11 @@
 /* Boutique sections — cloned from jadepink-flow, rebranded to JadePink.
-   Promises, six drawers, week's favourites, designers, review,
+   Six drawers, week's favourites, designers, review,
    newsletter + visit cards, glass footer. Server components. */
 
 import { BoutiqueImage } from "@/components/site/boutique-image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { NewsletterForm } from "@/components/site/newsletter-form";
-
-/* ---------- Promises ---------- */
-
-function Promise({
-  title,
-  body,
-  tone,
-  delay,
-}: {
-  title: string;
-  body: string;
-  tone: "brand" | "gold" | "blush";
-  delay: number;
-}) {
-  const colorClass = {
-    brand: "bg-brand/10 [&_span]:bg-brand",
-    gold: "bg-gold/15 [&_span]:bg-gold",
-    blush: "bg-blush/30 [&_span]:bg-brand",
-  }[tone];
-
-  return (
-    <div
-      className="glass-panel reveal group flex items-center gap-4 rounded-2xl p-5 ring-1 ring-shadow backdrop-blur-xl"
-      style={{ "--d": `${delay}ms` } as React.CSSProperties}
-    >
-      <div
-        className={
-          "grid size-11 shrink-0 place-items-center rounded-full transition-transform duration-200 group-hover:scale-105 " +
-          colorClass
-        }
-      >
-        <span className="size-2.5 rounded-full" />
-      </div>
-      <div>
-        <p className="font-medium tracking-[0.01em] text-ink">{title}</p>
-        <p className="mt-1 text-sm text-ink/65">{body}</p>
-      </div>
-    </div>
-  );
-}
-
-export function Promises() {
-  return (
-    <section aria-label="Boutique promises" className="mx-auto max-w-6xl px-4 py-12 sm:px-8 sm:py-16">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Promise title="Handpicked labels" body="Heritage, luxury + young experiments." tone="brand" delay={0} />
-        <Promise title="Styled in store" body="Tried on with a stylist, not alone." tone="gold" delay={80} />
-        <Promise title="Gift wrapped" body="Ribbon, note, no charge." tone="blush" delay={160} />
-      </div>
-    </section>
-  );
-}
 
 /* ---------- Section heading ---------- */
 
@@ -120,7 +68,7 @@ export function Categories() {
           <a
             href="#new"
             key={category.name}
-            className="glass-panel lift zoom-frame reveal group rounded-[1.25rem] p-2.5 ring-1 ring-shadow backdrop-blur-xl"
+            className="glass-panel lift zoom-frame reveal group rounded-[1.25rem] p-2.5 ring-1 ring-shadow backdrop-blur-md"
             style={{ "--d": `${index * 60}ms` } as React.CSSProperties}
           >
             <BoutiqueImage
@@ -129,6 +77,7 @@ export function Categories() {
               width={768}
               height={896}
               loading="lazy"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
               className="aspect-[3/4] w-full rounded-[0.85rem] object-cover outline-1 -outline-offset-1 outline-shadow"
             />
             <p className="px-1 pt-3 pb-1 text-sm font-medium tracking-[0.01em] text-ink transition-colors duration-200 group-hover:text-brand">
@@ -176,7 +125,7 @@ export function Favourites() {
           <a
             href="#contact"
             key={product.name}
-            className="glass-panel lift zoom-frame nudge reveal group rounded-[1.25rem] p-3 ring-1 ring-shadow backdrop-blur-xl"
+            className="glass-panel lift zoom-frame nudge reveal group rounded-[1.25rem] p-3 ring-1 ring-shadow backdrop-blur-md"
             style={{ "--d": `${index * 80}ms` } as React.CSSProperties}
           >
             <BoutiqueImage
@@ -185,6 +134,7 @@ export function Favourites() {
               width={816}
               height={816}
               loading="lazy"
+              sizes="(max-width: 640px) 100vw, 33vw"
               className="aspect-square w-full rounded-[1rem] object-cover outline-1 -outline-offset-1 outline-shadow"
             />
             <div className="flex items-start justify-between gap-3 px-1 pt-4 pb-1">
@@ -238,7 +188,7 @@ export function Designers() {
         {DESIGNER_GROUPS.map((g, i) => (
           <div
             key={g.craft}
-            className="glass-panel reveal rounded-[1.25rem] p-6 ring-1 ring-shadow backdrop-blur-xl"
+            className="glass-panel reveal rounded-[1.25rem] p-6 ring-1 ring-shadow backdrop-blur-md"
             style={{ "--d": `${i * 70}ms` } as React.CSSProperties}
           >
             <p className="text-xs font-medium tracking-[0.22em] uppercase text-brand">{g.craft}</p>
@@ -265,7 +215,7 @@ export function Designers() {
 export function Reviews() {
   return (
     <section aria-label="Customer review" className="mx-auto max-w-6xl px-4 py-12 sm:px-8 sm:py-16">
-      <figure className="glass-panel reveal mx-auto max-w-3xl rounded-[1.75rem] p-8 text-center ring-1 ring-shadow backdrop-blur-2xl sm:p-12">
+      <figure className="glass-panel reveal mx-auto max-w-3xl rounded-[1.75rem] p-8 text-center ring-1 ring-shadow backdrop-blur-lg sm:p-12">
         <div className="flex items-center justify-center gap-1.5 text-gold" aria-label="Rated five out of five">
           {[0, 1, 2, 3, 4].map((star) => (
             <span key={star} className="text-base leading-none" aria-hidden="true">
@@ -302,7 +252,7 @@ export function Lifestyle() {
   return (
     <section id="lifestyle" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-8 sm:py-16">
       <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-        <div className="glass-panel reveal flex flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-xl sm:p-8">
+        <div className="glass-panel reveal flex flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8">
           <h2 className="font-display text-2xl leading-tight font-light tracking-[-0.01em] text-ink sm:text-3xl">
             Stay in the drawer
           </h2>
@@ -314,7 +264,7 @@ export function Lifestyle() {
 
         <div
           id="contact"
-          className="glass-panel reveal flex scroll-mt-24 flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-xl sm:p-8"
+          className="glass-panel reveal flex scroll-mt-24 flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8"
           style={{ "--d": "100ms" } as React.CSSProperties}
         >
           <h2 className="font-display text-2xl leading-tight font-light tracking-[-0.01em] text-ink sm:text-3xl">
@@ -356,7 +306,7 @@ export function Lifestyle() {
 export function Footer() {
   return (
     <footer className="mx-auto max-w-6xl px-4 pt-8 pb-10 sm:px-8 sm:pt-12 sm:pb-12">
-      <div className="glass-panel rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-xl sm:p-8">
+      <div className="glass-panel rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8">
         <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-display text-xl font-medium tracking-[-0.01em] text-ink">

@@ -7,7 +7,6 @@ import {
   Favourites,
   Footer,
   Lifestyle,
-  Promises,
   Reviews,
 } from "@/components/site/sections";
 
@@ -64,7 +63,6 @@ export default function PublicLanding() {
       <Navbar />
       <main>
         <Hero />
-        <Promises />
         <Categories />
         <Favourites />
         <Designers />
