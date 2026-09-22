@@ -412,8 +412,12 @@ const EVENT_LABEL: Record<string, string> = {
   PRODUCT_REMOVED: "Product removed",
   TRIAL_STARTED: "Trial started",
   TRIAL_COMPLETED: "Trial completed",
+  TRIAL_REOPENED: "Trial reopened",
+  TRIAL_CANCELLED: "Trial cancelled",
   PRODUCT_LIKED: "Product liked",
+  PRODUCT_UNLIKED: "Like removed",
   PRODUCT_DROPPED: "Product dropped",
+  PRODUCT_UNDROPPED: "Drop undone — back on visit",
   DROP_REASON_CAPTURED: "Drop reason updated",
   PRODUCT_PURCHASED: "Product purchased",
 };

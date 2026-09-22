@@ -813,7 +813,11 @@ export function FloorBoard({
                   onStart={() => void run(`start-${card.id}`, () => callApi(visitId, "start-trial", { visitProductId: card.id }), { title: "Trial started", body: card.product.name })}
                   onComplete={() => void run(`complete-${card.id}`, () => callApi(visitId, "complete-trial", { visitProductId: card.id }), { title: "Trial completed", body: "Like it, or record why it was dropped." })}
                   onLike={() => void run(`like-${card.id}`, () => callApi(visitId, "like", { visitProductId: card.id }), { title: "Liked", body: card.product.name })}
+                  onUnlike={() => void run(`unlike-${card.id}`, () => callApi(visitId, "unlike", { visitProductId: card.id }), { title: "Like removed", body: `${card.product.name} is back where it was.` })}
+                  onReopen={() => void run(`reopen-${card.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: card.id }), { title: "Trial reopened", body: card.product.name })}
+                  onCancelTrial={() => void run(`canceltrial-${card.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: card.id }), { title: "Trial cancelled", body: `${card.product.name} is back on selected.` })}
                   onDrop={() => { setDropReasonId(""); setDropNote(""); setDropFor(card); }}
+                  onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
                   selectable={card.status === "LIKED"}
                   checked={billIds.includes(card.id)}
@@ -832,7 +836,7 @@ export function FloorBoard({
           </p>
           <span className="flex gap-2 sm:ml-auto">
             <Btn tone="brand" disabled={busy === "bill-many"} onClick={() => { setBillNumber(""); setBillOpen(true); }}>
-              Bill together →
+              Bill together
             </Btn>
             <Btn tone="quiet" onClick={() => setBillIds([])}>Clear</Btn>
           </span>
@@ -877,17 +881,17 @@ export function FloorBoard({
                     onClick={() => void toggleTorch()}
                     aria-pressed={torchOn}
                     aria-label="Toggle flash"
-                    className={`grid min-h-[36px] min-w-[36px] place-items-center rounded-full text-[15px] ${torchOn ? "bg-white text-[#23403a]" : "bg-white/20 text-white"}`}
+                    className={`inline-flex min-h-[36px] items-center rounded-full px-3 text-[12.5px] font-bold ${torchOn ? "bg-white text-[#23403a]" : "bg-white/20 text-white"}`}
                   >
-                    ⚡
+                    Flash
                   </button>
                   <button
                     type="button"
                     onClick={closeScan}
                     aria-label="Stop camera"
-                    className="grid min-h-[36px] min-w-[36px] place-items-center rounded-full bg-white/20 text-[15px] font-bold text-white"
+                    className="inline-flex min-h-[36px] items-center rounded-full bg-white/20 px-3 text-[12.5px] font-bold text-white"
                   >
-                    ✕
+                    Stop
                   </button>
                 </div>
               )}
@@ -912,7 +916,7 @@ export function FloorBoard({
                       onClick={() => addVariant(scanResult.product.id, scanResult.product.product.name)}
                       className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-[#23403a] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
                     >
-                      {busy === `add-${scanResult.product.id}` ? "Adding…" : "Instant Add ✓"}
+                      {busy === `add-${scanResult.product.id}` ? "Adding…" : "Instant Add"}
                     </button>
                   )}
                 </div>
@@ -1037,6 +1041,7 @@ export function FloorBoard({
                 <Btn tone="brand" disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Complete trial</Btn>
                 <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
                 <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
+                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`canceltrial-${detail.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: detail.id }), { title: "Trial cancelled", body: `${detail.product.name} is back on selected.` })}>Cancel trial</Btn>
               </>
             )}
             {detail.status === "TRIAL_COMPLETED" && (
@@ -1044,13 +1049,18 @@ export function FloorBoard({
                 <Btn tone="ok" disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</Btn>
                 <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
                 <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
+                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>↩ Reopen</Btn>
               </>
             )}
             {detail.status === "LIKED" && (
               <>
                 <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
                 <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
+                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>↩ Unlike</Btn>
               </>
+            )}
+            {detail.status === "DROPPED" && (
+              <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>↩ Undo drop</Btn>
             )}
           </div>
         </Drawer>
@@ -1319,7 +1329,7 @@ function StatePill({ status }: { status: ProductVisitStatus }) {
   if (status === "LIKED") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6f2ea] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#1c6b46]">
-        ✓ Liked (Ready for billing)
+        Liked (Ready for billing)
       </span>
     );
   }
@@ -1366,7 +1376,7 @@ function ConsoleBtn({ children, onClick, disabled, tone }: { children: ReactNode
 }
 
 function ProductRow({
-  card, busy, onOpen, onStart, onComplete, onLike, onDrop, onBill,
+  card, busy, onOpen, onStart, onComplete, onLike, onUnlike, onReopen, onCancelTrial, onDrop, onUndrop, onBill,
   selectable, checked, onToggle,
 }: {
   card: ProductCardDTO;
@@ -1375,7 +1385,11 @@ function ProductRow({
   onStart: () => void;
   onComplete: () => void;
   onLike: () => void;
+  onUnlike: () => void;
+  onReopen: () => void;
+  onCancelTrial: () => void;
   onDrop: () => void;
+  onUndrop: () => void;
   onBill: () => void;
   selectable?: boolean;
   checked?: boolean;
@@ -1429,49 +1443,71 @@ function ProductRow({
             aria-checked={!!checked}
             aria-label={`Select ${p.name} for combined bill`}
             onClick={onToggle}
-            className={`grid min-h-[44px] min-w-[44px] place-items-center rounded-lg border text-[16px] font-bold transition-colors ${checked ? "border-[#23403a] bg-[#23403a] text-white" : "border-[#e0d7c9] bg-white text-transparent hover:border-[#211d18]"}`}
+            className={`grid min-h-[44px] min-w-[44px] place-items-center rounded-lg border transition-colors ${checked ? "border-[#23403a] bg-[#23403a] text-white" : "border-[#e0d7c9] bg-white hover:border-[#211d18]"}`}
           >
-            ✓
+            <span aria-hidden className={`grid size-5 place-items-center rounded ${checked ? "bg-white/15" : "bg-transparent"}`}>
+              {checked ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M3 8.5 6.5 12 13 4" />
+                </svg>
+              ) : (
+                <span className="block size-5 rounded border border-[#e0d7c9]" />
+              )}
+            </span>
           </button>
         )}
         {card.status === "SELECTED" && (
           <>
             <ConsoleBtn tone="dark" disabled={busy === `start-${card.id}`} onClick={onStart}>
-              {busy === `start-${card.id}` ? "Starting…" : "Trial →"}
+              {busy === `start-${card.id}` ? "Starting…" : "Trial"}
             </ConsoleBtn>
             <ConsoleBtn tone="dark" disabled={busy === `like-${card.id}`} onClick={onLike}>
-              {busy === `like-${card.id}` ? "Saving…" : "✓ Like"}
+              {busy === `like-${card.id}` ? "Saving…" : "Like"}
             </ConsoleBtn>
-            <ConsoleBtn tone="rose" onClick={onDrop}>✕ Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill →</ConsoleBtn>
+            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_IN_PROGRESS" && (
           <>
             <p className="mr-auto inline-flex items-center gap-1.5 text-[13px] text-[#57534e]">Client is currently trying this on</p>
             <ConsoleBtn tone="dark" disabled={busy === `complete-${card.id}`} onClick={onComplete}>
-              {busy === `complete-${card.id}` ? "Saving…" : "Complete Trial →"}
+              {busy === `complete-${card.id}` ? "Saving…" : "Complete Trial"}
             </ConsoleBtn>
-            <ConsoleBtn tone="rose" onClick={onDrop}>✕ Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill →</ConsoleBtn>
+            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn tone="ghost" disabled={busy === `canceltrial-${card.id}`} onClick={onCancelTrial}>
+              {busy === `canceltrial-${card.id}` ? "Saving…" : "Cancel trial"}
+            </ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_COMPLETED" && (
           <>
-            <ConsoleBtn tone="rose" onClick={onDrop}>✕ Drop</ConsoleBtn>
+            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
             <ConsoleBtn tone="dark" disabled={busy === `like-${card.id}`} onClick={onLike}>
-              {busy === `like-${card.id}` ? "Saving…" : "✓ Like"}
+              {busy === `like-${card.id}` ? "Saving…" : "Like"}
             </ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill →</ConsoleBtn>
+            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn tone="ghost" disabled={busy === `reopen-${card.id}`} onClick={onReopen}>
+              {busy === `reopen-${card.id}` ? "Saving…" : "Reopen"}
+            </ConsoleBtn>
           </>
         )}
         {card.status === "LIKED" && (
           <>
             <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
             <ConsoleBtn tone="dark" disabled={busy === `bill-${card.id}`} onClick={onBill}>
-              {busy === `bill-${card.id}` ? "Saving…" : "Mark billed →"}
+              {busy === `bill-${card.id}` ? "Saving…" : "Mark billed"}
+            </ConsoleBtn>
+            <ConsoleBtn tone="ghost" disabled={busy === `unlike-${card.id}`} onClick={onUnlike}>
+              {busy === `unlike-${card.id}` ? "Saving…" : "Unlike"}
             </ConsoleBtn>
           </>
+        )}
+        {card.status === "DROPPED" && (
+          <ConsoleBtn tone="ghost" disabled={busy === `undrop-${card.id}`} onClick={onUndrop}>
+            {busy === `undrop-${card.id}` ? "Saving…" : "Undo drop"}
+          </ConsoleBtn>
         )}
       </div>
     </article>
