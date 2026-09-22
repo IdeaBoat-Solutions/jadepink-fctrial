@@ -1474,6 +1474,11 @@ function ProductRow({
           {card.status === "TRIAL_IN_PROGRESS" && card.timeline.trialStartedAt && (
             <p className="mt-1 text-[12.5px] text-[#7a736a]">Trying now · started {ago(card.timeline.trialStartedAt)}</p>
           )}
+          {card.staffNote && (
+            <p className="mt-2 rounded-lg bg-[#faf7f2] px-2.5 py-1.5 text-[12.5px] text-[#57534e]">
+              <strong className="font-semibold">Tagged:</strong> {card.staffNote}
+            </p>
+          )}
           {dropped && (
             <p className="mt-2 rounded-lg bg-[#faf7f2] px-2.5 py-1.5 text-[12.5px] text-[#57534e]">
               <strong className="font-semibold">Client Feedback:</strong> {card.note || card.dropReason?.label || "No reason recorded"}

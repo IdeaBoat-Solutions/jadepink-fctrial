@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, assertCanAssign, type AuthContext } from "@/lib/authz";
-import { canAssignOthers } from "@/lib/policy";
+import { canAssignOthers, canReassignVisit } from "@/lib/policy";
 import { toDTO, type VisitRow } from "../visits/repository";
 
 /* FC assignment (§22–23): 7 checks + same-store invariant + audit event. Idempotent (§31).
@@ -33,10 +33,19 @@ export async function assignSalesperson(auth: AuthContext, visitId: string, sale
     return toDTO(visit as VisitRow);
   }
 
-  const isReassign = !!visit.assigned_salesperson_id;
+  // Reassigning a visit away from another FC is a manager override (roadmap:
+  // "the override is logged with who changed it"). An FC may still take an
+  // unassigned visit themselves, but may not pull one off a colleague.
+  const isReassign = !!visit.assigned_salesperson_id && visit.assigned_salesperson_id !== salespersonId;
+  if (isReassign && !canReassignVisit(auth.role)) {
+    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "This visit is already with another FC — a manager can reassign it", 403);
+  }
+
   const patch: Record<string, unknown> = {
     assigned_salesperson_id: salespersonId,
-    assigned_at: visit.assigned_at ?? new Date().toISOString(),
+    // Refresh on every real change so the round-robin rotation pointer
+    // (most-recent assigned_at) tracks reassigns, not just first assigns.
+    assigned_at: new Date().toISOString(),
   };
   if (visit.status === "IDENTIFYING" || visit.status === "ARRIVED") patch.status = "ASSIGNED";
   const { data: updated } = await supabase.from("visits").update(patch).eq("id", visitId).select("*").single();
@@ -50,7 +59,7 @@ export async function assignSalesperson(auth: AuthContext, visitId: string, sale
 }
 
 export async function reassignSalesperson(auth: AuthContext, visitId: string, salespersonId: string) {
-  if (auth.role !== "STORE_MANAGER" && auth.role !== "ADMIN") {
+  if (!canReassignVisit(auth.role)) {
     throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only managers reassign active visits", 403);
   }
   return assignSalesperson(auth, visitId, salespersonId);

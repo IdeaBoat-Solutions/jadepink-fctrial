@@ -87,7 +87,7 @@ export async function attachCustomerToVisit(auth: AuthContext, visitId: string, 
   const { data: updated } = await supabase.from("visits").update(patch).eq("id", visitId).select("*").single();
   await supabase.from("visit_events").insert({
     visit_id: visitId, event_type: "CUSTOMER_ATTACHED", actor_id: auth.userId,
-    metadata: { customer_id: customerId },
+    metadata: { customer_id: customerId, previous_customer_id: visit.customer_id ?? null },
   });
 
   // First attach on this visit counts as a visit for the customer snapshot.
@@ -187,6 +187,22 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
   if (visit.status === "CANCELLED" || visit.status === "COMPLETED") {
     const [dto] = await enrichVisits(supabase, [visit as VisitRow]);
     return dto;
+  }
+  // Same guard as completeVisit: cancelling with liked/trialled pieces still
+  // open would silently lose the vendor-report drop reasons. The FC must bill
+  // each piece or drop it with a reason first — "End visit" stays for visits
+  // with nothing trialled.
+  const { count: outstanding } = await supabase
+    .from("visit_products")
+    .select("id", { count: "exact", head: true })
+    .eq("visit_id", visitId)
+    .in("status", ["LIKED", "TRIAL_IN_PROGRESS", "TRIAL_COMPLETED"]);
+  if ((outstanding ?? 0) > 0) {
+    throw new Stage2Error(
+      STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
+      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or trialled but not billed — mark each billed or dropped with a reason first`,
+      422,
+    );
   }
   const { data: updated } = await supabase
     .from("visits")
@@ -336,6 +352,8 @@ export async function getVisitTimeline(auth: AuthContext, visitId: string) {
       detail = suite ? `Moved to ${suite}` : "Suite cleared";
     } else if (r.eventType === "RUNNER_REQUESTED") {
       detail = [suite, note].filter(Boolean).join(" · ") || "Runner called";
+    } else if (r.eventType === "PRODUCT_NOTE_UPDATED") {
+      detail = [sku, note ? `Note: ${note}` : "Note cleared"].filter(Boolean).join(" · ") || null;
     } else {
       detail = sku;
     }

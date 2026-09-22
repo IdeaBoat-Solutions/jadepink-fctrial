@@ -119,6 +119,7 @@ export function toProductCard(vp: VisitProductRow): ProductCardDTO {
       ? { id: vp.drop_reason.id, code: vp.drop_reason.code, label: vp.drop_reason.label }
       : null,
     note: vp.note,
+    staffNote: vp.staff_note,
     billNumber: vp.bill_number ?? null,
   };
 }
@@ -524,6 +525,34 @@ export async function captureDropReason(
       drop_reason_id: reason.id,
       drop_reason_code: reason.code,
       note,
+    },
+  });
+  return refreshCard(vp.id);
+}
+
+/** setVisitProductNote(): the FC's handling note for a piece ("pack with
+    sleeve", "ask about the fit"). Not a state transition — allowed in any
+    product state on an active visit, cleared by saving an empty note. */
+export async function setVisitProductNote(
+  auth: AuthContext,
+  visitProductId: string,
+  note: string | null,
+) {
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  const clean = (note ?? "").trim().slice(0, 500) || null;
+  if ((vp.staff_note ?? null) === clean) return refreshCard(vp.id);
+  await patchVisitProduct(vp.id, { staff_note: clean });
+  await insertVisitEvent({
+    visitId: vp.visit_id,
+    eventType: "PRODUCT_NOTE_UPDATED",
+    actorId: auth.userId,
+    entityType: "VISIT_PRODUCT",
+    entityId: vp.id,
+    metadata: {
+      product_variant_id: vp.product_variant_id,
+      sku: vp.product?.sku ?? null,
+      note: clean,
     },
   });
   return refreshCard(vp.id);

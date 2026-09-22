@@ -41,6 +41,7 @@ export interface CustomerSnapshotLive {
   area?: string | null;
   budget?: string | null;
   source?: string | null;
+  tier: string | null;
 }
 
 export interface StaffProfile {
@@ -204,9 +205,10 @@ export interface UpdatedCustomer {
   id: string;
   name: string;
   phone: string;
+  tier: string | null;
 }
 
-export const updateCustomerRecord = (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) =>
+export const updateCustomerRecord = (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) =>
   call<UpdatedCustomer>(`/api/customers/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),

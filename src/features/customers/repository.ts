@@ -47,5 +47,6 @@ export async function snapshotFor(customerId: string): Promise<CustomerSnapshot 
     area: c.area ?? null,
     budget: c.budget ?? null,
     source: c.source ?? null,
+    tier: (c.tier as string | null) ?? null,
   };
 }

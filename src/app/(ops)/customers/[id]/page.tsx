@@ -83,7 +83,10 @@ export default function CustomerDetailPage() {
         {isManager && <Btn tone="quiet" onClick={() => setEditing(true)}>Edit record</Btn>}
       </div>
       <h1 className="fp-name mt-3 text-[34px] leading-none">{customer.name}</h1>
-      <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">{formatMobileIN(customer.phone)}</p>
+      <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">
+        {formatMobileIN(customer.phone)}
+        {customer.tier && <span className="ml-2 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
+      </p>
       {(customer.area || customer.budget || customer.source) && (
         <p className="mt-1.5 text-[13.5px] text-[var(--fp-muted)]">
           {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
@@ -155,24 +158,26 @@ function EditDrawer({
   customer: CustomerSnapshotLive;
   onClose: () => void;
   onSaved: (name: string) => void;
-  save: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: { name: string } } | { ok: false; code: string; message?: string }>;
+  save: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { name: string } } | { ok: false; code: string; message?: string }>;
 }) {
   const [name, setName] = useState(customer.name);
   const [phone, setPhone] = useState(normalizeMobile(customer.phone));
   const [source, setSource] = useState(customer.source ?? "Walk-in");
   const [area, setArea] = useState(customer.area ?? "");
   const [budget, setBudget] = useState(customer.budget ?? BUDGETS[1]);
+  const [tier, setTier] = useState(customer.tier ?? "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   const submit = async () => {
     setErr("");
-    const input: { name?: string; phone?: string; source?: string; area?: string; budget?: string } = {};
+    const input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null } = {};
     if (name.trim() && name.trim() !== customer.name) input.name = name.trim();
     if (phone.trim() && normalizeMobile(phone) !== normalizeMobile(customer.phone)) input.phone = phone.trim();
     if (area.trim() !== (customer.area ?? "")) input.area = area.trim();
     if (budget !== (customer.budget ?? "")) input.budget = budget;
     if (source !== (customer.source ?? "Walk-in")) input.source = source;
+    if (tier !== (customer.tier ?? "")) input.tier = tier === "" ? null : tier;
     if (Object.keys(input).length === 0) {
       onClose();
       return;
@@ -220,6 +225,13 @@ function EditDrawer({
         <Field label="Budget" htmlFor="edit-budget">
           <select id="edit-budget" value={budget} onChange={(e) => setBudget(e.target.value)} className={inputClass}>
             {BUDGETS.map((b) => <option key={b}>{b}</option>)}
+          </select>
+        </Field>
+        <Field label="Loyalty tier" htmlFor="edit-tier" hint="Set by the store — shown on the visit header. Most customers have none.">
+          <select id="edit-tier" value={tier} onChange={(e) => setTier(e.target.value)} className={inputClass}>
+            <option value="">No tier</option>
+            <option value="Silver">Silver</option>
+            <option value="Gold">Gold</option>
           </select>
         </Field>
         {err && <p role="alert" className="text-[13.5px] font-medium text-[var(--fp-drop)]">{err}</p>}

@@ -8,6 +8,8 @@ export interface CustomerSnapshot {
   area?: string | null;
   budget?: string | null;
   source?: string | null;
+  /** Store-set loyalty tier (migration 160). Null = no tier. */
+  tier: string | null;
 }
 
 export interface CustomerDetail extends CustomerSnapshot {

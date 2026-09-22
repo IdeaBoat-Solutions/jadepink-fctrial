@@ -14,6 +14,7 @@ import {
   likeProduct,
   dropProduct,
   captureDropReason,
+  setVisitProductNote,
   removeProductFromVisit,
   getVisitWithProducts,
   getVisitProductsForVisit,
@@ -29,6 +30,7 @@ import {
   likeProductSchema,
   dropProductSchema,
   captureDropReasonSchema,
+  setProductNoteSchema,
   removeProductFromVisitSchema,
   visitProductsSchema,
 } from "./schemas";
@@ -137,6 +139,17 @@ export async function captureDropReasonAction(input: { visitProductId: string; d
     const auth = await requireAuth();
     const parsed = captureDropReasonSchema.parse(input);
     const data = await captureDropReason(auth, parsed.visitProductId, parsed.dropReasonId, parsed.note ?? null);
+    return { ok: true as const, data };
+  } catch (e) {
+    return { ok: false as const, ...toErrorPayload(e) };
+  }
+}
+
+export async function setVisitProductNoteAction(input: { visitProductId: string; note?: string }) {
+  try {
+    const auth = await requireAuth();
+    const parsed = setProductNoteSchema.parse(input);
+    const data = await setVisitProductNote(auth, parsed.visitProductId, parsed.note || null);
     return { ok: true as const, data };
   } catch (e) {
     return { ok: false as const, ...toErrorPayload(e) };

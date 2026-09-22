@@ -17,12 +17,12 @@ export async function searchCustomer(phone: string): Promise<CustomerSnapshot | 
     // Fallback: partial match for pasted/partial numbers (UI debounced search).
     const { data } = await supabase
       .from("customers")
-      .select("id, name, mobile, visits, purchases, area, budget, source")
+      .select("id, name, mobile, visits, purchases, area, budget, source, tier")
       .or(`normalized_phone.ilike.%${norm}%,mobile.ilike.%${norm}%`)
       .limit(1)
       .single();
     if (!data) return null;
-    return { id: data.id, name: data.name, phone: data.mobile, visitCount: data.visits, lastVisitAt: null, purchaseCount: data.purchases, area: data.area ?? null, budget: data.budget ?? null, source: data.source ?? null };
+    return { id: data.id, name: data.name, phone: data.mobile, visitCount: data.visits, lastVisitAt: null, purchaseCount: data.purchases, area: data.area ?? null, budget: data.budget ?? null, source: data.source ?? null, tier: (data.tier as string | null) ?? null };
   }
   const { data: last } = await supabase
     .from("visits")
@@ -41,6 +41,7 @@ export async function searchCustomer(phone: string): Promise<CustomerSnapshot | 
     area: (c as { area?: string | null }).area ?? null,
     budget: (c as { budget?: string | null }).budget ?? null,
     source: (c as { source?: string | null }).source ?? null,
+    tier: (c as { tier?: string | null }).tier ?? null,
   };
 }
 
@@ -53,7 +54,7 @@ export async function searchCustomersByName(name: string): Promise<CustomerSnaps
   const supabase = await createClient();
   const { data } = await supabase
     .from("customers")
-    .select("id, name, mobile, visits, purchases, area, budget, source")
+    .select("id, name, mobile, visits, purchases, area, budget, source, tier")
     .ilike("name", `%${needle}%`)
     .order("visits", { ascending: false })
     .limit(8);
@@ -67,6 +68,7 @@ export async function searchCustomersByName(name: string): Promise<CustomerSnaps
     area: (c as { area?: string | null }).area ?? null,
     budget: (c as { budget?: string | null }).budget ?? null,
     source: (c as { source?: string | null }).source ?? null,
+    tier: (c as { tier?: string | null }).tier ?? null,
   }));
 }
 
@@ -118,7 +120,7 @@ export async function updateCustomer(auth: AuthContext, customerId: string, inpu
   const { data: current } = await supabase.from("customers").select("id").eq("id", customerId).single();
   if (!current) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_NOT_FOUND, "Customer not found", 404);
 
-  const patch: { name?: string; mobile?: string; normalized_phone?: string; source?: string; area?: string | null; budget?: string | null } = {};
+  const patch: { name?: string; mobile?: string; normalized_phone?: string; source?: string; area?: string | null; budget?: string | null; tier?: string | null } = {};
   if (input.name !== undefined) {
     if (!input.name.trim()) throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Name required", 422);
     patch.name = input.name.trim();
@@ -138,12 +140,13 @@ export async function updateCustomer(auth: AuthContext, customerId: string, inpu
   if (input.source !== undefined) patch.source = input.source.trim().slice(0, 40) || "Walk-in";
   if (input.area !== undefined) patch.area = input.area.trim().slice(0, 80) || null;
   if (input.budget !== undefined) patch.budget = input.budget.trim().slice(0, 40) || null;
+  if (input.tier !== undefined) patch.tier = input.tier;
 
   const { data: updated, error } = await supabase
     .from("customers")
     .update(patch)
     .eq("id", customerId)
-    .select("id, name, mobile")
+    .select("id, name, mobile, tier")
     .single();
   if (error || !updated) {
     const msg = String(error?.message ?? "");
@@ -152,7 +155,7 @@ export async function updateCustomer(auth: AuthContext, customerId: string, inpu
     }
     throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Could not save changes", 422);
   }
-  return { id: updated.id as string, name: updated.name as string, phone: updated.mobile as string };
+  return { id: updated.id as string, name: updated.name as string, phone: updated.mobile as string, tier: (updated.tier as string | null) ?? null };
 }
 
 export async function getCustomerSnapshot(_auth: AuthContext, customerId: string): Promise<CustomerSnapshot> {
@@ -176,5 +179,6 @@ export async function getCustomerSnapshot(_auth: AuthContext, customerId: string
     area: c.area ?? null,
     budget: c.budget ?? null,
     source: c.source ?? null,
+    tier: (c.tier as string | null) ?? null,
   };
 }

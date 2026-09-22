@@ -175,7 +175,8 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const suite = suiteOverride ?? visit.suite ?? null;
   const elapsedMin = visit.startedAt ? Math.max(0, Math.floor((now - new Date(visit.startedAt).getTime()) / 60000)) : null;
   const visitCode = `#${visit.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`;
-  const tier = !customer || customer.visitCount <= 0 ? null : customer.visitCount >= 7 ? "Gold member" : customer.visitCount >= 3 ? "Silver member" : "Member";
+  const storedTier = customer?.tier === "Gold" || customer?.tier === "Silver" ? `${customer.tier} member` : null;
+  const tier = storedTier ?? (!customer || customer.visitCount <= 0 ? null : customer.visitCount >= 7 ? "Gold member" : customer.visitCount >= 3 ? "Silver member" : "Member");
 
   const loadTimeline = async () => {
     setTimelineOpen(true);
@@ -373,62 +374,68 @@ function ArrivalFlow({
   onAssign: () => void;
 }) {
   const store = useStore();
-  const [mode, setMode] = useState<"mobile" | "name">("mobile");
+  const [query, setQuery] = useState("");
   const [phone, setPhone] = useState("");
-  const [nameQuery, setNameQuery] = useState("");
-  const [nameMatches, setNameMatches] = useState<CustomerSnapshotLive[]>([]);
+  const [results, setResults] = useState<CustomerSnapshotLive[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [found, setFound] = useState<CustomerSnapshotLive | null>(null);
   const [err, setErr] = useState<{ title: string; body: string } | null>(null);
   const [, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
   const [budget, setBudget] = useState(BUDGETS[1]);
   const [source, setSource] = useState("Walk-in");
+  const [fcId, setFcId] = useState(() =>
+    store.user && !canAssignOthers(store.user.role) ? store.user.id : "",
+  );
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [attaching, setAttaching] = useState(false);
 
-  const digits = normalizeMobile(phone);
+  /* Registered FCs with live load — the create-form dropdown shows who is
+     free, the same roster rule as the assign drawer (FCs see only self). */
+  const fcLoad = new Map<string, number>();
+  store.visits.forEach((v) => {
+    if (v.assignedSalespersonId && (v.status === "ACTIVE" || v.status === "ASSIGNED")) {
+      fcLoad.set(v.assignedSalespersonId, (fcLoad.get(v.assignedSalespersonId) ?? 0) + 1);
+    }
+  });
+  const fcRoster = (canAssignOthers(store.user?.role)
+    ? store.salespeople
+    : store.salespeople.filter((s) => s.id === store.user?.id)
+  ).filter((s) => s.active);
+
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const ready = !!visit.customerId && !!visit.assignedSalespersonId;
 
-  const searchMobile = async () => {
-    if (!isValidMobileIN(phone)) {
-      setErr({ title: "Enter a valid 10-digit mobile number.", body: "Include the number the customer gives you. +91 and spaces are fine." });
+  /* One lookup — name or mobile in a single field. Digits hit the mobile
+     index, letters hit name search, and every match shows its mobile inline
+     so same names are told apart on the spot. */
+  const search = async () => {
+    const q = query.trim();
+    const d = normalizeMobile(q);
+    const hasLetters = /[a-zA-Z\u0900-\u097F]/.test(q);
+    if (q.length < 2 && d.length < 3) {
+      setErr({ title: "Type a name or mobile number.", body: "2+ letters for a name, or the 10-digit mobile number." });
       return;
     }
     setSearching(true);
     setErr(null);
-    const c = await store.searchCustomer(phone);
+    const [mobileHit, nameList] = await Promise.all([
+      d.length >= 3 ? store.searchCustomer(q) : Promise.resolve(null),
+      hasLetters || d.length < 6 ? store.searchCustomersByName(q) : Promise.resolve([]),
+    ]);
+    const combined = [...(mobileHit ? [mobileHit] : []), ...nameList.filter((c) => c.id !== mobileHit?.id)];
     setSearching(false);
     setSearched(true);
-    setFound(c);
-    if (c) setCreating(false);
-    else {
+    setResults(combined);
+    if (combined.length === 0) {
       setCreating(true);
-      setName("");
+      setName(hasLetters ? q : "");
+      setPhone(d || "");
       setArea("");
-    }
-  };
-
-  const searchByName = async () => {
-    const q = nameQuery.trim();
-    if (q.length < 2) {
-      setErr({ title: "Type at least 2 letters.", body: "Same names are common — you will pick the right person by mobile next." });
-      return;
-    }
-    setSearching(true);
-    setErr(null);
-    const list = await store.searchCustomersByName(q);
-    setSearching(false);
-    setSearched(true);
-    setNameMatches(list);
-    setFound(null);
-    if (list.length === 0) {
-      setCreating(true);
-      setName(q);
+    } else {
+      setCreating(false);
     }
   };
 
@@ -445,9 +452,9 @@ function ArrivalFlow({
   };
 
   const create = async () => {
-    const cleanName = normalizeName(name || nameQuery);
+    const cleanName = normalizeName(name || query);
     if (!isFullName(cleanName)) { setErr({ title: "Full name is required.", body: FULL_NAME_ERROR }); return; }
-    const mobile = mode === "mobile" ? digits || phone : phone;
+    const mobile = normalizeMobile(phone);
     if (!isValidMobileIN(mobile)) { setErr({ title: "Enter a valid 10-digit mobile number.", body: "The number is the lookup key — it must be exact." }); return; }
     setSaving(true);
     setErr(null);
@@ -466,6 +473,15 @@ function ArrivalFlow({
       return;
     }
     await attach(r.customer.id, r.customer.name);
+    if (fcId) {
+      const a = await store.assignSalesperson(visit.id, fcId);
+      const fcName = store.salespeople.find((s) => s.id === fcId)?.name;
+      store.pushToast(
+        a.ok ? "Customer created" : "Customer created — FC not assigned",
+        a.ok ? `${r.customer.name} is with ${fcName ?? "the FC"}.` : (a.message || "Pick the FC on the next step."),
+      );
+      return;
+    }
     store.pushToast("Customer created", `${r.customer.name} is on this visit.`);
   };
 
@@ -481,95 +497,42 @@ function ArrivalFlow({
   };
 
   return (
-    <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <div>
+    <div className="mt-6 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0">
         <p className="text-[13px] font-semibold text-[var(--fp-ok)]">Arrival recorded · {clockTime(visit.arrivedAt)}</p>
 
         {!visit.customerId && (
           <section className="mt-5" aria-label="Identify customer">
             <h2 className="text-[18px] font-semibold tracking-tight">Customer looked up on the spot</h2>
             <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Name and mobile number searched against the database. Known customers return with purchase history.</p>
-            <div role="tablist" aria-label="Lookup mode" className="mt-4 flex gap-1.5">
-              {(["mobile", "name"] as const).map((m) => (
-                <button
-                  key={m}
-                  role="tab"
-                  aria-selected={mode === m}
-                  type="button"
-                  onClick={() => { setMode(m); setSearched(false); setErr(null); setFound(null); setNameMatches([]); }}
-                  className={`min-h-[36px] rounded-full px-4 text-[13px] font-bold ${mode === m ? "bg-[#23403a] text-white" : "bg-[#f1ece4] text-[#57534e]"}`}
-                >
-                  {m === "mobile" ? "Mobile" : "Name"}
-                </button>
-              ))}
-            </div>
-            {mode === "mobile" ? (
-              <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void searchMobile(); }}>
-                <Field label="Mobile number" htmlFor="lookup-mobile" required>
-                  <div className="flex min-h-11 items-center border border-[var(--fp-line-strong)] bg-[var(--fp-surface)]">
-                    <span className="fp-num pl-3 text-[15px] text-[var(--fp-muted)]">+91</span>
-                    <input
-                      id="lookup-mobile"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      autoFocus
-                      value={phone}
-                      onChange={(e) => { setPhone(e.target.value); setSearched(false); setErr(null); }}
-                      onPaste={(e) => {
-                        const text = e.clipboardData.getData("text");
-                        if (text) { e.preventDefault(); setPhone(normalizeMobile(text)); }
-                      }}
-                      placeholder="98765 43210"
-                      className="min-h-11 flex-1 bg-transparent px-2 text-[16px] outline-none"
-                    />
-                    {phone && (
-                      <button type="button" onClick={() => { setPhone(""); setSearched(false); setFound(null); }} className="min-h-11 px-3 text-[13px] font-semibold text-[var(--fp-muted)]">
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </Field>
-                <Btn type="submit" tone="brand" disabled={searching} className="sm:mb-0 sm:min-w-[160px]">
-                  {searching ? "Searching…" : "Search customer"}
-                </Btn>
-              </form>
-            ) : (
-              <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void searchByName(); }}>
-                <Field label="Customer name" htmlFor="lookup-name" required hint="Same names are common — pick by mobile on the next step.">
-                  <input
-                    id="lookup-name"
-                    value={nameQuery}
-                    onChange={(e) => { setNameQuery(e.target.value); setSearched(false); setErr(null); }}
-                    placeholder="e.g. Priya Shah"
-                    autoComplete="off"
-                    autoFocus
-                    className={inputClass}
-                  />
-                </Field>
-                <Btn type="submit" tone="brand" disabled={searching} className="sm:mb-0 sm:min-w-[160px]">
-                  {searching ? "Searching…" : "Search by name"}
-                </Btn>
-              </form>
-            )}
+            <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void search(); }}>
+              <Field label="Name or mobile" htmlFor="lookup-q" required>
+                <input
+                  id="lookup-q"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setSearched(false); setErr(null); }}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData("text");
+                    if (text && /[0-9]/.test(text)) { e.preventDefault(); setQuery(normalizeMobile(text)); }
+                  }}
+                  placeholder="Priya Shah, or 98765 43210"
+                  autoComplete="off"
+                  autoFocus
+                  className={inputClass}
+                />
+              </Field>
+              <Btn type="submit" tone="brand" disabled={searching} className="sm:mb-0 sm:min-w-[160px]">
+                {searching ? "Searching…" : "Search"}
+              </Btn>
+            </form>
+            <p className="mt-1.5 text-[12.5px] text-[var(--fp-muted)]">Same names are common — every match shows its mobile.</p>
             {err && <div className="mt-4"><ErrorNote title={err.title} body={err.body} /></div>}
 
-            {searched && found && mode === "mobile" && (
+            {searched && results.length > 0 && (
               <div className="fp-rise mt-5 border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
-                <Snapshot customer={found} />
-                <p className="mt-3 text-[12.5px] text-[var(--fp-muted)]">Prior WhatsApp context appears here once the Stage 1 agent is connected — purchase history above is the source of truth for now.</p>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Btn tone="brand" disabled={attaching} onClick={() => void attach(found.id, found.name)}>
-                    {attaching ? "Attaching…" : "Continue visit"}
-                  </Btn>
-                </div>
-              </div>
-            )}
-
-            {searched && mode === "name" && nameMatches.length > 0 && (
-              <div className="fp-rise mt-5 border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
-                <p className="text-[13px] font-semibold text-[var(--fp-muted)]">{nameMatches.length} match{nameMatches.length > 1 ? "es" : ""} — confirm the mobile before continuing.</p>
+                <p className="text-[13px] font-semibold text-[var(--fp-muted)]">{results.length} match{results.length > 1 ? "es" : ""} — confirm the mobile before continuing.</p>
                 <ul className="mt-2">
-                  {nameMatches.map((c) => (
+                  {results.map((c) => (
                     <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0">
                       <div className="min-w-0">
                         <p className="text-[15px] font-semibold">{c.name}</p>
@@ -582,24 +545,23 @@ function ArrivalFlow({
               </div>
             )}
 
-            {searched && ((mode === "mobile" && !found) || (mode === "name" && nameMatches.length === 0)) && (
+            {searched && results.length === 0 && (
               <form className="fp-rise mt-5 max-w-md" onSubmit={(e) => { e.preventDefault(); void create(); }}>
                 <h3 className="text-[16px] font-semibold">New customer captured</h3>
                 <p className="mt-1 text-[13.5px] text-[var(--fp-muted)]">
-                  {mode === "mobile" ? `No record for ${formatMobileIN(digits)}. ` : `No record for “${nameQuery.trim()}”. `}
+                  No record for “{query.trim()}”.
                   Name, number, area, budget and how they heard about the store — 30 seconds while they are with you.
                 </p>
                 <div className="mt-4 flex flex-col gap-3">
                   <Field label="Full name" htmlFor="nc-name" required hint="First name + surname — one name alone mixes two different people up.">
-                    <input id="nc-name" value={name || (mode === "name" ? nameQuery : "")} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Shah" className={inputClass} autoFocus />
+                    <input id="nc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Shah" className={inputClass} autoFocus />
                   </Field>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Mobile" htmlFor="nc-mobile" required>
                       <input
                         id="nc-mobile"
-                        value={mode === "mobile" ? formatMobileIN(digits) : phone}
+                        value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        readOnly={mode === "mobile"}
                         placeholder="+91 98765 43210"
                         inputMode="tel"
                         className={inputClass}
@@ -621,6 +583,19 @@ function ArrivalFlow({
                       </select>
                     </Field>
                   </div>
+                  <Field label="Serving FC" htmlFor="nc-fc" hint="Registered salesperson — optional, skips the assign step.">
+                    <select id="nc-fc" value={fcId} onChange={(e) => setFcId(e.target.value)} className={inputClass}>
+                      <option value="">Select FC…</option>
+                      {fcRoster.map((sp) => {
+                        const n = fcLoad.get(sp.id) ?? 0;
+                        return (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name}{sp.id === store.user?.id ? " (you)" : ""} — {n === 0 ? "free now" : `${n} active`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </Field>
                   <Btn type="submit" tone="brand" disabled={saving}>{saving ? "Creating…" : "Create customer"}</Btn>
                 </div>
               </form>
@@ -631,7 +606,7 @@ function ArrivalFlow({
         {visit.customerId && customer && !ready && (
           <section className="mt-5">
             <Snapshot customer={{ ...customer, phone: customer.phone }} />
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap gap-2 xl:hidden">
               <Btn tone="brand" onClick={onAssign}>{visit.assignedSalespersonId ? "Continue visit" : "Assign FC"}</Btn>
             </div>
           </section>
@@ -660,13 +635,24 @@ function ArrivalFlow({
         )}
       </div>
 
-      <aside className="border-t border-[var(--fp-line)] pt-4 lg:border-t-0 lg:border-l lg:pl-6 lg:pt-0">
+      <aside className="border-t border-[var(--fp-line)] pt-5 xl:border-t-0 xl:border-l xl:pl-6 xl:pt-0" aria-label="Assignment">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">This visit</p>
         <p className="mt-2 text-[14px] leading-relaxed text-[var(--fp-muted)]">
           {stepOf(visit) === 0 && "Find the customer, then assign who is serving them."}
           {stepOf(visit) === 1 && "Customer is on the visit. Assign an FC before the floor trial."}
           {stepOf(visit) === 2 && "Ready to start. The same visit continues into product trial."}
         </p>
+        <div className="mt-5 border-t border-[var(--fp-line)] pt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Assign Fashion Consultant</p>
+          {visit.customerId ? (
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
+              {visit.assignedSalespersonId ? "Serving this visit — change only if the floor needs it." : "Pick who leads this fitting."}
+            </p>
+          ) : null}
+          <div className="mt-3">
+            <FcRoster visit={visit} locked={!visit.customerId} />
+          </div>
+        </div>
       </aside>
     </div>
   );
@@ -675,21 +661,23 @@ function ArrivalFlow({
 function Snapshot({ customer }: { customer: { name: string; phone: string; visitCount: number; purchaseCount: number; lastVisitAt: string | null; area?: string | null; budget?: string | null; source?: string | null } }) {
   const returning = customer.visitCount > 0;
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="fp-name text-[28px] leading-none">{customer.name}</h2>
-        <StatusMark value={returning ? "active" : "selected"} label={returning ? "Returning customer" : "New customer"} />
+    <div className="border border-[var(--fp-line)] bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="fp-name text-[28px] leading-none">{customer.name}</h2>
+          <StatusMark value={returning ? "active" : "selected"} label={returning ? "Returning customer" : "New customer"} />
+        </div>
       </div>
-      <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">{formatMobileIN(customer.phone)}</p>
+      <p className="fp-num mt-1.5 px-5 text-[14px] text-[var(--fp-muted)]">{formatMobileIN(customer.phone)}</p>
       {(customer.area || customer.budget || customer.source) && (
-        <p className="mt-1.5 text-[13px] text-[var(--fp-muted)]">
+        <p className="mt-1.5 px-5 text-[13px] text-[var(--fp-muted)]">
           {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
         </p>
       )}
-      <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 text-[14px]">
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num font-semibold">{customer.visitCount}</dd></div>
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num font-semibold">{customer.purchaseCount}</dd></div>
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="font-semibold">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
+      <dl className="mx-5 mb-5 mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-[var(--fp-line)] pt-3 text-[14px]">
+        <div><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num text-[18px] font-semibold">{customer.visitCount}</dd></div>
+        <div><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num text-[18px] font-semibold">{customer.purchaseCount}</dd></div>
+        <div><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="text-[15px] font-semibold">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
       </dl>
     </div>
   );
@@ -727,6 +715,29 @@ function PastVisits({ customerId }: { customerId: string }) {
 }
 
 function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => void }) {
+  const { user } = useStore();
+  const manager = canAssignOthers(user?.role);
+
+  return (
+    <Drawer kicker="Assignment · round robin" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC — round robin"} onClose={onClose}>
+      {!manager && (
+        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">You can take this customer yourself. A manager assigns anyone else.</p>
+      )}
+      {manager && (
+        <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
+          Walk-ins rotate in roster order — fair share across the floor. You can reassign any walk-in;
+          the override is logged with who changed it (see Visit timeline).
+        </p>
+      )}
+      <FcRoster visit={visit} onAssigned={() => window.setTimeout(onClose, 500)} />
+    </Drawer>
+  );
+}
+
+/* The assignment rail: same roster + round-robin logic the drawer uses, so the
+   arrival terminal can show it inline (wide screens) instead of behind a tap.
+   Locked until a customer is attached — the server would reject the pick. */
+function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?: () => void; locked?: boolean }) {
   const { salespeople, visits, assignSalesperson, pushToast, user } = useStore();
   const [saving, setSaving] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(visit.assignedSalespersonId);
@@ -740,6 +751,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
   const roster = manager ? salespeople : salespeople.filter((s) => s.id === user?.id);
 
   const pick = async (id: string, name: string) => {
+    if (locked) return;
     if (visit.assignedSalespersonId && visit.assignedSalespersonId !== id && !canReassignVisit(user?.role)) return;
     setSaving(id);
     const r = await assignSalesperson(visit.id, id);
@@ -750,19 +762,13 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
     }
     setDone(id);
     pushToast("Assigned", name);
-    window.setTimeout(onClose, 500);
+    onAssigned?.();
   };
 
   return (
-    <Drawer kicker="Assignment · round robin" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC — round robin"} onClose={onClose}>
-      {!manager && (
-        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">You can take this customer yourself. A manager assigns anyone else.</p>
-      )}
-      {manager && (
-        <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
-          Walk-ins rotate in roster order — fair share across the floor. You can reassign any walk-in;
-          the override is logged with who changed it (see Visit timeline).
-        </p>
+    <div>
+      {locked && (
+        <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">Identify the customer first — then pick who serves them.</p>
       )}
       {roster.length === 0 && <EmptyNote title="No salesperson is available to assign." body="Ask a manager to activate staff for this store." />}
       {(() => {
@@ -772,9 +778,9 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
         return (
           <button
             type="button"
-            disabled={saving !== null || isCurrent}
+            disabled={saving !== null || isCurrent || locked}
             onClick={() => void pick(next.id, next.name)}
-            className="mb-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-lg bg-[#23403a] px-4 text-left text-white"
+            className="mb-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-lg bg-[#23403a] px-4 text-left text-white disabled:opacity-50"
           >
             <span className="text-[14px] font-bold">
               {isCurrent ? `Round robin — ${next.name} is already on this visit` : `Round robin — next up: ${next.name} →`}
@@ -783,7 +789,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
           </button>
         );
       })()}
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2" aria-label="Fashion consultants">
         {roster.map((sp) => {
           const n = load.get(sp.id) ?? 0;
           const state = !sp.active ? "offline" : n > 0 ? "busy" : "available";
@@ -792,7 +798,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
             <li key={sp.id}>
               <button
                 onClick={() => void pick(sp.id, sp.name)}
-                disabled={saving !== null || state === "offline"}
+                disabled={saving !== null || state === "offline" || locked}
                 className={`flex min-h-[64px] w-full items-center justify-between gap-3 border px-3 text-left ${selected ? "border-[var(--fp-ok)] bg-[var(--fp-ok-bg)]" : "border-[var(--fp-line)] bg-white hover:border-[var(--fp-ink)]"}`}
               >
                 <span>
@@ -805,6 +811,6 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
           );
         })}
       </ul>
-    </Drawer>
+    </div>
   );
 }

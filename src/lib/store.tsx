@@ -45,7 +45,7 @@ interface StoreCtx {
   /** Reads one record from the database and caches it. null = no such record. */
   fetchCustomer: (id: string) => Promise<CustomerSnapshotLive | null>;
   createCustomer: (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
-  updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string } } | { ok: false; code: string; message?: string }>;
+  updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string; tier: string | null } } | { ok: false; code: string; message?: string }>;
   attachCustomerToVisit: (visitId: string, customerId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
@@ -246,17 +246,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     ]);
     return {
       ok: true as const,
-      customer: { id: c.id, name: c.name, phone: c.phone, visitCount: 0, lastVisitAt: null, purchaseCount: 0 },
+      customer: { id: c.id, name: c.name, phone: c.phone, visitCount: 0, lastVisitAt: null, purchaseCount: 0, tier: null },
     };
   }, []);
 
-  const updateCustomerOp = useCallback(async (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) => {
+  const updateCustomerOp = useCallback(async (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => {
     const r = await updateCustomerRecord(id, input);
     if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
     const c = r.data;
     setCustomers((prev) => prev.map((x) => (
       x.id === c.id
-        ? { ...x, name: c.name, phone: c.phone, displayMobile: formatMobileIN(c.phone) }
+        ? { ...x, name: c.name, phone: c.phone, displayMobile: formatMobileIN(c.phone), tier: c.tier }
         : x
     )));
     return { ok: true as const, customer: c };

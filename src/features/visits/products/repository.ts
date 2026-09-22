@@ -57,6 +57,7 @@ interface RawVisitProduct {
   dropped_at: string | null;
   drop_reason_id: string | null;
   note: string | null;
+  staff_note: string | null;
   bill_number: string | null;
   purchased_at: string | null;
   created_at: string;
@@ -110,6 +111,7 @@ export function mapVisitProduct(row: RawVisitProduct): VisitProductRow {
     dropped_at: row.dropped_at,
     drop_reason_id: row.drop_reason_id,
     note: row.note,
+    staff_note: row.staff_note ?? null,
     bill_number: row.bill_number ?? null,
     purchased_at: row.purchased_at ?? null,
     created_at: row.created_at,

@@ -15,6 +15,7 @@ import {
   reopenTrial,
   scanProduct,
   searchProducts,
+  setVisitProductNote,
   startTrial,
   undropProduct,
   unlikeProduct,
@@ -30,6 +31,7 @@ import {
   removeProductFromVisitSchema,
   resolveProductSchema,
   searchProductsSchema,
+  setProductNoteSchema,
   startTrialSchema,
   undoProductSchema,
 } from "@/features/visits/products/schemas";
@@ -65,6 +67,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
  *   { action: "mark-purchased-many", visitProductIds, billNumber? }
  *   { action: "drop",               visitProductId, dropReasonId, note? }
  *   { action: "capture-drop-reason",visitProductId, dropReasonId, note? }
+ *   { action: "note",               visitProductId, note? }
  *   { action: "remove",             visitProductId }
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -156,6 +159,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       case "remove": {
         const parsed = removeProductFromVisitSchema.parse({ visitProductId: body.visitProductId });
         return NextResponse.json({ data: await removeProductFromVisit(auth, parsed.visitProductId) });
+      }
+      case "note": {
+        const parsed = setProductNoteSchema.parse({
+          visitProductId: body.visitProductId,
+          note: body.note ?? "",
+        });
+        return NextResponse.json({
+          data: await setVisitProductNote(auth, parsed.visitProductId, parsed.note || null),
+        });
       }
       default:
         return NextResponse.json(

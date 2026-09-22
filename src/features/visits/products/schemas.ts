@@ -84,6 +84,14 @@ export const captureDropReasonSchema = z.object({
 });
 export type CaptureDropReasonInput = z.infer<typeof captureDropReasonSchema>;
 
+/* ---------- FC handling note ---------- */
+
+export const setProductNoteSchema = z.object({
+  visitProductId: z.string().min(1, "Visit product ID required"),
+  note: z.string().trim().max(500, "Keep the note under 500 characters").optional().default(""),
+});
+export type SetProductNoteInput = z.infer<typeof setProductNoteSchema>;
+
 /* ---------- Remove product from visit ---------- */
 
 export const removeProductFromVisitSchema = z.object({

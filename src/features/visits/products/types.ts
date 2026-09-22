@@ -23,6 +23,7 @@ export type ProductEventType =
   | "PRODUCT_DROPPED"
   | "PRODUCT_UNDROPPED"
   | "DROP_REASON_CAPTURED"
+  | "PRODUCT_NOTE_UPDATED"
   | "PRODUCT_PURCHASED";
 
 export interface ProductVariantRow {
@@ -68,6 +69,9 @@ export interface VisitProductRow {
   dropped_at: string | null;
   drop_reason_id: string | null;
   note: string | null;
+  /** FC handling note ("pack with sleeve", "ask about fit") — free text,
+      independent of the drop verdict stored in `note`. */
+  staff_note: string | null;
   /** Roadmap Stage 3 "Billed — scanned": bill number + close timestamp. */
   bill_number: string | null;
   purchased_at: string | null;

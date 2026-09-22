@@ -51,6 +51,8 @@ export interface ProductCardDTO {
   };
   dropReason: { id: string; code: string; label: string } | null;
   note: string | null;
+  /** FC handling note for this piece. Null when none — UI hides the line. */
+  staffNote: string | null;
   /** Roadmap Stage 3 "Billed — scanned". Null until marked billed. */
   billNumber: string | null;
 }

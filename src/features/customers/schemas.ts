@@ -34,7 +34,8 @@ export const updateCustomerSchema = z.object({
   area: z.string().trim().max(80).optional(),
   budget: z.string().trim().max(40).optional(),
   source: z.string().trim().max(40).optional(),
-}).refine((o) => o.name !== undefined || o.phone !== undefined || o.source !== undefined || o.area !== undefined || o.budget !== undefined, {
+  tier: z.enum(["Silver", "Gold"]).nullable().optional(),
+}).refine((o) => o.name !== undefined || o.phone !== undefined || o.source !== undefined || o.area !== undefined || o.budget !== undefined || o.tier !== undefined, {
   message: "Change at least one field",
 });
 
