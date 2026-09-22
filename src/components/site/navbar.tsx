@@ -1,12 +1,13 @@
 /* Floating glass pill nav — cloned from jadepink-flow.
    Sticky, rounded-full, backdrop-blur. Server component. */
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 const LINKS = [
   { href: "#collections", label: "Collections" },
-  { href: "#collections", label: "Clothing" },
-  { href: "#new", label: "Jewellery" },
+  { href: "#new", label: "New in" },
+  { href: "#designers", label: "Designers" },
   { href: "#lifestyle", label: "Lifestyle" },
   { href: "#contact", label: "Visit" },
 ];
@@ -15,7 +16,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-30 px-4 pt-4 sm:px-8 sm:pt-5">
       <div className="mx-auto max-w-6xl">
-        <div className="glass-panel-strong reveal flex items-center justify-between gap-4 rounded-full px-4 py-2.5 ring-1 ring-shadow backdrop-blur-2xl sm:px-5">
+        <div className="glass-panel-strong reveal flex items-center justify-between gap-4 rounded-full px-4 py-2.5 ring-1 ring-shadow backdrop-blur-lg sm:px-5">
           <a
             href="#top"
             className="group flex shrink-0 items-center gap-2.5 rounded-full"
@@ -44,14 +45,22 @@ export function Navbar() {
             ))}
           </nav>
 
-          <Button asChild variant="boutique" size="boutique" className="nudge shrink-0">
-            <a href="#collections">
-              Shop now
-              <span className="nudge-target text-base leading-none" aria-hidden="true">
-                →
-              </span>
-            </a>
-          </Button>
+          <div className="ml-auto flex shrink-0 items-center gap-4 sm:gap-5">
+            <Link
+              href="/login"
+              className="link-line hidden py-1 text-[0.9375rem] leading-none text-ink/65 transition-colors duration-200 hover:text-brand min-[400px]:inline"
+            >
+              Sign in
+            </Link>
+            <Button asChild variant="boutique" size="boutique" className="nudge shrink-0">
+              <a href="#collections">
+                Shop now
+                <span className="nudge-target text-base leading-none" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </Button>
+          </div>
         </div>
 
         {/* Mobile anchor row: single line, horizontally scrollable */}
@@ -66,6 +75,12 @@ export function Navbar() {
                 {l.label}
               </a>
             ))}
+            <Link
+              href="/login"
+              className="shrink-0 text-[12px] font-medium tracking-[0.12em] text-brand uppercase"
+            >
+              Sign in
+            </Link>
           </div>
         </nav>
       </div>
