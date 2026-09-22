@@ -42,6 +42,13 @@ export const likeProductSchema = z.object({
 });
 export type LikeProductInput = z.infer<typeof likeProductSchema>;
 
+/* ---------- Undo: unlike / reopen / cancel trial / un-drop ---------- */
+
+export const undoProductSchema = z.object({
+  visitProductId: z.string().min(1, "Visit product ID required"),
+});
+export type UndoProductInput = z.infer<typeof undoProductSchema>;
+
 /* ---------- Billed — scanned (roadmap Stage 3) ----------
    Bill number is OPTIONAL: the FC can bill liked pieces immediately and add
    the paper bill number later (or never — walk-in cash sales often have none).

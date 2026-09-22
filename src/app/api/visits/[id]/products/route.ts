@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/authz";
 import { toErrorPayload } from "@/lib/errors";
 import {
   addProductToVisit,
+  cancelTrial,
   captureDropReason,
   completeTrial,
   dropProduct,
@@ -11,9 +12,12 @@ import {
   markProductPurchased,
   markProductsPurchased,
   removeProductFromVisit,
+  reopenTrial,
   scanProduct,
   searchProducts,
   startTrial,
+  undropProduct,
+  unlikeProduct,
 } from "@/features/visits/products/service";
 import {
   addProductToVisitSchema,
@@ -27,6 +31,7 @@ import {
   resolveProductSchema,
   searchProductsSchema,
   startTrialSchema,
+  undoProductSchema,
 } from "@/features/visits/products/schemas";
 
 function fail(e: unknown) {
@@ -93,6 +98,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       case "like": {
         const parsed = likeProductSchema.parse({ visitProductId: body.visitProductId });
         return NextResponse.json({ data: await likeProduct(auth, parsed.visitProductId) });
+      }
+      case "unlike": {
+        const parsed = undoProductSchema.parse({ visitProductId: body.visitProductId });
+        return NextResponse.json({ data: await unlikeProduct(auth, parsed.visitProductId) });
+      }
+      case "reopen-trial": {
+        const parsed = undoProductSchema.parse({ visitProductId: body.visitProductId });
+        return NextResponse.json({ data: await reopenTrial(auth, parsed.visitProductId) });
+      }
+      case "cancel-trial": {
+        const parsed = undoProductSchema.parse({ visitProductId: body.visitProductId });
+        return NextResponse.json({ data: await cancelTrial(auth, parsed.visitProductId) });
+      }
+      case "undrop": {
+        const parsed = undoProductSchema.parse({ visitProductId: body.visitProductId });
+        return NextResponse.json({ data: await undropProduct(auth, parsed.visitProductId) });
       }
       case "mark-purchased": {
         const parsed = markPurchasedSchema.parse({
