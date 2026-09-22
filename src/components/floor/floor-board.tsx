@@ -1028,6 +1028,17 @@ export function FloorBoard({
           {detail.status === "DROPPED" && detail.dropReason && (
             <p className="mt-3 text-[14px]">Reason: <span className="font-semibold">{detail.dropReason.label}</span>{detail.note ? ` — ${detail.note}` : ""}</p>
           )}
+          <NoteEditor
+            key={detail.id}
+            initial={detail.staffNote ?? ""}
+            saving={busy === `note-${detail.id}`}
+            onSave={(note) => {
+              void run(`note-${detail.id}`, () => callApi(visitId, "note", { visitProductId: detail.id, note }), {
+                title: note ? "Note saved" : "Note cleared",
+                body: detail.product.name,
+              });
+            }}
+          />
           <ol className="mt-5 border-t border-[var(--fp-line)] pt-4">
             <TimeRow at={detail.timeline.addedAt} label="Added" />
             <TimeRow at={detail.timeline.trialStartedAt} label="Trial started" />
@@ -1326,6 +1337,56 @@ function TimeRow({ at, label }: { at: string | null; label: string }) {
       <span>{label}</span>
       <span className="fp-num text-[var(--fp-muted)]">{clockTime(at)}</span>
     </li>
+  );
+}
+
+/* FC handling note for one piece ("pack with garment sleeve", "ask about
+   the fit"). Shown on the card once saved; emptying the field clears it. */
+function NoteEditor({ initial, saving, onSave }: { initial: string; saving: boolean; onSave: (note: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initial);
+  if (!editing) {
+    return (
+      <div className="mt-4">
+        {initial ? (
+          <p className="rounded-lg bg-[#faf7f2] px-3 py-2 text-[13.5px] text-[#57534e]">
+            <strong className="font-semibold">Tagged:</strong> {initial}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => { setDraft(initial); setEditing(true); }}
+          className="mt-2 inline-flex min-h-[44px] items-center text-[13.5px] font-semibold text-[var(--fp-muted)] hover:text-[var(--fp-ink)]"
+        >
+          {initial ? "Edit note" : "Add a note for this piece"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <label htmlFor="piece-note" className="text-[13px] font-semibold text-[#44403c]">Note for this piece</label>
+      <textarea
+        id="piece-note"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={2}
+        maxLength={500}
+        autoFocus
+        placeholder="e.g. Pack with garment sleeve"
+        className="mt-1.5 w-full rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 py-2 text-[14.5px] text-[var(--fp-ink)] placeholder:text-[var(--fp-faint)] focus:border-[var(--fp-ink)] focus:outline-none"
+      />
+      <div className="mt-2 flex gap-2">
+        <Btn
+          tone="brand"
+          disabled={saving || draft.trim() === initial.trim()}
+          onClick={() => { onSave(draft.trim()); setEditing(false); }}
+        >
+          {saving ? "Saving…" : "Save note"}
+        </Btn>
+        <Btn tone="quiet" onClick={() => { setDraft(initial); setEditing(false); }}>Cancel</Btn>
+      </div>
+    </div>
   );
 }
 

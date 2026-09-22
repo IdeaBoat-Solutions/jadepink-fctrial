@@ -1,0 +1,412 @@
+-- LIVE schema of public schema — read from the database 2026-09-21T12:37:31.735Z
+-- This is ground truth. Compare against supabase/schema.sql before writing new migrations.
+
+-- ===== TABLES (15) / VIEWS (3) =====
+-- categories               table (4 cols)
+-- customers                table (10 cols)
+-- drop_reasons             table (7 cols)
+-- order_items              table (6 cols)
+-- orders                   table (12 cols)
+-- product_images           table (6 cols)
+-- product_variants         table (11 cols)
+-- products                 table (48 cols)
+-- staff_profiles           table (9 cols)
+-- stock_movements          table (8 cols)
+-- stores                   table (8 cols)
+-- suppliers                table (8 cols)
+-- v_floor_team             view (8 cols)
+-- v_salespeople            view (8 cols)
+-- v_store_managers         view (8 cols)
+-- visit_events             table (8 cols)
+-- visit_products           table (13 cols)
+-- visits                   table (13 cols)
+
+-- ===== ENUM TYPES =====
+-- product_visit_status: SELECTED, TRIAL_IN_PROGRESS, TRIAL_COMPLETED, LIKED, DROPPED, PURCHASED
+
+-- ===== COLUMNS / CONSTRAINTS / INDEXES =====
+
+-- ---- categories ----
+--   id                         text                     not null
+--   name                       text                     not null
+--   slug                       text                     not null
+--   created_at                 timestamp with time zone not null default now()
+--   constraint categories_name_key [u] UNIQUE (name)
+--   constraint categories_pkey [p] PRIMARY KEY (id)
+--   constraint categories_slug_key [u] UNIQUE (slug)
+--   index CREATE UNIQUE INDEX categories_name_key ON public.categories USING btree (name)
+--   index CREATE UNIQUE INDEX categories_pkey ON public.categories USING btree (id)
+--   index CREATE UNIQUE INDEX categories_slug_key ON public.categories USING btree (slug)
+
+-- ---- customers ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   name                       text                     not null
+--   mobile                     text                     not null
+--   normalized_phone           text
+--   email                      text
+--   city                       text
+--   source                     text                      default 'Walk-in'::text
+--   visits                     integer                  not null default 0
+--   purchases                  integer                  not null default 0
+--   created_at                 timestamp with time zone not null default now()
+--   constraint customers_mobile_key [u] UNIQUE (mobile)
+--   constraint customers_normalized_phone_key [u] UNIQUE (normalized_phone)
+--   constraint customers_pkey [p] PRIMARY KEY (id)
+--   index CREATE UNIQUE INDEX customers_mobile_key ON public.customers USING btree (mobile)
+--   index CREATE INDEX customers_normalized_phone_idx ON public.customers USING btree (normalized_phone)
+--   index CREATE UNIQUE INDEX customers_normalized_phone_key ON public.customers USING btree (normalized_phone)
+--   index CREATE UNIQUE INDEX customers_pkey ON public.customers USING btree (id)
+
+-- ---- drop_reasons ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   code                       text                     not null
+--   label                      text                     not null
+--   description                text
+--   is_active                  boolean                  not null default true
+--   sort_order                 integer                  not null default 0
+--   created_at                 timestamp with time zone not null default now()
+--   constraint drop_reasons_code_key [u] UNIQUE (code)
+--   constraint drop_reasons_pkey [p] PRIMARY KEY (id)
+--   index CREATE UNIQUE INDEX drop_reasons_code_key ON public.drop_reasons USING btree (code)
+--   index CREATE UNIQUE INDEX drop_reasons_pkey ON public.drop_reasons USING btree (id)
+--   index CREATE INDEX drop_reasons_sort_idx ON public.drop_reasons USING btree (sort_order)
+
+-- ---- order_items ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   order_id                   text                     not null
+--   product_id                 text                     not null
+--   product_name               text                     not null
+--   qty                        integer                  not null
+--   price                      integer                  not null
+--   constraint order_items_order_id_fkey [f] FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+--   constraint order_items_pkey [p] PRIMARY KEY (id)
+--   constraint order_items_product_id_fkey [f] FOREIGN KEY (product_id) REFERENCES products(id)
+--   index CREATE INDEX order_items_order_idx ON public.order_items USING btree (order_id)
+--   index CREATE UNIQUE INDEX order_items_pkey ON public.order_items USING btree (id)
+--   index CREATE INDEX order_items_product_idx ON public.order_items USING btree (product_id)
+
+-- ---- orders ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   code                       text                     not null
+--   customer_id                text
+--   customer_name              text                     not null
+--   customer_phone             text                     not null
+--   total                      integer                  not null
+--   status                     text                     not null default 'pending'::text
+--   channel                    text                     not null default 'walk-in'::text
+--   fc_name                    text
+--   staff_id                   uuid
+--   store_id                   text
+--   created_at                 timestamp with time zone not null default now()
+--   constraint orders_code_key [u] UNIQUE (code)
+--   constraint orders_customer_id_fkey [f] FOREIGN KEY (customer_id) REFERENCES customers(id)
+--   constraint orders_pkey [p] PRIMARY KEY (id)
+--   constraint orders_store_id_fkey [f] FOREIGN KEY (store_id) REFERENCES stores(id)
+--   index CREATE INDEX orders_channel_idx ON public.orders USING btree (channel)
+--   index CREATE UNIQUE INDEX orders_code_key ON public.orders USING btree (code)
+--   index CREATE INDEX orders_created_idx ON public.orders USING btree (created_at)
+--   index CREATE UNIQUE INDEX orders_pkey ON public.orders USING btree (id)
+--   index CREATE INDEX orders_status_idx ON public.orders USING btree (status)
+
+-- ---- product_images ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   product_id                 text                     not null
+--   url                        text                     not null
+--   position                   integer                  not null default 0
+--   alt                        text
+--   created_at                 timestamp with time zone not null default now()
+--   constraint product_images_pkey [p] PRIMARY KEY (id)
+--   constraint product_images_product_id_fkey [f] FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+--   constraint product_images_product_id_url_key [u] UNIQUE (product_id, url)
+--   index CREATE UNIQUE INDEX product_images_pkey ON public.product_images USING btree (id)
+--   index CREATE UNIQUE INDEX product_images_product_id_url_key ON public.product_images USING btree (product_id, url)
+--   index CREATE INDEX product_images_product_idx ON public.product_images USING btree (product_id, "position")
+
+-- ---- product_variants ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   product_id                 text                     not null
+--   sku                        text                     not null
+--   barcode                    text
+--   size                       text                     not null default 'ONE_SIZE'::text
+--   colour                     text                     not null default 'ONE_COLOUR'::text
+--   price                      integer                  not null default 0
+--   image_key                  text
+--   is_active                  boolean                  not null default true
+--   created_at                 timestamp with time zone not null default now()
+--   updated_at                 timestamp with time zone not null default now()
+--   constraint product_variants_barcode_key [u] UNIQUE (barcode)
+--   constraint product_variants_pkey [p] PRIMARY KEY (id)
+--   constraint product_variants_product_id_fkey [f] FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+--   constraint product_variants_sku_key [u] UNIQUE (sku)
+--   index CREATE INDEX product_variants_barcode_idx ON public.product_variants USING btree (barcode)
+--   index CREATE UNIQUE INDEX product_variants_barcode_key ON public.product_variants USING btree (barcode)
+--   index CREATE INDEX product_variants_barcode_search_idx ON public.product_variants USING btree (barcode) WHERE (barcode IS NOT NULL)
+--   index CREATE UNIQUE INDEX product_variants_pkey ON public.product_variants USING btree (id)
+--   index CREATE INDEX product_variants_product_idx ON public.product_variants USING btree (product_id)
+--   index CREATE INDEX product_variants_sku_idx ON public.product_variants USING btree (sku)
+--   index CREATE UNIQUE INDEX product_variants_sku_key ON public.product_variants USING btree (sku)
+--   index CREATE INDEX product_variants_sku_search_idx ON public.product_variants USING btree (sku) WHERE (sku IS NOT NULL)
+
+-- ---- products ----
+--   id                         text                     not null
+--   sku                        text                     not null
+--   name                       text                     not null
+--   category_id                text                     not null
+--   price                      integer                  not null
+--   mrp                        integer
+--   cost                       integer                  not null default 0
+--   stock                      integer                  not null default 0
+--   low_stock_at               integer                  not null default 5
+--   sizes                      text                     not null default 'S,M,L'::text
+--   colors                     text                     not null default ''::text
+--   supplier_id                text
+--   updated_at                 timestamp with time zone not null default now()
+--   created_at                 timestamp with time zone not null default now()
+--   barcode                    text
+--   company_barcode            text
+--   branch_name                text                     not null default 'HO'::text
+--   department                 text
+--   brand_name                 text
+--   item_id                    text
+--   item_group_name            text
+--   hsn_code                   text
+--   party_name                 text
+--   party_city                 text
+--   agent_name                 text
+--   design_no                  text
+--   lot_no                     text
+--   color                      text
+--   size                       text
+--   season                     text
+--   subcategory2               text
+--   subcategory3               text
+--   qty                        numeric                  not null default 1
+--   sales_rate                 numeric
+--   day_book                   text
+--   inward_vch_no              text
+--   inward_vch_date            date
+--   purc_bill_no               text
+--   purchase_vch_no            text
+--   purchase_vch_date          date
+--   pur_rate                   numeric
+--   pur_net_rate               numeric
+--   pur_cost_rate              numeric
+--   pur_exp_rate               numeric
+--   markup_pct                 numeric
+--   markdown_pct               numeric
+--   image_url                  text
+--   image_urls                 text[]                   not null default '{}'::text[]
+--   constraint products_barcode_key [u] UNIQUE (barcode)
+--   constraint products_category_id_fkey [f] FOREIGN KEY (category_id) REFERENCES categories(id)
+--   constraint products_pkey [p] PRIMARY KEY (id)
+--   constraint products_sku_key [u] UNIQUE (sku)
+--   constraint products_supplier_id_fkey [f] FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+--   index CREATE INDEX products_barcode_idx ON public.products USING btree (barcode)
+--   index CREATE UNIQUE INDEX products_barcode_key ON public.products USING btree (barcode)
+--   index CREATE INDEX products_brand_idx ON public.products USING btree (brand_name)
+--   index CREATE INDEX products_category_idx ON public.products USING btree (category_id)
+--   index CREATE INDEX products_company_barcode_idx ON public.products USING btree (company_barcode)
+--   index CREATE INDEX products_department_idx ON public.products USING btree (department)
+--   index CREATE INDEX products_design_no_idx ON public.products USING btree (design_no)
+--   index CREATE UNIQUE INDEX products_pkey ON public.products USING btree (id)
+--   index CREATE UNIQUE INDEX products_sku_key ON public.products USING btree (sku)
+--   index CREATE INDEX products_supplier_idx ON public.products USING btree (supplier_id)
+
+-- ---- staff_profiles ----
+--   id                         uuid                     not null
+--   email                      text                     not null
+--   name                       text                     not null
+--   phone                      text
+--   role                       text                     not null default 'FC'::text
+--   store_id                   text
+--   active                     boolean                  not null default true
+--   created_at                 timestamp with time zone not null default now()
+--   updated_at                 timestamp with time zone not null default now()
+--   constraint staff_profiles_email_key [u] UNIQUE (email)
+--   constraint staff_profiles_id_fkey [f] FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
+--   constraint staff_profiles_pkey [p] PRIMARY KEY (id)
+--   constraint staff_profiles_role_check [c] CHECK ((role = ANY (ARRAY['FC'::text, 'STORE_MANAGER'::text, 'ADMIN'::text, 'MANAGEMENT'::text])))
+--   constraint staff_profiles_store_id_fkey [f] FOREIGN KEY (store_id) REFERENCES stores(id)
+--   index CREATE UNIQUE INDEX staff_profiles_email_key ON public.staff_profiles USING btree (email)
+--   index CREATE UNIQUE INDEX staff_profiles_pkey ON public.staff_profiles USING btree (id)
+--   index CREATE INDEX staff_profiles_role_idx ON public.staff_profiles USING btree (role)
+--   index CREATE INDEX staff_profiles_store_idx ON public.staff_profiles USING btree (store_id)
+
+-- ---- stock_movements ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   product_id                 text                     not null
+--   product_name               text                     not null
+--   type                       text                     not null
+--   qty                        integer                  not null
+--   reason                     text                     not null default ''::text
+--   actor                      text                     not null default 'system'::text
+--   created_at                 timestamp with time zone not null default now()
+--   constraint stock_movements_pkey [p] PRIMARY KEY (id)
+--   constraint stock_movements_product_id_fkey [f] FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+--   index CREATE UNIQUE INDEX stock_movements_pkey ON public.stock_movements USING btree (id)
+--   index CREATE INDEX stock_movements_product_idx ON public.stock_movements USING btree (product_id)
+
+-- ---- stores ----
+--   id                         text                     not null
+--   name                       text                     not null
+--   code                       text
+--   city                       text                     not null default 'Mumbai'::text
+--   address                    text
+--   location                   text
+--   active                     boolean                  not null default true
+--   created_at                 timestamp with time zone not null default now()
+--   constraint stores_code_key [u] UNIQUE (code)
+--   constraint stores_pkey [p] PRIMARY KEY (id)
+--   index CREATE UNIQUE INDEX stores_code_key ON public.stores USING btree (code)
+--   index CREATE UNIQUE INDEX stores_pkey ON public.stores USING btree (id)
+
+-- ---- suppliers ----
+--   id                         text                     not null
+--   name                       text                     not null
+--   contact                    text
+--   phone                      text
+--   email                      text
+--   city                       text
+--   rating                     double precision          default 4.5
+--   created_at                 timestamp with time zone not null default now()
+--   constraint suppliers_pkey [p] PRIMARY KEY (id)
+--   index CREATE UNIQUE INDEX suppliers_pkey ON public.suppliers USING btree (id)
+
+-- ---- visit_events ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   visit_id                   text                     not null
+--   event_type                 text                     not null
+--   actor_id                   uuid
+--   metadata                   jsonb                    not null default '{}'::jsonb
+--   created_at                 timestamp with time zone not null default now()
+--   entity_type                text
+--   entity_id                  text
+--   constraint visit_events_pkey [p] PRIMARY KEY (id)
+--   constraint visit_events_visit_id_fkey [f] FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE CASCADE
+--   index CREATE INDEX visit_events_entity_idx ON public.visit_events USING btree (entity_type, entity_id)
+--   index CREATE INDEX visit_events_entity_type_idx ON public.visit_events USING btree (entity_type, entity_id)
+--   index CREATE UNIQUE INDEX visit_events_pkey ON public.visit_events USING btree (id)
+--   index CREATE INDEX visit_events_visit_created_desc_idx ON public.visit_events USING btree (visit_id, created_at DESC)
+--   index CREATE INDEX visit_events_visit_idx ON public.visit_events USING btree (visit_id, created_at)
+
+-- ---- visit_products ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   visit_id                   text                     not null
+--   product_variant_id         text                     not null
+--   status                     product_visit_status     not null default 'SELECTED'::product_visit_status
+--   added_at                   timestamp with time zone not null default now()
+--   trial_started_at           timestamp with time zone
+--   trial_completed_at         timestamp with time zone
+--   liked_at                   timestamp with time zone
+--   dropped_at                 timestamp with time zone
+--   drop_reason_id             text
+--   note                       text
+--   created_at                 timestamp with time zone not null default now()
+--   updated_at                 timestamp with time zone not null default now()
+--   constraint visit_products_drop_reason_id_fkey [f] FOREIGN KEY (drop_reason_id) REFERENCES drop_reasons(id)
+--   constraint visit_products_drop_reason_required [c] CHECK (((status <> 'DROPPED'::product_visit_status) OR (drop_reason_id IS NOT NULL)))
+--   constraint visit_products_pkey [p] PRIMARY KEY (id)
+--   constraint visit_products_product_variant_id_fkey [f] FOREIGN KEY (product_variant_id) REFERENCES product_variants(id) ON DELETE RESTRICT
+--   constraint visit_products_trial_order [c] CHECK (((trial_completed_at IS NULL) OR (trial_started_at IS NULL) OR (trial_completed_at >= trial_started_at)))
+--   constraint visit_products_visit_id_fkey [f] FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE CASCADE
+--   constraint visit_products_visit_id_product_variant_id_key [u] UNIQUE (visit_id, product_variant_id)
+--   index CREATE INDEX visit_products_active_trials_idx ON public.visit_products USING btree (visit_id, status) WHERE (status = 'TRIAL_IN_PROGRESS'::product_visit_status)
+--   index CREATE UNIQUE INDEX visit_products_pkey ON public.visit_products USING btree (id)
+--   index CREATE INDEX visit_products_status_idx ON public.visit_products USING btree (visit_id, status)
+--   index CREATE INDEX visit_products_variant_idx ON public.visit_products USING btree (product_variant_id)
+--   index CREATE INDEX visit_products_variant_status_analytics_idx ON public.visit_products USING btree (product_variant_id, status)
+--   index CREATE INDEX visit_products_variant_status_idx ON public.visit_products USING btree (product_variant_id, status)
+--   index CREATE UNIQUE INDEX visit_products_visit_id_product_variant_id_key ON public.visit_products USING btree (visit_id, product_variant_id)
+--   index CREATE INDEX visit_products_visit_idx ON public.visit_products USING btree (visit_id)
+--   index CREATE INDEX visit_products_visit_status_summary_idx ON public.visit_products USING btree (visit_id, status)
+
+-- ---- visits ----
+--   id                         text                     not null default (gen_random_uuid())::text
+--   customer_id                text
+--   store_id                   text                     not null
+--   assigned_salesperson_id    uuid
+--   status                     text                     not null default 'ARRIVED'::text
+--   arrived_at                 timestamp with time zone not null default now()
+--   identified_at              timestamp with time zone
+--   assigned_at                timestamp with time zone
+--   started_at                 timestamp with time zone
+--   completed_at               timestamp with time zone
+--   cancelled_at               timestamp with time zone
+--   created_at                 timestamp with time zone not null default now()
+--   updated_at                 timestamp with time zone not null default now()
+--   constraint visits_customer_id_fkey [f] FOREIGN KEY (customer_id) REFERENCES customers(id)
+--   constraint visits_pkey [p] PRIMARY KEY (id)
+--   constraint visits_status_check [c] CHECK ((status = ANY (ARRAY['ARRIVED'::text, 'IDENTIFYING'::text, 'ASSIGNED'::text, 'ACTIVE'::text, 'COMPLETED'::text, 'CANCELLED'::text])))
+--   constraint visits_store_id_fkey [f] FOREIGN KEY (store_id) REFERENCES stores(id)
+--   index CREATE INDEX visits_customer_idx ON public.visits USING btree (customer_id, created_at)
+--   index CREATE UNIQUE INDEX visits_pkey ON public.visits USING btree (id)
+--   index CREATE INDEX visits_salesperson_idx ON public.visits USING btree (assigned_salesperson_id, status)
+--   index CREATE INDEX visits_store_status_idx ON public.visits USING btree (store_id, status)
+
+-- ===== ORPHAN INDEXES (not backing a constraint) =====
+-- categories :: categories_name_key
+-- categories :: categories_pkey
+-- categories :: categories_slug_key
+-- customers :: customers_mobile_key
+-- customers :: customers_normalized_phone_idx
+-- customers :: customers_normalized_phone_key
+-- customers :: customers_pkey
+-- drop_reasons :: drop_reasons_code_key
+-- drop_reasons :: drop_reasons_pkey
+-- drop_reasons :: drop_reasons_sort_idx
+-- order_items :: order_items_order_idx
+-- order_items :: order_items_pkey
+-- order_items :: order_items_product_idx
+-- orders :: orders_channel_idx
+-- orders :: orders_code_key
+-- orders :: orders_created_idx
+-- orders :: orders_pkey
+-- orders :: orders_status_idx
+-- product_images :: product_images_pkey
+-- product_images :: product_images_product_id_url_key
+-- product_images :: product_images_product_idx
+-- product_variants :: product_variants_barcode_idx
+-- product_variants :: product_variants_barcode_key
+-- product_variants :: product_variants_barcode_search_idx
+-- product_variants :: product_variants_pkey
+-- product_variants :: product_variants_product_idx
+-- product_variants :: product_variants_sku_idx
+-- product_variants :: product_variants_sku_key
+-- product_variants :: product_variants_sku_search_idx
+-- products :: products_barcode_idx
+-- products :: products_barcode_key
+-- products :: products_brand_idx
+-- products :: products_category_idx
+-- products :: products_company_barcode_idx
+-- products :: products_department_idx
+-- products :: products_design_no_idx
+-- products :: products_pkey
+-- products :: products_sku_key
+-- products :: products_supplier_idx
+-- staff_profiles :: staff_profiles_email_key
+-- staff_profiles :: staff_profiles_pkey
+-- staff_profiles :: staff_profiles_role_idx
+-- staff_profiles :: staff_profiles_store_idx
+-- stock_movements :: stock_movements_pkey
+-- stock_movements :: stock_movements_product_idx
+-- stores :: stores_code_key
+-- stores :: stores_pkey
+-- suppliers :: suppliers_pkey
+-- visit_events :: visit_events_entity_idx
+-- visit_events :: visit_events_entity_type_idx
+-- visit_events :: visit_events_pkey
+-- visit_events :: visit_events_visit_created_desc_idx
+-- visit_events :: visit_events_visit_idx
+-- visit_products :: visit_products_active_trials_idx
+-- visit_products :: visit_products_pkey
+-- visit_products :: visit_products_status_idx
+-- visit_products :: visit_products_variant_idx
+-- visit_products :: visit_products_variant_status_analytics_idx
+-- visit_products :: visit_products_variant_status_idx
+-- visit_products :: visit_products_visit_id_product_variant_id_key
+-- visit_products :: visit_products_visit_idx
+-- visit_products :: visit_products_visit_status_summary_idx
+-- visits :: visits_customer_idx
+-- visits :: visits_pkey
+-- visits :: visits_salesperson_idx
+-- visits :: visits_store_status_idx
