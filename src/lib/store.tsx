@@ -163,7 +163,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const createWalkInOp = useCallback(async (): Promise<VisitLive | null> => {
     const storeId = profile?.storeId;
-    if (!storeId) return null;
+    if (!storeId) {
+      // Never fail silently here: every caller returns on null, so an
+      // unassigned store would otherwise look like a dead button.
+      pushToast("Could not record walk-in", "Your account has no store assigned. Ask your manager to assign one.");
+      return null;
+    }
     const r = await createWalkIn(storeId);
     if (!r.ok) {
       pushToast("Could not record walk-in", r.message);
