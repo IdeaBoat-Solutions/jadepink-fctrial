@@ -1,28 +1,25 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function BackgroundBeams({ className }: { className?: string }) {
   const beams = [
-    { left: "8%", duration: 9, delay: 0, height: "220px" },
-    { left: "28%", duration: 12, delay: 1.5, height: "320px" },
-    { left: "52%", duration: 10, delay: 0.8, height: "260px" },
-    { left: "74%", duration: 13, delay: 2.2, height: "300px" },
-    { left: "90%", duration: 8, delay: 0.4, height: "200px" },
+    { left: "8%", duration: "9s", delay: "0s", height: "220px" },
+    { left: "28%", duration: "12s", delay: "1.5s", height: "320px" },
+    { left: "52%", duration: "10s", delay: "0.8s", height: "260px" },
+    { left: "74%", duration: "13s", delay: "2.2s", height: "300px" },
+    { left: "90%", duration: "8s", delay: "0.4s", height: "200px" },
   ];
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(180,35,77,0.14),transparent_60%)]" />
       <div className="absolute inset-0 dot-grid opacity-[0.35] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
       {beams.map((b, i) => (
-        <motion.span
+        <span
           key={i}
-          className="absolute top-[-30%] w-px bg-gradient-to-b from-transparent via-[#b4234d]/40 to-transparent"
-          style={{ left: b.left, height: b.height }}
-          animate={{ y: ["0vh", "130vh"] }}
-          transition={{ duration: b.duration, delay: b.delay, repeat: Infinity, ease: "linear" }}
+          className="beam-fall absolute top-[-30%] w-px bg-gradient-to-b from-transparent via-[#b4234d]/40 to-transparent motion-safe:animate-[beam-fall_linear_infinite] motion-reduce:animate-none"
+          style={{ left: b.left, height: b.height, animationDuration: b.duration, animationDelay: b.delay }}
         />
       ))}
     </div>

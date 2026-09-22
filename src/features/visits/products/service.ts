@@ -26,6 +26,7 @@ import {
   listVisitProducts,
   patchVisitProduct,
   resolveVariantByIdentifier,
+  searchVariants,
   transitionVisitProduct,
 } from "./repository";
 import { canTransitionProductStatus } from "./state-machine";
@@ -75,6 +76,7 @@ function toResolvedProduct(v: {
   product_id: string;
   product_name?: string;
   product_category?: string;
+  product_image_url?: string | null;
   size: string;
   colour: string;
   price: number;
@@ -87,6 +89,7 @@ function toResolvedProduct(v: {
     size: v.size,
     colour: v.colour,
     price: v.price,
+    imageUrl: v.product_image_url ?? null,
   };
 }
 
@@ -102,6 +105,7 @@ export function toProductCard(vp: VisitProductRow): ProductCardDTO {
       colour: vp.product?.colour ?? "",
       price: vp.product?.price ?? 0,
       imageKey: vp.product?.image_key ?? null,
+      imageUrl: vp.product?.image_url ?? vp.variant?.product_image_url ?? null,
     },
     timeline: {
       addedAt: vp.added_at,
@@ -109,11 +113,13 @@ export function toProductCard(vp: VisitProductRow): ProductCardDTO {
       trialCompletedAt: vp.trial_completed_at,
       likedAt: vp.liked_at,
       droppedAt: vp.dropped_at,
+      purchasedAt: vp.purchased_at ?? null,
     },
     dropReason: vp.drop_reason
       ? { id: vp.drop_reason.id, code: vp.drop_reason.code, label: vp.drop_reason.label }
       : null,
     note: vp.note,
+    billNumber: vp.bill_number ?? null,
   };
 }
 
@@ -178,6 +184,30 @@ export async function scanProduct(auth: AuthContext, visitId: string, identifier
     product: toResolvedProduct(variant),
     alreadyAdded: Boolean(existing),
     visitProductId: existing?.id ?? null,
+  };
+}
+
+/** searchProducts(): fuzzy fallback when exact scan misses — typo-tolerant,
+    token-order-free matching over name + colour + size + category + SKU.
+    Read-only; visit must still be ACTIVE and store-scoped. Each candidate
+    carries alreadyAdded so the UI focuses instead of duplicating. */
+export async function searchProducts(auth: AuthContext, visitId: string, query: string) {
+  const visit = await loadVisit(visitId);
+  assertStoreAccess(auth, visit.store_id);
+  assertVisitActive(visit);
+
+  const q = (query ?? "").trim();
+  if (q.length < 2) return { query: q, results: [] as Array<ResolvedProduct & { alreadyAdded: boolean; visitProductId: string | null }> };
+
+  const [variants, existing] = await Promise.all([searchVariants(q), listVisitProducts(visitId)]);
+  const onVisit = new Map(existing.map((vp) => [vp.product_variant_id, vp.id]));
+  return {
+    query: q,
+    results: variants.map((v) => ({
+      ...toResolvedProduct(v),
+      alreadyAdded: onVisit.has(v.id),
+      visitProductId: onVisit.get(v.id) ?? null,
+    })),
   };
 }
 
@@ -263,6 +293,167 @@ export async function likeProduct(auth: AuthContext, visitProductId: string) {
     product_variant_id: vp.product_variant_id,
     sku: vp.product?.sku ?? null,
   });
+}
+
+/* ---------- Undo: every step can step back ----------
+   A mistaken tap on the floor must never trap a product. Each undo returns
+   the piece where it came from and records its own event, so the timeline
+   stays honest (liked → unliked reads as two facts, not a silent rewrite). */
+
+/** unlikeProduct(): LIKED steps back to trial-completed when trialled, else
+    straight back to selected. */
+export async function unlikeProduct(auth: AuthContext, visitProductId: string) {
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  const back = vp.trial_completed_at ? "TRIAL_COMPLETED" : "SELECTED";
+  if (vp.status === back && !vp.liked_at) return toProductCard(vp); // already undone retry
+  return runTransition(auth, vp.visit_id, vp.id, "LIKED", back, { liked_at: null }, "PRODUCT_UNLIKED", {
+    product_variant_id: vp.product_variant_id,
+    sku: vp.product?.sku ?? null,
+  });
+}
+
+/** reopenTrial(): a completed trial goes back in progress (customer tries again). */
+export async function reopenTrial(auth: AuthContext, visitProductId: string) {
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  if (vp.status === "TRIAL_IN_PROGRESS" && !vp.trial_completed_at) return toProductCard(vp);
+  return runTransition(auth, vp.visit_id, vp.id, "TRIAL_COMPLETED", "TRIAL_IN_PROGRESS", { trial_completed_at: null }, "TRIAL_REOPENED", {
+    product_variant_id: vp.product_variant_id,
+    sku: vp.product?.sku ?? null,
+  });
+}
+
+/** cancelTrial(): a trial in progress is called off — back to selected. */
+export async function cancelTrial(auth: AuthContext, visitProductId: string) {
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  if (vp.status === "SELECTED" && !vp.trial_started_at) return toProductCard(vp);
+  return runTransition(auth, vp.visit_id, vp.id, "TRIAL_IN_PROGRESS", "SELECTED", { trial_started_at: null }, "TRIAL_CANCELLED", {
+    product_variant_id: vp.product_variant_id,
+    sku: vp.product?.sku ?? null,
+  });
+}
+
+/** undropProduct(): a dropped piece comes back where it was dropped from.
+    The drop reason stays in the event history; the row itself is live again. */
+export async function undropProduct(auth: AuthContext, visitProductId: string) {
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  const back = vp.liked_at ? "LIKED" : vp.trial_completed_at ? "TRIAL_COMPLETED" : vp.trial_started_at ? "TRIAL_IN_PROGRESS" : "SELECTED";
+  if (vp.status === back) return toProductCard(vp);
+  return runTransition(auth, vp.visit_id, vp.id, "DROPPED", back, { dropped_at: null, drop_reason_id: null }, "PRODUCT_UNDROPPED", {
+    product_variant_id: vp.product_variant_id,
+    sku: vp.product?.sku ?? null,
+    previous_drop_reason_id: vp.drop_reason_id,
+  });
+}
+
+/** markProductPurchased(): roadmap Stage 3 "Billed". The (optional) bill number
+    is attached and the sale closed against the piece. Bill number is NOT
+    mandatory — walk-in cash sales often have none on the floor; it can be
+    left blank. */
+export async function markProductPurchased(
+  auth: AuthContext,
+  visitProductId: string,
+  billNumber?: string,
+) {
+  const bill = (billNumber ?? "").trim();
+  const { vp, visit } = await loadVisitProduct(auth, visitProductId);
+  assertVisitActive(visit);
+  if (vp.status === "PURCHASED") {
+    // Idempotent retry — optionally backfill a bill number that was skipped.
+    if (bill && !vp.bill_number) {
+      await patchVisitProduct(vp.id, { bill_number: bill });
+      await insertVisitEvent({
+        visitId: vp.visit_id,
+        eventType: "PRODUCT_PURCHASED",
+        actorId: auth.userId,
+        entityType: "VISIT_PRODUCT",
+        entityId: vp.id,
+        metadata: {
+          product_variant_id: vp.product_variant_id,
+          sku: vp.product?.sku ?? null,
+          bill_number: bill,
+        },
+      });
+    }
+    return refreshCard(vp.id);
+  }
+  return runTransition(
+    auth,
+    vp.visit_id,
+    vp.id,
+    vp.status,
+    "PURCHASED",
+    { purchased_at: nowIso(), bill_number: bill || null },
+    "PRODUCT_PURCHASED",
+    {
+      product_variant_id: vp.product_variant_id,
+      sku: vp.product?.sku ?? null,
+      bill_number: bill || null,
+    },
+  );
+}
+
+/** markProductsPurchased(): bill 2–3 liked pieces together on ONE bill,
+    Amazon-cart style. One (optional) bill number is stamped on every piece.
+    Per-item results: billable rows (LIKED, or DROPPED bought anyway) go
+    through; anything else is reported in `failed` without aborting the rest. */
+export async function markProductsPurchased(
+  auth: AuthContext,
+  visitProductIds: string[],
+  billNumber?: string,
+) {
+  const bill = (billNumber ?? "").trim();
+  const billed: ProductCardDTO[] = [];
+  const failed: Array<{ visitProductId: string; code: string; message: string }> = [];
+  const seen = new Set<string>();
+  for (const id of visitProductIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    try {
+      const { vp, visit } = await loadVisitProduct(auth, id);
+      assertVisitActive(visit);
+      if (vp.status === "PURCHASED") {
+        if (bill && !vp.bill_number) {
+          await patchVisitProduct(vp.id, { bill_number: bill });
+        }
+        billed.push(await refreshCard(vp.id));
+        continue;
+      }
+      if (!canTransitionProductStatus(vp.status, "PURCHASED")) {
+        failed.push({
+          visitProductId: id,
+          code: STAGE2_ERRORS.INVALID_PRODUCT_STATE,
+          message: `${vp.product?.name ?? "Product"} is ${vp.status} — only liked pieces can be billed together`,
+        });
+        continue;
+      }
+      billed.push(
+        await runTransition(
+          auth,
+          vp.visit_id,
+          vp.id,
+          vp.status,
+          "PURCHASED",
+          { purchased_at: nowIso(), bill_number: bill || null },
+          "PRODUCT_PURCHASED",
+          {
+            product_variant_id: vp.product_variant_id,
+            sku: vp.product?.sku ?? null,
+            bill_number: bill || null,
+          },
+        ),
+      );
+    } catch (e) {
+      const payload = e instanceof Stage2Error
+        ? { code: e.code, message: e.message }
+        : { code: "INTERNAL", message: e instanceof Error ? e.message : "Could not bill this piece" };
+      failed.push({ visitProductId: id, ...payload });
+    }
+  }
+  return { billed, failed, billNumber: bill || null };
 }
 
 /** dropProduct(): reason is mandatory and captured atomically (§25, §26). */
@@ -400,6 +591,7 @@ export async function getVisitWithProducts(auth: AuthContext, visitId: string): 
       arrivedAt: visit.arrived_at,
       startedAt: visit.started_at,
       completedAt: visit.completed_at,
+      suite: visit.suite ?? null,
     },
     summary: computeVisitProductSummary(rows),
     products: rows.map(toProductCard),

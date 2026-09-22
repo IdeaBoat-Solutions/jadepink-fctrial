@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Cormorant_Garamond, Inter, Jost, Playfair_Display } from "next/font/google";
+import { Geist, Geist_Mono, Cormorant_Garamond, Inter, Jost, Newsreader, Outfit, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
 
@@ -34,6 +34,19 @@ const lux = Cormorant_Garamond({
   display: "swap",
 });
 
+/* Floor OS: Outfit for operational reading, Newsreader only for customer names. */
+const outfit = Outfit({
+  variable: "--font-outfit",
+  subsets: ["latin"],
+  display: "swap",
+});
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://jadepink.com"),
   title: {
@@ -52,7 +65,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${lux.variable} ${inter.variable} ${jost.variable} h-full antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${lux.variable} ${inter.variable} ${jost.variable} ${outfit.variable} ${newsreader.variable} h-full antialiased`}>
       <body className="min-h-full">
         {/* Theme/tooltip/toast providers live in (admin)/layout — only the
             admin shell uses them, so public + ops routes skip that JS. */}

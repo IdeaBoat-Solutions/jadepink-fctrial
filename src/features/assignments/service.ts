@@ -1,11 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, assertCanAssign, type AuthContext } from "@/lib/authz";
+import { canAssignOthers } from "@/lib/policy";
 import { toDTO, type VisitRow } from "../visits/repository";
 
-/* FC assignment (§22–23): 7 checks + same-store invariant + audit event. Idempotent (§31). */
+/* FC assignment (§22–23): 7 checks + same-store invariant + audit event. Idempotent (§31).
+   Role rule: an FC may only assign themselves; assigning a different FC
+   needs a managing role. The UI mirrors this (FCSelector shows self only). */
 export async function assignSalesperson(auth: AuthContext, visitId: string, salespersonId: string) {
   assertCanAssign(auth);
+  if (!canAssignOthers(auth.role) && salespersonId !== auth.userId) {
+    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only managers assign other FCs — you can take the customer yourself", 403);
+  }
   const supabase = await createClient();
   const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
   if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);

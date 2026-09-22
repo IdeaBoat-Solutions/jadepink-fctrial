@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export function MovingBorderButton({
@@ -38,16 +37,16 @@ export function TextGenerateEffect({ words, className }: { words: string; classN
   return (
     <span className={cn("inline", className)}>
       {list.map((w, i) => (
-        <motion.span
+        <span
           key={i}
-          initial={{ opacity: 0, filter: "blur(4px)" }}
-          animate={{ opacity: 1, filter: "blur(0px)" }}
-          transition={{ duration: 0.4, delay: i * 0.06 }}
-          className="inline-block"
+          /* Opacity-only stagger (no blur filter): GPU-composite, smooth even
+             on low-end phones. Respects reduced motion via CSS. */
+          className="word-rise inline-block opacity-0 motion-safe:animate-[word-rise_0.4s_ease-out_forwards] motion-reduce:opacity-100 motion-reduce:animate-none"
+          style={{ animationDelay: `${i * 60}ms` }}
         >
           {w}
           {i < list.length - 1 ? " " : ""}
-        </motion.span>
+        </span>
       ))}
     </span>
   );

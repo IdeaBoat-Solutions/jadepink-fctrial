@@ -6,14 +6,18 @@
    service.ts imports exactly the names exported here. */
 
 import { createClient } from "@/lib/supabase/server";
+import { normalizeSearchText, rankQuery, searchTokens } from "@/lib/fuzzy";
 import type { DropReasonRow, ProductVariantRow, VisitProductRow } from "./types";
 
-/* ---------- PostgREST embed selects ---------- */
+/* ---------- PostgREST embed selects ----------
+   Product photos live on products.image_url / image_urls (public
+   product-images bucket). Variants carry image_key=null for SJ imports,
+   so both selects join the parent image for card fallback. */
 
-const VARIANT_SELECT = "*, products(id, name, category_id, categories(name))";
+const VARIANT_SELECT = "*, products(id, name, category_id, image_url, image_urls, categories(name))";
 
 const VISIT_PRODUCT_SELECT =
-  "*, product_variants(*, products(id, name, category_id, categories(name))), drop_reasons(id, code, label, description, sort_order, is_active, created_at)";
+  "*, product_variants(*, products(id, name, category_id, image_url, image_urls, categories(name))), drop_reasons(id, code, label, description, sort_order, is_active, created_at)";
 
 /* ---------- Raw shapes (snake_case, as Postgres/PostgREST returns) ---------- */
 
@@ -21,6 +25,8 @@ interface RawProduct {
   id: string;
   name: string;
   category_id: string;
+  image_url?: string | null;
+  image_urls?: string[] | null;
   categories?: { name: string } | { name: string }[] | null;
 }
 
@@ -51,6 +57,8 @@ interface RawVisitProduct {
   dropped_at: string | null;
   drop_reason_id: string | null;
   note: string | null;
+  bill_number: string | null;
+  purchased_at: string | null;
   created_at: string;
   updated_at: string;
   product_variants?: RawVariant | null;
@@ -68,6 +76,7 @@ function first<T>(v: T | T[] | null | undefined): T | null {
 export function mapVariant(row: RawVariant): ProductVariantRow {
   const product = first(row.products);
   const category = product ? first(product.categories) : null;
+  const imageUrls = (product?.image_urls ?? []).filter(Boolean);
   return {
     id: row.id,
     product_id: row.product_id,
@@ -82,6 +91,8 @@ export function mapVariant(row: RawVariant): ProductVariantRow {
     updated_at: row.updated_at,
     product_name: product?.name,
     product_category: category?.name,
+    product_image_url: product?.image_url ?? imageUrls[0] ?? null,
+    product_image_urls: imageUrls,
   };
 }
 
@@ -99,6 +110,8 @@ export function mapVisitProduct(row: RawVisitProduct): VisitProductRow {
     dropped_at: row.dropped_at,
     drop_reason_id: row.drop_reason_id,
     note: row.note,
+    bill_number: row.bill_number ?? null,
+    purchased_at: row.purchased_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
     variant,
@@ -113,6 +126,7 @@ export function mapVisitProduct(row: RawVisitProduct): VisitProductRow {
             colour: variant.colour,
             price: variant.price,
             image_key: variant.image_key,
+            image_url: variant.product_image_url ?? null,
           }
         : undefined,
     drop_reason: row.drop_reasons ?? undefined,
@@ -160,6 +174,69 @@ export async function getVariantById(id: string): Promise<ProductVariantRow | nu
     .eq("id", id)
     .maybeSingle();
   return data ? mapVariant(data as RawVariant) : null;
+}
+
+/* ---------- Name / code search (floor trial) ----------
+   The scanner resolves exact barcode/SKU first (resolveVariantByIdentifier).
+   When that misses — e.g. the FC typed "florl dress" — this falls back to a
+   bounded fuzzy search (src/lib/fuzzy): token-order-free, one-typo-tolerant,
+   matching name + colour + size + category + SKU. Capped, active-only,
+   relevance-ordered (exact > prefix > typo, name-prefix first). */
+
+export async function searchVariants(query: string, limit = 12): Promise<ProductVariantRow[]> {
+  const supabase = await createClient();
+  const tokens = searchTokens(query);
+  if (!tokens.length) return [];
+  const cap = Math.min(25, Math.max(1, limit));
+  /* Any-token prefetch (OR): the typo may sit in any token, so recall comes
+     from matching SOME token — the fuzzy ranker below enforces ALL tokens. */
+  const nameOr = tokens.map((t) => `name.ilike.%${t}%`).join(",");
+  const codeKey = (query ?? "").trim().replace(/[%(),]/g, "");
+
+  const [{ data: matched }, { data: byCode }] = await Promise.all([
+    supabase.from("products").select("id").or(nameOr).limit(25),
+    codeKey.length >= 2
+      ? supabase
+          .from("product_variants")
+          .select(VARIANT_SELECT)
+          .eq("is_active", true)
+          .or(`sku.ilike.%${codeKey}%,barcode.ilike.%${codeKey}%`)
+          .limit(cap)
+      : Promise.resolve({ data: [] as RawVariant[] }),
+  ]);
+
+  const productIds = ((matched ?? []) as Array<{ id: string }>).map((r) => r.id).filter(Boolean);
+
+  let byProduct: RawVariant[] = [];
+  if (productIds.length) {
+    const { data } = await supabase
+      .from("product_variants")
+      .select(VARIANT_SELECT)
+      .eq("is_active", true)
+      .in("product_id", productIds)
+      .limit(40);
+    byProduct = (data ?? []) as RawVariant[];
+  }
+
+  const seen = new Set<string>();
+  const rows: RawVariant[] = [];
+  for (const r of [...((byCode ?? []) as RawVariant[]), ...byProduct]) {
+    if (!r?.id || seen.has(r.id)) continue;
+    seen.add(r.id);
+    rows.push(r);
+  }
+
+  const scored: Array<{ row: RawVariant; score: number; prefix: boolean }> = [];
+  for (const r of rows) {
+    const m = mapVariant(r);
+    const haystack = [m.product_name ?? "", m.colour ?? "", m.size ?? "", m.product_category ?? "", m.sku ?? "", m.barcode ?? ""].join(" ");
+    const score = rankQuery(haystack, tokens);
+    if (score === null) continue;
+    const name = (m.product_name ?? "").toLowerCase();
+    scored.push({ row: r, score, prefix: name.startsWith(normalizeSearchText(query)) });
+  }
+  scored.sort((a, b) => a.score - b.score || Number(b.prefix) - Number(a.prefix));
+  return scored.slice(0, cap > 12 ? 12 : cap).map((s) => mapVariant(s.row));
 }
 
 /* ---------- Visit products ---------- */

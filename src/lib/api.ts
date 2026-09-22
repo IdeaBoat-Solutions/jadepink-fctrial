@@ -17,6 +17,8 @@ export interface VisitLive {
   assignedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** Fitting suite (SUITE_01/02/03, SALON_VIP) — null until assigned. */
+  suite?: string | null;
   /** Resolved server-side so the UI never needs a client cache to show a name. */
   customerName?: string | null;
   fcName?: string | null;
@@ -36,6 +38,9 @@ export interface CustomerSnapshotLive {
   visitCount: number;
   lastVisitAt: string | null;
   purchaseCount: number;
+  area?: string | null;
+  budget?: string | null;
+  source?: string | null;
 }
 
 export interface StaffProfile {
@@ -96,10 +101,52 @@ export const completeVisit = (visitId: string) =>
 export const cancelVisit = (visitId: string) =>
   call<VisitLive>(`/api/visits/${visitId}/cancel`, { method: "POST" });
 
+export const setVisitSuite = (visitId: string, suite: string | null) =>
+  call<VisitLive>(`/api/visits/${visitId}/suite`, { method: "POST", body: JSON.stringify({ suite }) });
+
+export const requestRunner = (visitId: string, note?: string) =>
+  call<{ requested: boolean; suite: string | null; note: string | null }>(`/api/visits/${visitId}/runner`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? undefined }),
+  });
+
+export interface FloorSummary {
+  selected: number;
+  trialInProgress: number;
+  trialCompleted: number;
+  liked: number;
+  dropped: number;
+  purchased: number;
+}
+
+export interface FloorVisit {
+  visit: VisitLive & { customerName?: string | null; fcName?: string | null };
+  summary: FloorSummary;
+}
+
+export const listFloorVisits = (storeId: string) =>
+  call<FloorVisit[]>(`/api/visits/floor?storeId=${encodeURIComponent(storeId)}`);
+
+export interface VisitTimelineEventLive {
+  id: string;
+  type: string;
+  at: string;
+  actorName?: string;
+  detail?: string | null;
+}
+
+export const getVisitTimeline = (visitId: string) =>
+  call<VisitTimelineEventLive[]>(`/api/visits/${visitId}/timeline`);
+
 /* ---------- Customers ---------- */
 
 export const searchCustomerByPhone = (phone: string) =>
   call<CustomerSnapshotLive | null>(`/api/customers/search?phone=${encodeURIComponent(phone)}`);
+
+/* Name lookup returns every close match — one name may be two people, so the
+   UI lists them with mobiles + history instead of guessing one. */
+export const searchCustomersByName = (name: string) =>
+  call<CustomerSnapshotLive[]>(`/api/customers/search?name=${encodeURIComponent(name)}`);
 
 /* Single-record read. Needed because the client cache only holds customers that
    appear in today's visits — a direct URL, a reload or a link from history must
@@ -107,11 +154,73 @@ export const searchCustomerByPhone = (phone: string) =>
 export const getCustomerById = (id: string) =>
   call<CustomerSnapshotLive>(`/api/customers/${encodeURIComponent(id)}`);
 
-export const createCustomer = (input: { name: string; phone: string; source?: string }) =>
+export interface PastVisitHistoryLive {
+  id: string;
+  dateLabel: string;
+  arrivedAt: string;
+  status: string;
+  fcName: string;
+  trialled: number;
+  liked: number;
+  purchased: number;
+  billedValue: number;
+  items: Array<{
+    name: string;
+    size: string;
+    colour: string;
+    verdict: "liked" | "purchased" | "rejected" | "trialled";
+    billNumber?: string | null;
+    price?: number | null;
+  }>;
+}
+
+export const getCustomerHistory = (id: string, limit = 20) =>
+  call<PastVisitHistoryLive[]>(
+    `/api/customers/${encodeURIComponent(id)}/history?limit=${encodeURIComponent(String(limit))}`,
+  );
+
+export interface FunnelMetricsLive {
+  footfall: number;
+  trials: number;
+  billedVisits: number;
+  billedPieces: number;
+  billedValue: number;
+  footfallToTrialPct: number | null;
+  trialToBillPct: number | null;
+  footfallConversionPct: number | null;
+  billedValuePerVisitor: number;
+}
+
+export const getVisitFunnel = (storeId: string) =>
+  call<FunnelMetricsLive>(`/api/visits/funnel?storeId=${encodeURIComponent(storeId)}`);
+
+export const createCustomer = (input: { name: string; phone: string; source?: string; area?: string; budget?: string }) =>
   call<{ id: string; name: string; phone: string; normalizedPhone: string }>("/api/customers", {
     method: "POST",
     body: JSON.stringify(input),
   });
+
+export interface UpdatedCustomer {
+  id: string;
+  name: string;
+  phone: string;
+}
+
+export const updateCustomerRecord = (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) =>
+  call<UpdatedCustomer>(`/api/customers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+
+/* ---------- Sales ---------- */
+
+export interface SalesSummary {
+  source: string;
+  today: { orders: number; revenue: number };
+  week: { orders: number; revenue: number; byFc: Array<{ name: string; orders: number; revenue: number }> };
+}
+
+export const getSalesSummary = () => call<SalesSummary>("/api/sales/summary");
 
 /* ---------- Salespeople ---------- */
 

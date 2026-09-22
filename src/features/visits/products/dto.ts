@@ -37,6 +37,9 @@ export interface ProductCardDTO {
     colour: string;
     price: number;
     imageKey: string | null;
+    /** Parent product photo (products.image_url, public product-images
+        bucket). Null when the catalogue has no photo — UI falls back. */
+    imageUrl: string | null;
   };
   timeline: {
     addedAt: string;
@@ -44,9 +47,12 @@ export interface ProductCardDTO {
     trialCompletedAt: string | null;
     likedAt: string | null;
     droppedAt: string | null;
+    purchasedAt: string | null;
   };
   dropReason: { id: string; code: string; label: string } | null;
   note: string | null;
+  /** Roadmap Stage 3 "Billed — scanned". Null until marked billed. */
+  billNumber: string | null;
 }
 
 /* Visit product summary (derived counters). */
@@ -71,6 +77,7 @@ export interface VisitWithProductsDTO {
     arrivedAt: string;
     startedAt: string | null;
     completedAt: string | null;
+    suite: string | null;
   };
   summary: VisitProductSummaryDTO;
   products: ProductCardDTO[];

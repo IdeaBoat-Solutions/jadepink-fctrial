@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useStore } from "@/lib/store";
 import { ModeToggle } from "@/components/layout/mode-toggle";
+import { RouteFocus } from "@/components/layout/route-focus";
 
 type Role = "fc" | "manager";
 
@@ -101,7 +102,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <span className="hidden truncate text-[13px] text-muted-foreground sm:inline">JadePink fullstack · dashboard / inventory / orders</span>
           <span className="ml-auto"><ModeToggle /></span>
         </header>
-        <main className="staff-page flex-1 p-4 md:p-6 lg:p-8">{children}</main>
+        <main id="main-content" tabIndex={-1} className="staff-page flex-1 p-4 focus:outline-none md:p-6 lg:p-8">
+          <RouteFocus />
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

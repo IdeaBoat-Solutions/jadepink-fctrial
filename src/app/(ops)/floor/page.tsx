@@ -1,186 +1,152 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
+import { AccessNote, Btn, EmptyNote, StatusMark } from "@/components/floor/ui";
 import { timeAgo } from "@/lib/utils";
-import { Panel, EmptyState, StatusBadge } from "@/components/ui";
-import { FCQuickAssign } from "@/components/ops";
-import { paginate } from "@/lib/pagination";
-import { PaginationControls, usePageParam } from "@/components/pagination";
-
-const FLOOR_PAGE_SIZE = 9;
-
-/* Live floor (§19): store-manager view of every active visit. "Live" means
-   refreshed data on a calm interval, never flashing UI. */
-
-function FloorInner() {
-  const { visits, customers, getCustomer, salespeople, assignSalesperson, pushToast } = useStore();
-  const [, setNow] = useState(0);
-  const { page, setPage } = usePageParam();
-
-  // Calm refresh of relative times
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(t);
-  }, []);
-
-  const live = visits.filter((v) => ["ACTIVE", "ASSIGNED", "IDENTIFYING", "ARRIVED"].includes(v.status));
-  const unassigned = live.filter((v) => !v.assignedSalespersonId && v.customerId);
-  const identifying = live.filter((v) => !v.customerId);
-  const paged = paginate(live, page, FLOOR_PAGE_SIZE);
-
-  const fcLoad = (spId: string) => live.filter((v) => v.assignedSalespersonId === spId).length;
-
-  const quickAssign = async (visitId: string, spId: string) => {
-    const r = await assignSalesperson(visitId, spId);
-    if (!r.ok) pushToast("Could not assign", r.message ?? "Try again once.");
-    else pushToast("FC assigned", "Floor updated.");
-  };
-
-  const spName = (id: string | null) => (id ? salespeople.find((s) => s.id === id)?.name ?? "Team" : null);
-
-  return (
-    <div className="staff-page">
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="min-w-0">
-          <p className="staff-kicker">Store manager view</p>
-          <h1 className="staff-title mt-1 flex flex-wrap items-center gap-2.5">Live floor
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#bfe3cd] bg-[#e6f4ec] px-2.5 py-1 text-[11.5px] font-bold tracking-wide text-[#177245]">
-              <span aria-hidden className="live-dot inline-block size-1.5 rounded-full bg-[#177245] text-[#177245]" />LIVE
-            </span>
-          </h1>
-          <p className="staff-sub" aria-live="polite">
-            <strong className="tnum font-semibold text-[#1c1917]">{live.length}</strong> in store{unassigned.length ? <> · <strong className="font-semibold text-[#9a5b00]">{unassigned.length} waiting for FC</strong></> : " · everyone assigned"}
-          </p>
-        </div>
-        <Link href="/today" className="group inline-flex min-h-[40px] items-center gap-1 rounded-lg px-2 text-[13.5px] font-semibold text-[#b4234d] transition-colors hover:bg-[#fbe9ef]"><span aria-hidden className="transition-transform duration-150 group-hover:-translate-x-0.5">←</span> Today</Link>
-      </div>
-
-      {/* Team load — calm, factual */}
-      <Panel className="p-4 sm:px-5">
-        <p className="staff-kicker mb-2.5">Team load</p>
-        <div className="flex flex-wrap gap-2" aria-label="Team load">
-          {salespeople.map((sp) => {
-            const load = fcLoad(sp.id);
-            return (
-              <span key={sp.id} className={`inline-flex min-h-[38px] items-center gap-2 rounded-full border px-3 text-[13px] transition-colors ${load >= 3 ? "border-[#f0d48a] bg-[#fffdf5]" : "border-[#e8dfd6] bg-[#faf8f6]"}`}>
-                <strong className="font-semibold text-[#1c1917]">{sp.name}</strong>
-                <span className="tnum rounded-full bg-white px-2 py-0.5 text-[12px] font-semibold text-[#78716c] ring-1 ring-[#e8dfd6]">{load} active</span>
-              </span>
-            );
-          })}
-        </div>
-      </Panel>
-
-      {/* Customers not yet identified */}
-      {identifying.length > 0 && (
-        <Panel className="border-[#f0d48a] bg-[#fffdf5] p-5">
-          <h2 className="text-[16px] font-semibold">{identifying.length} awaiting identification</h2>
-          <p className="mt-0.5 text-[13px] text-[#78716c]">Open the walk-in to find or create the customer.</p>
-          <div className="mt-3 grid gap-2.5 md:grid-cols-2">
-            {identifying.map((v) => (
-              <div key={v.id} className="rounded-xl border border-[#f0d48a] bg-white p-4">
-                <p className="text-[15px] font-semibold">Identifying…</p>
-                <p className="tnum text-[13px] text-[#78716c]">{timeAgo(v.arrivedAt)} in store</p>
-                <Link href={`/walk-in?visit=${v.id}`} className="mt-2 inline-flex min-h-[44px] items-center rounded-lg bg-[#1c1917] px-4 text-[13.5px] font-semibold text-white">
-                  Identify customer →
-                </Link>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
-
-      {unassigned.length > 0 && (
-        <Panel className="border-[#f0d48a] bg-[#fffdf5] p-5">
-          <h2 className="text-[16px] font-semibold">Waiting for FC — assign now</h2>
-          <div className="mt-3 grid gap-2.5 md:grid-cols-2">
-            {unassigned.map((v) => {
-              const c = v.customerId ? getCustomer(v.customerId) : undefined;
-              return (
-                <div key={v.id} className="rounded-xl border border-[#f0d48a] bg-white p-4">
-                  <p className="text-[15px] font-semibold">{c?.name || "Identifying…"}</p>
-                  <p className="tnum text-[13px] text-[#78716c]">{timeAgo(v.arrivedAt)} in store</p>
-                  <div className="mt-2">
-                    <FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId} onAssign={quickAssign} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      )}
-
-      {live.length === 0 ? (
-        <EmptyState
-          title="Floor is clear."
-          body="No active visits right now. New customers will appear here the moment a walk-in starts."
-          action={<Link href="/today" className="btn-sheen inline-flex min-h-[48px] items-center rounded-xl bg-[#1c1917] px-5 text-[14px] font-semibold text-white transition-all duration-150 hover:-translate-y-px active:translate-y-0 active:scale-[0.98]">Go to Today →</Link>}
-        />
-      ) : (
-        <>
-          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-            {paged.pageItems.map((v) => {
-              const c = v.customerId ? getCustomer(v.customerId) : undefined;
-              const fc = spName(v.assignedSalespersonId);
-              const statusLabelLive =
-                v.status === "ACTIVE" ? "On the floor" : v.assignedSalespersonId ? "Assigned" : "Waiting";
-              return (
-                <Panel key={v.id} className="pressable flex flex-col gap-3 p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Link href={`/visits/${v.id}`} className="block truncate text-[15.5px] font-semibold tracking-tight text-[#1c1917] hover:text-[#b4234d] hover:underline hover:underline-offset-2">
-                        {c?.name || "Identifying customer…"}
-                      </Link>
-                      <p className="tnum mt-0.5 text-[12.5px] text-[#78716c]">
-                        {fc ? <><span className="font-semibold text-[#57534e]">FC: {fc}</span> · </> : <><span className="font-semibold text-[#9a5b00]">Unassigned</span> · </>}{timeAgo(v.arrivedAt)} in store
-                      </p>
-                    </div>
-                    <StatusBadge value={v.status} label={statusLabelLive} />
-                  </div>
-                  <div className="flex min-w-0 gap-2 border-t border-[#e8dfd6] pt-3">
-                    <Link href={`/visits/${v.id}`} className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-xl border border-[#d6c9bb] px-4 text-[13.5px] font-semibold transition-all duration-150 hover:-translate-y-px hover:border-[#1c1917] hover:bg-[#faf8f6] active:translate-y-0">
-                      Open
-                    </Link>
-                    {v.customerId && (
-                      <div className="min-w-0 flex-1">
-                        <FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId} onAssign={quickAssign} />
-                      </div>
-                    )}
-                  </div>
-                </Panel>
-              );
-            })}
-          </div>
-          <PaginationControls
-            page={paged.page} totalPages={paged.totalPages} total={paged.total}
-            start={paged.start} end={paged.end} onPage={setPage}
-          />
-        </>
-      )}
-      {/* customers list referenced to keep the composite snapshot cache warm */}
-      <span className="hidden">{customers.length}</span>
-    </div>
-  );
-}
+import type { FloorSummary } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { canViewLiveFloor } from "@/lib/policy";
 
 export default function FloorPage() {
-  return (
-    <Suspense
-      fallback={
-        <div aria-busy="true" aria-label="Loading" className="staff-page">
-          <div className="skeleton-soft h-8 w-44 rounded-xl" />
-          <div className="skeleton-soft h-[54px] rounded-2xl" />
-          <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="skeleton-soft h-[140px] rounded-2xl" style={{ animationDelay: `${i * 110}ms` }} />
-            ))}
-          </div>
-        </div>
+  const { salespeople, profile, user, activeVisits, awaitingAssignment } = useStore();
+  const router = useRouter();
+  const [summaries, setSummaries] = useState<Map<string, FloorSummary>>(new Map());
+  const storeId = profile?.storeId ?? null;
+
+  const refresh = useCallback(async () => {
+    if (!storeId) return;
+    try {
+      const res = await fetch(`/api/visits/floor?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const next = new Map<string, FloorSummary>();
+      for (const row of (json.data ?? []) as Array<{ visit: { id: string }; summary: FloorSummary }>) {
+        next.set(row.visit.id, row.summary);
       }
-    >
-      <FloorInner />
-    </Suspense>
+      setSummaries(next);
+    } catch { /* keep last numbers */ }
+  }, [storeId]);
+
+  useEffect(() => {
+    const t0 = window.setTimeout(() => void refresh(), 0);
+    const t = window.setInterval(() => void refresh(), 15000);
+    return () => { window.clearTimeout(t0); window.clearInterval(t); };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!storeId || !isSupabaseConfigured()) return;
+    const supabase = createClient();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const fire = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void refresh(), 400);
+    };
+    const channel = supabase
+      .channel(`floor-os:${storeId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "visit_products" }, fire)
+      .on("postgres_changes", { event: "*", schema: "public", table: "visits" }, fire)
+      .subscribe();
+    return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(channel); };
+  }, [storeId, refresh]);
+
+  if (user && !canViewLiveFloor(user.role)) {
+    return (
+      <AccessNote
+        title="Live floor is a manager view."
+        body="Your work is the customer in front of you. Open My visits to continue a fitting."
+        action={<Btn tone="brand" onClick={() => router.push("/today")}>Back to my work</Btn>}
+      />
+    );
+  }
+
+  const fcOf = (id: string | null, fallback?: string | null) => salespeople.find((s) => s.id === id)?.name || fallback || "Unassigned";
+  const waiting = awaitingAssignment;
+  const active = activeVisits.filter((v) => v.status === "ACTIVE" || (v.status === "ASSIGNED" && v.assignedSalespersonId));
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-[26px] font-semibold tracking-tight">Live floor</h1>
+          <p className="mt-1 text-[14px] text-[var(--fp-muted)]">
+            <span className="fp-num font-semibold text-[var(--fp-ink)]">{active.length}</span> active visits
+            <span className="mx-2 text-[var(--fp-line-strong)]">·</span>
+            <span className="fp-num font-semibold text-[var(--fp-ink)]">{waiting.length}</span> waiting for assignment
+          </p>
+        </div>
+      </div>
+
+      {waiting.length > 0 && (
+        <section className="mt-6" aria-label="Waiting for assignment">
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-wait)]">Waiting</h2>
+          <ul>
+            {waiting.map((v) => (
+              <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3.5">
+                <div>
+                  <p className="fp-name text-[24px] leading-none">{v.customerName || "Unidentified"}</p>
+                  <p className="mt-1 text-[13px] text-[var(--fp-muted)]">Arrived {timeAgo(v.arrivedAt)} ago</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusMark value="waiting" />
+                  <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-brand)] px-4 text-[14px] font-semibold text-white">Assign FC</Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="mt-6" aria-label="Active visits">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">Active</h2>
+        {active.length === 0 ? (
+          <EmptyNote title="No customers are currently active." body="Assigned visits appear here with product counts as soon as a salesperson starts the fitting." />
+        ) : (
+          <ul>
+            {active.map((v) => {
+              const s = summaries.get(v.id);
+              const trialled = s ? s.trialInProgress + s.trialCompleted : null;
+              return (
+                <li key={v.id} className="grid gap-3 border-b border-[var(--fp-line)] py-4 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:items-center">
+                  <div>
+                    <p className="fp-name text-[24px] leading-none">{v.customerName || "Customer"}</p>
+                    <p className="mt-1.5 text-[13.5px] text-[var(--fp-muted)]">
+                      FC {fcOf(v.assignedSalespersonId, v.fcName)}
+                      <span className="mx-1.5">·</span>
+                      Active {timeAgo(v.startedAt || v.arrivedAt)}
+                    </p>
+                  </div>
+                  <p className="fp-num text-[13.5px] text-[var(--fp-muted)]">
+                    {s ? (
+                      <>
+                        <span className="font-semibold text-[var(--fp-ink)]">{s.selected}</span> selected
+                        <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
+                        <span className="font-semibold text-[var(--fp-ink)]">{trialled}</span> trialled
+                        <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
+                        <span className="font-semibold text-[var(--fp-ink)]">{s.liked}</span> liked
+                        <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
+                        <span className="font-semibold text-[var(--fp-ink)]">{s.dropped}</span> dropped
+                        {s.purchased > 0 && (
+                          <>
+                            <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
+                            <span className="font-semibold text-[var(--fp-ok)]">{s.purchased} billed</span>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      "Counts updating"
+                    )}
+                  </p>
+                  <Link href={`/visits/${v.id}`} className="text-[14px] font-semibold text-[var(--fp-brand)]">View visit</Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+      </div>
   );
 }

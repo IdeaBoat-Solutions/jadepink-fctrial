@@ -2,13 +2,15 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { friendlyError, isValidMobileIN, seedHistory } from "@/lib/domain";
-import type { VisitLive } from "@/lib/api";
+import { friendlyError, isValidMobileIN } from "@/lib/domain";
+import type { PastVisitHistoryLive, VisitLive } from "@/lib/api";
 import { formatMobileIN } from "@/lib/domain";
 import type { CustomerSnapshotLive } from "@/lib/api";
+import { getCustomerHistory } from "@/lib/api";
 import { timeAgo, clockTime, cn } from "@/lib/utils";
 import { PrimaryButton, SecondaryButton, StatusBadge, TextInput } from "@/components/ui";
 import { useStore } from "@/lib/store";
+import { roundRobinNext } from "@/lib/round-robin";
 
 /* Shared Stage 2 components over the LIVE visit model (VisitLive /
    CustomerSnapshotLive from the Supabase-backed API). */
@@ -81,6 +83,11 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
         <div>
           <p className="text-[18px] font-semibold tracking-tight text-[#1c1917]">{customer.name}</p>
           <p className="tnum text-[14px] text-[#57534e]">{customer.phone}</p>
+          {(customer.area || customer.budget || customer.source) && (
+            <p className="mt-1 text-[12.5px] text-[#78716c]">
+              {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
+            </p>
+          )}
           <p className="mt-1 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[#177245]">
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[#177245]" />
             {customer.visitCount > 0 ? "Returning customer" : "First visit"}
@@ -92,6 +99,11 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
           </Link>
         )}
       </div>
+      {(customer.area || customer.budget || customer.source) && (
+        <p className="text-[12.5px] text-[#78716c]">
+          {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
+        </p>
+      )}
       <dl className="grid grid-cols-3 gap-2 border-t border-[#e8dfd6] pt-3">
         <div><dt className="text-[12px] font-medium text-[#78716c]">Visits</dt><dd className="tnum text-[16px] font-semibold">{customer.visitCount}</dd></div>
         <div><dt className="text-[12px] font-medium text-[#78716c]">Purchases</dt><dd className="tnum text-[16px] font-semibold">{customer.purchaseCount}</dd></div>
@@ -113,13 +125,36 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
 const HISTORY_PAGE = 3;
 
 export function HistoryLayers({ customerId }: { customerId: string }) {
-  const history = seedHistory(customerId);
-  const [open, setOpen] = useState<string | null>(history[0]?.id || null);
+  const [history, setHistory] = useState<PastVisitHistoryLive[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const [limit, setLimit] = useState(HISTORY_PAGE);
+  const [loadErr, setLoadErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const r = await getCustomerHistory(customerId);
+      if (cancelled) return;
+      if (!r.ok) {
+        setHistory([]);
+        setLoadErr(r.message || "Could not load history.");
+        return;
+      }
+      setHistory(r.data);
+      setOpen(r.data[0]?.id ?? null);
+      setLoadErr("");
+    })();
+    return () => { cancelled = true; };
+  }, [customerId]);
+
+  if (history === null) {
+    return <p className="px-1 py-3 text-[13.5px] text-[#78716c]" aria-busy="true">Loading history…</p>;
+  }
   const visible = history.slice(0, limit);
   return (
     <div className="flex flex-col gap-2">
-      {history.length === 0 && (
+      {loadErr && <p role="alert" className="px-1 text-[13px] font-medium text-[#b4232a]">{loadErr}</p>}
+      {history.length === 0 && !loadErr && (
         <p className="px-1 py-3 text-[13.5px] text-[#78716c]">
           No trial history recorded for this customer yet.
         </p>
@@ -141,17 +176,17 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
             </button>
             {expanded && (
               <div className="ui-fade border-t border-[#e8dfd6] bg-[#faf8f6] px-4 py-3">
-                {h.items ? (
+                {h.items.length > 0 ? (
                   <ul className="flex flex-col gap-1.5">
                     {h.items.map((it, i) => (
                       <li key={i} className="flex items-center justify-between gap-3 text-[13.5px]">
-                        <span>{it.name} <span className="text-[#78716c]">· {it.size}</span></span>
+                        <span>{it.name} <span className="text-[#78716c]">· {it.size}{it.colour ? ` · ${it.colour}` : ""}</span></span>
                         <StatusBadge value={it.verdict === "rejected" ? "offline" : it.verdict === "purchased" ? "ACTIVE" : "IDENTIFYING"} label={it.verdict} />
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-[13.5px] text-[#78716c]">Summary only — detailed products were recorded before item tracking.</p>
+                  <p className="text-[13.5px] text-[#78716c]">Visit recorded — no products were scanned on the floor.</p>
                 )}
               </div>
             )}
@@ -196,6 +231,10 @@ export function FCSelector({ visitId, currentSpId, onDone, showAuto = true }: { 
 
   const me = user ? salespeople.find((sp) => sp.id === user.id) : undefined;
   const meAssigned = me && currentSpId === me.id;
+  /* Role rule (src/lib/policy.ts): an FC may only take a customer themselves —
+     assigning anyone else needs a manager. Managers see the whole team. */
+  const selfOnly = user?.role === "fc";
+  const roster = selfOnly ? salespeople.filter((sp) => sp.id === user?.id) : salespeople;
 
   return (
     <div className="flex flex-col gap-2">
@@ -215,13 +254,18 @@ export function FCSelector({ visitId, currentSpId, onDone, showAuto = true }: { 
           Assigned to you
         </p>
       )}
+      {selfOnly && !me && salespeople.length > 0 && (
+        <p className="rounded-xl bg-[#faf8f6] px-4 py-3 text-[13.5px] leading-relaxed text-[#78716c]">
+          Your staff profile isn&apos;t in the FC list — ask a manager to assign this customer.
+        </p>
+      )}
       {salespeople.length === 0 && (
         <p className="rounded-xl bg-[#faf8f6] px-4 py-3 text-[13.5px] leading-relaxed text-[#78716c]">
           No active FCs found for this store. Ask a manager to activate staff profiles, then try again.
         </p>
       )}
       <div role="radiogroup" aria-label="Assign FC" className="flex flex-col gap-2">
-        {salespeople.map((sp) => {
+        {roster.map((sp) => {
           const n = load.get(sp.id) || 0;
           const selected = currentSpId === sp.id;
           const isMe = user?.id === sp.id;
@@ -259,14 +303,13 @@ export function FCSelector({ visitId, currentSpId, onDone, showAuto = true }: { 
           );
         })}
       </div>
-      {showAuto && salespeople.length > 0 && (
+      {showAuto && !selfOnly && salespeople.length > 0 && (
         <SecondaryButton onClick={() => {
-          // Fewest active visits wins (documented heuristic, no invented logic).
-          const sorted = [...salespeople].sort((a, b) => (load.get(a.id) || 0) - (load.get(b.id) || 0));
-          const candidate = sorted[0];
+          // Round robin: next in roster rotation; falls back to fewest load with no history.
+          const candidate = roundRobinNext(salespeople, visits);
           if (candidate) void pick(candidate);
         }} disabled={saving !== null}>
-          {saving === "auto" ? "Finding free FC…" : "Auto-assign (fewest active visits)"}
+          {saving !== null ? "Assigning…" : "Auto-assign — round robin (next up)"}
         </SecondaryButton>
       )}
     </div>
@@ -350,20 +393,55 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
   );
 }
 
-/* ---------- Visit timeline (human labels, never raw event names) ---------- */
+/* ---------- Visit timeline (human labels, never raw event names) ----------
+   Stage 2 + Stage 3 in one journey: walk-in → identify → FC → products →
+   trial → liked/dropped. Detail (SKU, drop reason) comes from event metadata. */
 
 const EVENT_LABEL: Record<string, string> = {
   WALK_IN_RECORDED: "Walk-in recorded",
   CUSTOMER_IDENTIFIED: "Customer identified",
+  CUSTOMER_ATTACHED: "Customer identified",
   NEW_CUSTOMER_CREATED: "New customer created",
   FC_ASSIGNED: "FC assigned",
   FC_REASSIGNED: "FC reassigned",
   VISIT_STARTED: "Visit started",
   VISIT_COMPLETED: "Visit completed",
+  VISIT_CANCELLED: "Visit ended without purchase",
   VISIT_ABANDONED: "Visit ended without purchase",
+  PRODUCT_ADDED: "Product added",
+  PRODUCT_REMOVED: "Product removed",
+  TRIAL_STARTED: "Trial started",
+  TRIAL_COMPLETED: "Trial completed",
+  PRODUCT_LIKED: "Product liked",
+  PRODUCT_DROPPED: "Product dropped",
+  DROP_REASON_CAPTURED: "Drop reason updated",
+  PRODUCT_PURCHASED: "Product purchased",
 };
 
-export function VisitTimeline({ events }: { events: { id: string; type: string; at: string; actorName?: string }[] }) {
+export interface VisitTimelineEvent {
+  id: string;
+  type: string;
+  at: string;
+  actorName?: string;
+  detail?: string | null;
+}
+
+function eventDetail(type: string, metadata: Record<string, unknown> | null | undefined): string | null {
+  if (!metadata) return null;
+  const sku = typeof metadata.sku === "string" ? metadata.sku : null;
+  const code = typeof metadata.drop_reason_code === "string" ? metadata.drop_reason_code : null;
+  const label = typeof metadata.drop_reason_label === "string" ? metadata.drop_reason_label : null;
+  if (type === "PRODUCT_DROPPED" || type === "DROP_REASON_CAPTURED") {
+    const reason = label ?? (code ? code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, " ") : null);
+    return [sku, reason ? `Reason: ${reason}` : null].filter(Boolean).join(" · ") || null;
+  }
+  return sku;
+}
+
+export function VisitTimeline({ events }: { events: VisitTimelineEvent[] }) {
+  if (events.length === 0) {
+    return <p className="text-[13.5px] text-[#78716c]">No journey events yet.</p>;
+  }
   return (
     <ol className="flex flex-col">
       {events.map((e, i) => (
@@ -375,6 +453,7 @@ export function VisitTimeline({ events }: { events: { id: string; type: string; 
               {EVENT_LABEL[e.type] || e.type}
               {e.actorName && <span className="font-normal text-[#78716c]"> · {e.actorName}</span>}
             </p>
+            {e.detail && <p className="mt-0.5 truncate text-[12.5px] text-[#78716c]">{e.detail}</p>}
             <p className="tnum text-[12px] text-[#a8a29e]">{new Date(e.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</p>
           </div>
         </li>
@@ -382,6 +461,44 @@ export function VisitTimeline({ events }: { events: { id: string; type: string; 
     </ol>
   );
 }
+
+/* ---------- Visit timeline panel (fetches the full journey) ----------
+   One GET to /api/visits/[id]/timeline. Used on visit detail + trial pages
+   so Stage 3 product events are visible, not just DB rows. */
+
+export function VisitTimelinePanel({ visitId }: { visitId: string }) {
+  const [events, setEvents] = React.useState<VisitTimelineEvent[] | null>(null);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/visits/${visitId}/timeline`, { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(String(json.message ?? "timeline"));
+        if (!cancelled) setEvents((json.data ?? []) as VisitTimelineEvent[]);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [visitId]);
+
+  if (failed) return <p className="text-[13px] text-[#78716c]">Journey history is unavailable right now.</p>;
+  if (!events) {
+    return (
+      <div aria-busy="true" aria-label="Loading journey" className="flex flex-col gap-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="skeleton-soft h-9 rounded-lg" style={{ animationDelay: `${i * 120}ms` }} />
+        ))}
+      </div>
+    );
+  }
+  return <VisitTimeline events={events} />;
+}
+
+export { eventDetail };
 
 /* ---------- Active visit row (dashboard + floor share one pattern) ---------- */
 
@@ -448,6 +565,8 @@ export function CreateCustomerCard({
   const [name, setName] = useState(prefillName);
   const [mobile, setMobile] = useState(prefillMobile);
   const [source, setSource] = useState(defaultSource);
+  const [area, setArea] = useState("");
+  const [budget, setBudget] = useState("₹5–15k");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>("");
   const [existing, setExisting] = useState<CustomerSnapshotLive | null>(null);
@@ -476,7 +595,7 @@ export function CreateCustomerCard({
     if (cleanName.length < 2) { setErr("Enter the customer's name."); nameRef.current?.focus(); return; }
     if (!isValidMobileIN(mobile)) { setErr("Enter a valid 10-digit Indian mobile number."); mobileRef.current?.focus(); return; }
     setBusy(true);
-    const r = await createCustomer({ name: cleanName, mobile, source });
+    const r = await createCustomer({ name: cleanName, mobile, source, area: area.trim() || undefined, budget: budget || undefined });
     setBusy(false);
     if (r.ok) {
       pushToast("Customer created", `${r.customer.name} · ${formatMobileIN(r.customer.phone)}`);
@@ -498,7 +617,7 @@ export function CreateCustomerCard({
       {compact && (
         <section className="ui-fade rounded-2xl border border-dashed border-[#d6c9bb] bg-[#faf8f6]/70 px-3 py-2.5" aria-label={title}>
           <form
-            className="flex flex-col gap-2 lg:flex-row lg:items-center"
+            className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center"
             onSubmit={(e) => { e.preventDefault(); void submit(); }}
             aria-label="Create customer record"
           >
@@ -529,17 +648,38 @@ export function CreateCustomerCard({
               className="tnum lg:max-w-[170px]"
               aria-invalid={!!err && !isValidMobileIN(mobile)}
             />
-            <label htmlFor="cc-source" className="sr-only">How did they hear about us?</label>
-            <select
-              id="cc-source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              aria-label="How did they hear about us?"
-              title="How did they hear about us?"
-              className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-2.5 text-[14px] text-[#1c1917] transition-colors hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 lg:w-auto lg:max-w-[170px] lg:shrink-0"
-            >
-              {CUSTOMER_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <span className="flex flex-col gap-1 lg:w-auto lg:flex-row lg:items-center lg:gap-2 lg:shrink-0">
+              <label htmlFor="cc-source" className="shrink-0 text-[13px] font-medium whitespace-nowrap text-[#78716c]">
+                How did they hear about us?
+              </label>
+              <select
+                id="cc-source"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] text-[#1c1917] transition-colors hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 lg:w-[190px] lg:shrink-0"
+              >
+                {CUSTOMER_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <label htmlFor="cc-area" className="sr-only">Area</label>
+              <TextInput
+                id="cc-area"
+                value={area}
+                onChange={(e) => setArea(e.target.value)}
+                placeholder="Area"
+                autoComplete="off"
+                className="lg:max-w-[150px]"
+              />
+              <label htmlFor="cc-budget" className="sr-only">Budget</label>
+              <select
+                id="cc-budget"
+                value={budget}
+                onChange={(e) => setBudget(e.target.value)}
+                title="Budget"
+                className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] text-[#1c1917] lg:w-[140px] lg:shrink-0"
+              >
+                {["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"].map((b) => <option key={b}>{b}</option>)}
+              </select>
+            </span>
             <span className="flex gap-2 lg:ml-auto lg:shrink-0">
               <PrimaryButton type="submit" disabled={busy} className="min-h-[44px] flex-1 px-5 lg:flex-none">
                 {busy ? "Creating…" : "Create →"}
@@ -626,6 +766,25 @@ export function CreateCustomerCard({
             className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 xl:max-w-[150px]"
           >
             {CUSTOMER_SOURCES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <label htmlFor="cc-area2" className="sr-only">Area</label>
+          <TextInput
+            id="cc-area2"
+            value={area}
+            onChange={(e) => setArea(e.target.value)}
+            placeholder="Area"
+            autoComplete="off"
+            className="xl:max-w-[130px]"
+          />
+          <label htmlFor="cc-budget2" className="sr-only">Budget</label>
+          <select
+            id="cc-budget2"
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            title="Budget"
+            className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3 text-[14px] xl:max-w-[130px]"
+          >
+            {["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"].map((b) => <option key={b}>{b}</option>)}
           </select>
           <span className="flex gap-2 xl:ml-auto xl:shrink-0">
             <PrimaryButton type="submit" disabled={busy} className="min-h-[44px] flex-1 px-5 xl:flex-none">

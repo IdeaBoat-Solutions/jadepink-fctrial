@@ -44,5 +44,8 @@ export async function snapshotFor(customerId: string): Promise<CustomerSnapshot 
     visitCount: c.visits,
     lastVisitAt: last?.created_at ?? null,
     purchaseCount: c.purchases,
+    area: c.area ?? null,
+    budget: c.budget ?? null,
+    source: c.source ?? null,
   };
 }

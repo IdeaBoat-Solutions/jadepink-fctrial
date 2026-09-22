@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { normalizePhone, formatPhoneIN, isValidPhoneIN } from "@/lib/phone";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
+import { isManagerRole } from "@/lib/policy";
 import type { AuthContext } from "@/lib/authz";
 import { findByNormalizedPhone } from "./repository";
 import type { CustomerSnapshot } from "./types";
-import type { CreateCustomerInput } from "./schemas";
+import type { CreateCustomerInput, UpdateCustomerInput } from "./schemas";
 
 /* searchCustomer (§19): normalize → query → snapshot. No events recorded for searches. */
 export async function searchCustomer(phone: string): Promise<CustomerSnapshot | null> {
@@ -16,12 +17,12 @@ export async function searchCustomer(phone: string): Promise<CustomerSnapshot | 
     // Fallback: partial match for pasted/partial numbers (UI debounced search).
     const { data } = await supabase
       .from("customers")
-      .select("id, name, mobile, visits, purchases")
+      .select("id, name, mobile, visits, purchases, area, budget, source")
       .or(`normalized_phone.ilike.%${norm}%,mobile.ilike.%${norm}%`)
       .limit(1)
       .single();
     if (!data) return null;
-    return { id: data.id, name: data.name, phone: data.mobile, visitCount: data.visits, lastVisitAt: null, purchaseCount: data.purchases };
+    return { id: data.id, name: data.name, phone: data.mobile, visitCount: data.visits, lastVisitAt: null, purchaseCount: data.purchases, area: data.area ?? null, budget: data.budget ?? null, source: data.source ?? null };
   }
   const { data: last } = await supabase
     .from("visits")
@@ -37,7 +38,36 @@ export async function searchCustomer(phone: string): Promise<CustomerSnapshot | 
     visitCount: c.visits,
     lastVisitAt: last?.created_at ?? null,
     purchaseCount: c.purchases,
+    area: (c as { area?: string | null }).area ?? null,
+    budget: (c as { budget?: string | null }).budget ?? null,
+    source: (c as { source?: string | null }).source ?? null,
   };
+}
+
+/* searchCustomersByName: "Priya Shah" may be two different people — return
+   every close match (newest cap 8) so staff picks by mobile + history,
+   never a silent single guess. */
+export async function searchCustomersByName(name: string): Promise<CustomerSnapshot[]> {
+  const needle = name.trim().replace(/[%_\\]/g, "").slice(0, 60);
+  if (needle.length < 2) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("customers")
+    .select("id, name, mobile, visits, purchases, area, budget, source")
+    .ilike("name", `%${needle}%`)
+    .order("visits", { ascending: false })
+    .limit(8);
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    phone: c.mobile,
+    visitCount: c.visits,
+    lastVisitAt: null,
+    purchaseCount: c.purchases,
+    area: (c as { area?: string | null }).area ?? null,
+    budget: (c as { budget?: string | null }).budget ?? null,
+    source: (c as { source?: string | null }).source ?? null,
+  }));
 }
 
 /* createCustomer (§20): UNIQUE(normalized_phone) is the final guard against races.
@@ -62,6 +92,8 @@ export async function createCustomer(auth: AuthContext, input: CreateCustomerInp
       normalized_phone: norm,
       email: input.email ?? null,
       city: input.city ?? null,
+      area: input.area?.trim() ? input.area.trim().slice(0, 80) : null,
+      budget: input.budget?.trim() ? input.budget.trim().slice(0, 40) : null,
       source: input.source ?? "Walk-in",
     })
     .select("id, name")
@@ -74,6 +106,53 @@ export async function createCustomer(auth: AuthContext, input: CreateCustomerInp
     throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Could not save customer", 422);
   }
   return { id: created.id, name: created.name, phone: formatPhoneIN(norm), normalizedPhone: norm };
+}
+
+export async function updateCustomer(auth: AuthContext, customerId: string, input: UpdateCustomerInput) {
+  /* Managers own the directory: correcting a name, a mistyped mobile or the
+     source stays a manager action so the floor record stays trustworthy. */
+  if (!isManagerRole(auth.role)) {
+    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only a manager can edit customer records", 403);
+  }
+  const supabase = await createClient();
+  const { data: current } = await supabase.from("customers").select("id").eq("id", customerId).single();
+  if (!current) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_NOT_FOUND, "Customer not found", 404);
+
+  const patch: { name?: string; mobile?: string; normalized_phone?: string; source?: string; area?: string | null; budget?: string | null } = {};
+  if (input.name !== undefined) {
+    if (!input.name.trim()) throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Name required", 422);
+    patch.name = input.name.trim();
+  }
+  if (input.phone !== undefined) {
+    const norm = normalizePhone(input.phone);
+    if (!isValidPhoneIN(input.phone)) {
+      throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Enter a valid 10-digit mobile number", 422);
+    }
+    const clash = await findByNormalizedPhone(norm);
+    if (clash && clash.id !== customerId) {
+      throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_ALREADY_EXISTS, "Phone already registered", 409);
+    }
+    patch.mobile = norm;
+    patch.normalized_phone = norm;
+  }
+  if (input.source !== undefined) patch.source = input.source.trim().slice(0, 40) || "Walk-in";
+  if (input.area !== undefined) patch.area = input.area.trim().slice(0, 80) || null;
+  if (input.budget !== undefined) patch.budget = input.budget.trim().slice(0, 40) || null;
+
+  const { data: updated, error } = await supabase
+    .from("customers")
+    .update(patch)
+    .eq("id", customerId)
+    .select("id, name, mobile")
+    .single();
+  if (error || !updated) {
+    const msg = String(error?.message ?? "");
+    if (error?.code === "23505" || msg.includes("duplicate key")) {
+      throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_ALREADY_EXISTS, "Phone already registered", 409);
+    }
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Could not save changes", 422);
+  }
+  return { id: updated.id as string, name: updated.name as string, phone: updated.mobile as string };
 }
 
 export async function getCustomerSnapshot(_auth: AuthContext, customerId: string): Promise<CustomerSnapshot> {
@@ -94,5 +173,8 @@ export async function getCustomerSnapshot(_auth: AuthContext, customerId: string
     visitCount: c.visits,
     lastVisitAt: last?.created_at ?? null,
     purchaseCount: c.purchases,
+    area: c.area ?? null,
+    budget: c.budget ?? null,
+    source: c.source ?? null,
   };
 }

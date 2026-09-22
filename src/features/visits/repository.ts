@@ -26,6 +26,8 @@ export interface VisitRow {
   assigned_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  /** Fitting suite (SUITE_01/02/03, SALON_VIP) — null until assigned. */
+  suite: string | null;
 }
 
 export function toDTO(v: VisitRow) {
@@ -35,6 +37,7 @@ export function toDTO(v: VisitRow) {
     arrivedAt: v.arrived_at, identifiedAt: v.identified_at,
     assignedAt: v.assigned_at, startedAt: v.started_at,
     completedAt: v.completed_at,
+    suite: v.suite ?? null,
   };
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
+import { FULL_NAME_ERROR, isFullName, normalizeName } from "@/lib/domain";
 
 /* POST /api/staff/register — manager-only staff signup.
    Body: { name, email, password, role: "FC" | "STORE_MANAGER", storeId?, phone? }
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const name = String(body.name ?? "").trim();
+    const name = normalizeName(String(body.name ?? ""));
     const email = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
     const role = String(body.role ?? "FC");
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       if (!/^[6-9]\d{9}$/.test(norm)) return NextResponse.json({ code: "INVALID", message: "Enter a valid 10-digit mobile number" }, { status: 422 });
       phone = norm;
     }
-    if (name.length < 2) return NextResponse.json({ code: "INVALID", message: "Enter the staff member's name" }, { status: 422 });
+    if (!isFullName(name)) return NextResponse.json({ code: "INVALID", message: FULL_NAME_ERROR }, { status: 422 });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ code: "INVALID", message: "Enter a valid email" }, { status: 422 });
     if (password.length < 8) return NextResponse.json({ code: "INVALID", message: "Password needs at least 8 characters" }, { status: 422 });
     if (!["FC", "STORE_MANAGER"].includes(role)) return NextResponse.json({ code: "INVALID", message: "Role must be FC or STORE_MANAGER" }, { status: 422 });

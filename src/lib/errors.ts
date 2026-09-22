@@ -28,6 +28,10 @@ export const STAGE2_ERRORS = {
   DROP_REASON_REQUIRED: "DROP_REASON_REQUIRED",
   DROP_REASON_NOT_FOUND: "DROP_REASON_NOT_FOUND",
   PRODUCT_NOT_DROPPED: "PRODUCT_NOT_DROPPED",
+  /* ---------- Stage 3: billed — scanned ---------- */
+  BILL_NUMBER_REQUIRED: "BILL_NUMBER_REQUIRED",
+  /** Roadmap: a visit cannot close while liked/trialled pieces are unbilled. */
+  VISIT_HAS_UNBILLED_ITEMS: "VISIT_HAS_UNBILLED_ITEMS",
 } as const;
 
 export type Stage2ErrorCode = (typeof STAGE2_ERRORS)[keyof typeof STAGE2_ERRORS];
@@ -49,6 +53,8 @@ const UNPROCESSABLE_CODES: ReadonlySet<string> = new Set([
   "VISIT_NOT_ACTIVE",
   "DROP_REASON_REQUIRED",
   "PRODUCT_NOT_DROPPED",
+  "BILL_NUMBER_REQUIRED",
+  "VISIT_HAS_UNBILLED_ITEMS",
 ]);
 
 function statusFor(code: string): number {

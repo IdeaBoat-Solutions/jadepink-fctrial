@@ -26,10 +26,19 @@ export function useApi<T>(key: string, load: () => Promise<ApiResult<T>>): ApiSt
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
 
-  useEffect(() => {
-    let cancelled = false;
+  /* New query (or manual reload) → back to loading, keeping the previous
+     data on screen (stale-while-revalidate, no flash). The reset happens in
+     render phase — the documented pattern — so no cascading effect renders. */
+  const signature = `${key}|${nonce}`;
+  const [activeSignature, setActiveSignature] = useState(signature);
+  if (activeSignature !== signature) {
+    setActiveSignature(signature);
     setLoading(true);
     setError(null);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       const res = await load();
       if (cancelled) return;
@@ -41,7 +50,7 @@ export function useApi<T>(key: string, load: () => Promise<ApiResult<T>>): ApiSt
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, nonce]);
+  }, [signature]);
 
   return { data, loading, error, reload };
 }

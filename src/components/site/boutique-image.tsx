@@ -15,7 +15,7 @@ export function BoutiqueImage({ className, ...props }: ImageProps) {
     <Image
       {...props}
       onLoad={() => setLoaded(true)}
-      className={`${className ?? ""} motion-safe:transition-opacity motion-safe:duration-500 ${
+      className={`${className ?? ""} motion-safe:transition-opacity motion-safe:duration-300 motion-safe:ease-out ${
         loaded ? "opacity-100" : "opacity-0"
       }`}
     />

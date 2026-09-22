@@ -1,28 +1,29 @@
-/* JadePink F.C. Trial — Stage 3 product state machine.
+/* Product state machine for the floor trial.
    The canonical, code-owned transition table. Services call
-   `assertProductTransition(from, to)` instead of scattering `if` checks (§35).
+   `canTransitionProductStatus(from, to)` instead of scattering `if` checks.
 
-       SELECTED
-          │ startTrial
-          ▼
-       TRIAL_IN_PROGRESS
-          │ completeTrial
-          ▼
-       TRIAL_COMPLETED
-          ├─ like ─▶ LIKED ─▶ PURCHASED (Stage 4 / billing)
-          └─ drop ─▶ DROPPED ─▶ PURCHASED (rare: bought despite dropping)
+   Actions are independent: from SELECTED the FC can trial, like, drop or
+   bill directly - no forced march through every step. Mid-trial the FC can
+   drop or bill without completing first.
 
-   DROPPED → TRIAL_IN_PROGRESS is intentionally NOT allowed: a dropped product
-   is not silently re-trialled; add it again as a fresh interaction instead. */
+        SELECTED -+- trial --> TRIAL_IN_PROGRESS -+- complete --> TRIAL_COMPLETED -+- like --> LIKED --> PURCHASED
+                   +- like --> LIKED             +- drop --> DROPPED (reason)      +- drop --> DROPPED (reason)
+                   +- drop --> DROPPED (reason)  +- bill --> PURCHASED            +- bill --> PURCHASED
+                   +- bill --> PURCHASED (buy w/o trial)
+
+    Liked-but-not-billed needs a reason if later dropped (vendor reports).
+    DROPPED -> TRIAL_IN_PROGRESS is intentionally NOT allowed: a dropped
+    product is not silently re-trialled; add it again as a fresh interaction
+    instead. */
 
 import type { ProductVisitStatus } from "./types";
 
 const TRANSITIONS: Record<ProductVisitStatus, ProductVisitStatus[]> = {
-  SELECTED: ["TRIAL_IN_PROGRESS"],
-  TRIAL_IN_PROGRESS: ["TRIAL_COMPLETED"],
-  TRIAL_COMPLETED: ["LIKED", "DROPPED"],
-  LIKED: ["PURCHASED"],
-  DROPPED: ["PURCHASED"],
+  SELECTED: ["TRIAL_IN_PROGRESS", "LIKED", "DROPPED", "PURCHASED"],
+  TRIAL_IN_PROGRESS: ["TRIAL_COMPLETED", "SELECTED", "DROPPED", "PURCHASED"],
+  TRIAL_COMPLETED: ["LIKED", "TRIAL_IN_PROGRESS", "DROPPED", "PURCHASED"],
+  LIKED: ["PURCHASED", "DROPPED", "TRIAL_COMPLETED", "SELECTED"],
+  DROPPED: ["PURCHASED", "LIKED", "TRIAL_COMPLETED", "TRIAL_IN_PROGRESS", "SELECTED"],
   PURCHASED: [],
 };
 

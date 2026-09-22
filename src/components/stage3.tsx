@@ -37,7 +37,21 @@ type ScanResult = {
     size: string;
     colour: string;
     price: number;
+    imageUrl: string | null;
   };
+  alreadyAdded: boolean;
+  visitProductId: string | null;
+};
+
+type SearchCandidate = {
+  id: string;
+  sku: string;
+  barcode: string | null;
+  product: { id: string; name: string; category: string };
+  size: string;
+  colour: string;
+  price: number;
+  imageUrl: string | null;
   alreadyAdded: boolean;
   visitProductId: string | null;
 };
@@ -71,7 +85,7 @@ function ProductStatusBadge({ status }: { status: ProductVisitStatus }) {
 function friendly(code: string, message: string): { title: string; body: string } {
   switch (code) {
     case "PRODUCT_NOT_FOUND":
-      return { title: "No product found for that code.", body: "Check the barcode or SKU and scan again." };
+      return { title: "No exact barcode or SKU found.", body: "Check the code — or pick from the name matches below." };
     case "PRODUCT_ALREADY_ADDED":
       return { title: "Already on this visit.", body: message || "The product is already in this visit." };
     case "INVALID_PRODUCT_STATE":
@@ -139,6 +153,8 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
   const [identifier, setIdentifier] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchCandidate[] | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [dropFor, setDropFor] = useState<ProductCardDTO | null>(null);
   const [dropReasonId, setDropReasonId] = useState<string>("");
@@ -190,7 +206,10 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
     setScanning(true);
     setErr(null);
     setScanResult(null);
+    setSearchResults(null);
+    setSearchQuery("");
     try {
+      // Exact path first: barcode, then SKU. Unchanged and fast.
       const data = (await callApi(visitId, "scan", { identifier: value })) as ScanResult;
       setScanResult(data);
       if (data.alreadyAdded) {
@@ -198,6 +217,20 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
       }
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "INTERNAL";
+      // Miss on exact code + enough characters → fall back to name search
+      // so the FC can type "floral" and pick the right variant.
+      if (code === "PRODUCT_NOT_FOUND" && value.length >= 2) {
+        try {
+          const found = (await callApi(visitId, "search", { query: value })) as { results: SearchCandidate[] };
+          if (found.results.length > 0) {
+            setSearchResults(found.results);
+            setSearchQuery(value);
+            return;
+          }
+        } catch {
+          /* fall through to the not-found message */
+        }
+      }
       setErr(friendly(code, e instanceof Error ? e.message : ""));
     } finally {
       setScanning(false);
@@ -218,6 +251,24 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
       { title: "Added to visit", body: name },
     );
   }, [run, scanResult, visitId]);
+
+  const addCandidate = useCallback((c: SearchCandidate) => {
+    if (c.alreadyAdded) {
+      pushToast("Already on this visit", `${c.product.name} · ${c.sku}`);
+      return;
+    }
+    void run(
+      `add-${c.id}`,
+      async () => {
+        await callApi(visitId, "add", { productVariantId: c.id });
+        setSearchResults(null);
+        setSearchQuery("");
+        setIdentifier("");
+        scanRef.current?.focus();
+      },
+      { title: "Added to visit", body: c.product.name },
+    );
+  }, [run, pushToast, visitId]);
 
   const openDrop = (card: ProductCardDTO) => {
     setDropReasonId("");
@@ -274,7 +325,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
         <Panel className="p-5">
           <EmptyState
             title="This visit isn’t on the floor yet."
-            body="Stage 3 runs on an active Supabase visit. In demo mode the local walk-in isn’t in the backend — open an active visit to start scanning."
+            body="Floor trial runs on an active visit. In demo mode the local walk-in isn’t in the backend — open an active visit to start scanning."
           />
         </Panel>
       );
@@ -296,7 +347,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
       {/* Visit header */}
       <Panel className="p-5 sm:p-6">
         <SectionTitle
-          kicker="On the floor · Stage 3"
+          kicker="On the floor"
           title={data.visit.customerName || "Active visit"}
           aside={
             <div className="flex items-center gap-2">
@@ -329,7 +380,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
 
       {err && <ErrorBlock title={err.title} body={err.body} actionLabel="Dismiss" onAction={() => setErr(null)} />}
 
-      {/* Scan / add */}
+      {/* Scan / search / add */}
       <Panel className="p-5 sm:p-6">
         <SectionTitle kicker="Scan or search" title="Add a product to this visit" />
         <form className="mt-3.5 flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); void doScan(); }}>
@@ -338,11 +389,11 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
               ref={scanRef}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="Scan barcode or type SKU…"
-              aria-label="Product barcode or SKU"
+              placeholder="Scan barcode, SKU or product name…"
+              aria-label="Product barcode, SKU or name"
               autoComplete="off"
               enterKeyHint="search"
-              className="flex-1 py-3 pl-11 font-mono"
+              className="flex-1 py-3 pl-11"
             />
             <span aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a8a29e]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18" /></svg>
@@ -356,7 +407,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
         {scanResult && (
           <div className="ui-fade mt-3 flex flex-col gap-3 rounded-2xl border border-[#e8dfd6] bg-[#faf8f6] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-start gap-3">
-              <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#1c1917] text-[14px] font-bold text-white">{scanResult.product.product.name.charAt(0)}</span>
+              <ProductThumb name={scanResult.product.product.name} imageUrl={scanResult.product.imageUrl} />
               <div className="min-w-0">
                 <p className="truncate text-[15px] font-semibold tracking-tight text-[#1c1917]">{scanResult.product.product.name}</p>
                 <p className="mt-0.5 text-[13px] leading-relaxed text-[#78716c]">
@@ -373,6 +424,36 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
                 {busy === `add-${scanResult.product.id}` ? "Adding…" : "Add to visit →"}
               </PrimaryButton>
             )}
+          </div>
+        )}
+
+        {searchResults && (
+          <div className="ui-fade mt-3 flex flex-col gap-2" role="listbox" aria-label={`Name matches for ${searchQuery}`}>
+            <p className="text-[13px] font-medium text-[#78716c]">
+              No exact code match — {searchResults.length} name match{searchResults.length > 1 ? "es" : ""} for <strong className="font-semibold text-[#1c1917]">“{searchQuery}”</strong>. Pick the right size / colour:
+            </p>
+            {searchResults.map((c) => (
+              <div key={c.id} role="option" aria-selected="false" className="flex flex-col gap-3 rounded-2xl border border-[#e8dfd6] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <ProductThumb name={c.product.name} imageUrl={c.imageUrl} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold tracking-tight text-[#1c1917]">{c.product.name}</p>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-[#78716c]">
+                      {c.product.category || "—"} · {c.colour} · {c.size} ·{" "}
+                      <span className="tnum font-semibold text-[#1c1917]">{INR.format(c.price)}</span>
+                    </p>
+                    <p className="mt-0.5 font-mono text-[12px] text-[#a8a29e]">{c.sku}</p>
+                  </div>
+                </div>
+                {c.alreadyAdded ? (
+                  <span className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 text-[13.5px] font-semibold text-[#9a5b00]"><span aria-hidden className="grid size-5 place-items-center rounded-full bg-[#fdf1d7] ring-1 ring-[#f0d48a]">!</span>Already added</span>
+                ) : (
+                  <PrimaryButton onClick={() => addCandidate(c)} disabled={busy === `add-${c.id}`} className="sm:w-40">
+                    {busy === `add-${c.id}` ? "Adding…" : "Add →"}
+                  </PrimaryButton>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </Panel>
@@ -461,7 +542,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
 
       {data.products.length === 0 && (
         <Panel className="p-5 sm:p-6">
-          <EmptyState title="Nothing scanned yet." body="Scan a product barcode or enter its SKU to start the trial for this visit." />
+          <EmptyState title="Nothing scanned yet." body="Scan a barcode, enter a SKU, or type a product name to start the trial for this visit." />
         </Panel>
       )}
 
@@ -507,11 +588,36 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
 
 /* ---------- Product row ---------- */
 
+function ProductThumb({ name, imageUrl, tone }: { name: string; imageUrl?: string | null; tone?: string }) {
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- 40px thumb from dynamic Supabase storage URLs (per-project host, not whitelisted); lazy + async so scan stays fast.
+      <img
+        src={imageUrl}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="size-10 shrink-0 rounded-xl border border-[#e8dfd6] bg-[#f3eeea] object-cover"
+      />
+    );
+  }
+  return (
+    <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-[14px] font-bold ${tone ?? "bg-[#f3eeea] text-[#57534e]"}`}>
+      {(name || "?").charAt(0)}
+    </span>
+  );
+}
+
 function ProductRow({ card, children, muted }: { card: ProductCardDTO; children?: ReactNode; muted?: boolean }) {
+  const tone =
+    card.status === "LIKED" ? "bg-[#e6f4ec] text-[#177245]"
+    : card.status === "DROPPED" ? "bg-[#fdecec] text-[#7d1a1f]"
+    : card.status === "TRIAL_IN_PROGRESS" ? "bg-[#fdf1d7] text-[#9a5b00]"
+    : "bg-[#f3eeea] text-[#57534e]";
   return (
     <div className={`pressable flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${muted ? "border-[#e8dfd6] bg-[#faf8f6]" : "border-[#e8dfd6] bg-white"}`}>
       <div className="flex min-w-0 items-start gap-3">
-        <span aria-hidden className={`grid size-10 shrink-0 place-items-center rounded-xl text-[14px] font-bold ${card.status === "LIKED" ? "bg-[#e6f4ec] text-[#177245]" : card.status === "DROPPED" ? "bg-[#fdecec] text-[#7d1a1f]" : card.status === "TRIAL_IN_PROGRESS" ? "bg-[#fdf1d7] text-[#9a5b00]" : "bg-[#f3eeea] text-[#57534e]"}`}>{card.product.name.charAt(0)}</span>
+        <ProductThumb name={card.product.name} imageUrl={card.product.imageUrl} tone={tone} />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-[15px] font-semibold tracking-tight text-[#1c1917]">{card.product.name}</p>
@@ -567,8 +673,12 @@ function DropReasonDialog({
     >
       <div className="ui-rise flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl">
         <div className="border-b border-[#e8dfd6] p-5">
-          <h3 className="text-[16px] font-semibold text-[#1c1917]">Why didn’t the customer like it?</h3>
+          <h3 className="text-[16px] font-semibold text-[#1c1917]">Why didn’t the customer take it?</h3>
           <p className="mt-0.5 truncate text-[13.5px] text-[#78716c]">{card.product.name} · {card.product.sku}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-[#78716c]">
+            Required on anything liked or trialled but not billed: size, colour, price, design, material, other.
+            Vendor reports are built on this field.
+          </p>
         </div>
 
         <fieldset className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-4">

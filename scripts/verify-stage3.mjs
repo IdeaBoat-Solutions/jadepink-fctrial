@@ -186,6 +186,33 @@ try {
     }
   }
 
+  // ---------- 6b. Billed — scanned (migration 130) ----------
+  const bill = await fc
+    .from("visit_products")
+    .update({ status: "PURCHASED", purchased_at: nowIso(), bill_number: "B-TEST-001" })
+    .eq("id", vp.id);
+  check("LIKED -> PURCHASED with bill_number", !bill.error, bill.error?.message);
+
+  await fc.from("visit_events").insert({
+    visit_id: visitId,
+    event_type: "PRODUCT_PURCHASED",
+    actor_id: sess.user.id,
+    entity_type: "VISIT_PRODUCT",
+    entity_id: vp.id,
+    metadata: { sku: v.sku, product_variant_id: v.id, bill_number: "B-TEST-001" },
+  });
+  const bev = await fc
+    .from("visit_events")
+    .select("event_type, entity_id")
+    .eq("visit_id", visitId)
+    .eq("event_type", "PRODUCT_PURCHASED")
+    .maybeSingle();
+  check(
+    "PRODUCT_PURCHASED event recorded with bill",
+    bev.data?.entity_id === vp.id,
+    JSON.stringify(bev.data ?? bev.error)
+  );
+
   // ---------- 7. Summary is derived, not stored ----------
   const { data: rows } = await fc.from("visit_products").select("status").eq("visit_id", visitId);
   const counts = {};

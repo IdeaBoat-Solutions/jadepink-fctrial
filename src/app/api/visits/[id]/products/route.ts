@@ -8,8 +8,11 @@ import {
   dropProduct,
   getVisitWithProducts,
   likeProduct,
+  markProductPurchased,
+  markProductsPurchased,
   removeProductFromVisit,
   scanProduct,
+  searchProducts,
   startTrial,
 } from "@/features/visits/products/service";
 import {
@@ -18,8 +21,11 @@ import {
   completeTrialSchema,
   dropProductSchema,
   likeProductSchema,
+  markPurchasedManySchema,
+  markPurchasedSchema,
   removeProductFromVisitSchema,
   resolveProductSchema,
+  searchProductsSchema,
   startTrialSchema,
 } from "@/features/visits/products/schemas";
 
@@ -45,10 +51,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
  * Explicit business operations — never a raw status write (§11, §34).
  *
  *   { action: "scan",               identifier }
+ *   { action: "search",             query }
  *   { action: "add",                productVariantId }
  *   { action: "start-trial",        visitProductId }
  *   { action: "complete-trial",     visitProductId }
  *   { action: "like",               visitProductId }
+ *   { action: "mark-purchased",     visitProductId, billNumber? }
+ *   { action: "mark-purchased-many", visitProductIds, billNumber? }
  *   { action: "drop",               visitProductId, dropReasonId, note? }
  *   { action: "capture-drop-reason",visitProductId, dropReasonId, note? }
  *   { action: "remove",             visitProductId }
@@ -65,6 +74,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         const parsed = resolveProductSchema.parse({ identifier: body.identifier });
         return NextResponse.json({ data: await scanProduct(auth, id, parsed.identifier) });
       }
+      case "search": {
+        const parsed = searchProductsSchema.parse({ query: body.query ?? body.identifier });
+        return NextResponse.json({ data: await searchProducts(auth, id, parsed.query) });
+      }
       case "add": {
         const parsed = addProductToVisitSchema.parse({ visitId: id, productVariantId: body.productVariantId });
         return NextResponse.json({ data: await addProductToVisit(auth, parsed.visitId, parsed.productVariantId) });
@@ -80,6 +93,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       case "like": {
         const parsed = likeProductSchema.parse({ visitProductId: body.visitProductId });
         return NextResponse.json({ data: await likeProduct(auth, parsed.visitProductId) });
+      }
+      case "mark-purchased": {
+        const parsed = markPurchasedSchema.parse({
+          visitProductId: body.visitProductId,
+          billNumber: body.billNumber ?? "",
+        });
+        return NextResponse.json({
+          data: await markProductPurchased(auth, parsed.visitProductId, parsed.billNumber),
+        });
+      }
+      case "mark-purchased-many": {
+        const parsed = markPurchasedManySchema.parse({
+          visitProductIds: body.visitProductIds,
+          billNumber: body.billNumber ?? "",
+        });
+        return NextResponse.json({
+          data: await markProductsPurchased(auth, parsed.visitProductIds, parsed.billNumber),
+        });
       }
       case "drop": {
         const parsed = dropProductSchema.parse({

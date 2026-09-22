@@ -27,6 +27,7 @@ export default function LoginPage() {
   // Email + password
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // OTP
   const [mobile, setMobile] = useState("");
@@ -37,8 +38,12 @@ export default function LoginPage() {
   const [demoName, setDemoName] = useState("");
   const [demoRole, setDemoRole] = useState<"fc" | "manager">("fc");
 
+  /* Managers own the store (dashboard); salespeople own their customers (today).
+     Same rule as src/lib/policy.ts. */
+  const landingFor = (r: "fc" | "manager") => (r === "manager" || r === "fc" ? "/today" : "/today");
+
   useEffect(() => {
-    if (user) router.replace("/today");
+    if (user) router.replace(landingFor(user.role));
   }, [user, router]);
 
   if (user) {
@@ -54,8 +59,9 @@ export default function LoginPage() {
   const finishSignIn = async (fallbackName: string) => {
     const me = await fetch("/api/staff/me").then((r) => r.json()).catch(() => null);
     const name: string = me?.profile?.name || fallbackName;
-    signIn(name, storeRole(me?.profile?.role));
-    router.push("/today");
+    const role = storeRole(me?.profile?.role);
+    signIn(name, role);
+    router.push(landingFor(role));
   };
 
   const submitPassword = async (e: React.FormEvent) => {
@@ -130,46 +136,27 @@ export default function LoginPage() {
     const n = demoName.trim() || "Riya";
     if (demoName.trim() && demoName.trim().length < 2) { setError("Enter your first name as the team knows you."); return; }
     signIn(n, demoRole);
-    router.push("/today");
+    router.push(landingFor(demoRole));
   };
 
   return (
-    <div className="flex min-h-dvh">
-      <div className="dot-grid-dark hidden w-[44%] flex-col justify-between bg-[#1c1917] p-10 text-white lg:flex">
-        <div className="flex items-center justify-between">
-          <p className="text-[13px] font-semibold uppercase tracking-[0.22em] text-white/60">JadePink · Internal</p>
-          <Link href="/" className="text-[13px] font-medium text-white/55 transition-colors hover:text-white">
-            ← jadepink.com
-          </Link>
-        </div>
+    <div className="floor-os grid min-h-dvh lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.1fr)]">
+      <aside className="hidden flex-col justify-between border-r border-[var(--fp-line)] px-10 py-8 lg:flex">
+        <p className="text-[12px] font-semibold tracking-[0.16em]">JADEPINK · AHMEDABAD</p>
         <div>
-          <h1 className="font-display mt-4 text-[52px] font-light leading-[1.04] tracking-tight">
-            Style<br /><em className="font-light">meets you.</em>
-          </h1>
-          <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/70">
-            The store operations portal. Walk-in to billing, one calm workflow —
-            built for the floor, not the back office.
+          <h1 className="fp-name text-[40px] leading-[1.05]">The floor is open.</h1>
+          <p className="mt-3 max-w-[28ch] text-[15px] leading-relaxed text-[var(--fp-muted)]">
+            Sign in, find the customer, and stay on the same visit until billing.
           </p>
-          <ol className="mt-8 space-y-2.5 border-t border-white/15 pt-6 text-[13.5px]">
-            {[
-              ["01", "Walk-in recorded the second she arrives"],
-              ["02", "Customer found by mobile in seconds"],
-              ["03", "FC assigned, visit started, trial begins"],
-            ].map(([n, t]) => (
-              <li key={n} className="flex gap-3">
-                <span className="font-display text-white/45">{n}</span>
-                <span className="text-white/80">{t}</span>
-              </li>
-            ))}
-          </ol>
         </div>
-      </div>
+        <Link href="/" className="text-[13px] font-semibold text-[var(--fp-muted)]">jadepink.com</Link>
+      </aside>
 
-      <main className="flex flex-1 items-center justify-center bg-[#faf8f6] p-6">
-        <div className="w-full max-w-sm rounded-2xl border border-[#e8dfd6] bg-white p-7">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#78716c] lg:hidden">JadePink · Internal</p>
-          <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-[#1c1917]">Sign in</h2>
-          <p className="mt-1 text-[14px] text-[#78716c]">Sales portal · Store management</p>
+      <main className="flex items-center justify-center px-6 py-10">
+        <div className="w-full max-w-sm">
+          <p className="text-[12px] font-semibold tracking-[0.16em] text-[var(--fp-muted)] lg:hidden">JADEPINK</p>
+          <h2 className="mt-1 text-[22px] font-semibold tracking-tight">Sign in</h2>
+          <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Sales floor and store management</p>
 
           {SUPABASE_CONFIGURED ? (
             <>
@@ -200,27 +187,40 @@ export default function LoginPage() {
                     <TextInput
                       id="login-email" type="email" autoComplete="username" placeholder="name@jadepink.in"
                       value={email} onChange={(e) => { setEmail(e.target.value); setError(""); }} aria-invalid={!!error}
+                      autoFocus
                     />
                   </Field>
                   <Field label="Password" htmlFor="login-password">
-                    <TextInput
-                      id="login-password" type="password" autoComplete="current-password" placeholder="••••••••"
-                      value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} aria-invalid={!!error}
-                    />
+                    <div className="relative">
+                      <TextInput
+                        id="login-password" type={showPassword ? "text" : "password"} autoComplete="current-password" placeholder="••••••••"
+                        value={password} onChange={(e) => { setPassword(e.target.value); setError(""); }} aria-invalid={!!error}
+                        className="pr-16"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-pressed={showPassword}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="absolute top-1/2 right-2 min-h-[36px] -translate-y-1/2 rounded-lg px-2.5 text-[13px] font-semibold text-[#78716c] transition-colors hover:bg-[#f3eeea] hover:text-[#1c1917] active:scale-95"
+                      >
+                        {showPassword ? "Hide" : "Show"}
+                      </button>
+                    </div>
                   </Field>
                   <PrimaryButton type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in →"}</PrimaryButton>
                 </form>
               ) : step === "mobile" ? (
                 <form onSubmit={sendOtp} className="mt-4 flex flex-col gap-4" aria-label="Request one-time code">
                   <Field label="Mobile number" htmlFor="login-mobile" hint="10-digit Indian mobile. We'll text you a 6-digit code — no password needed.">
-                    <TextInput id="login-mobile" autoComplete="tel" inputMode="tel" placeholder="+91 · 98765 43210" value={mobile} onChange={(e) => { setMobile(e.target.value); setError(""); }} aria-invalid={!!error} />
+                    <TextInput id="login-mobile" autoComplete="tel" inputMode="tel" placeholder="+91 · 98765 43210" value={mobile} onChange={(e) => { setMobile(e.target.value); setError(""); }} aria-invalid={!!error} autoFocus />
                   </Field>
                   <PrimaryButton type="submit" disabled={busy}>{busy ? "Sending code…" : "Send code →"}</PrimaryButton>
                 </form>
               ) : (
                 <form onSubmit={verifyCode} className="mt-4 flex flex-col gap-4" aria-label="Enter one-time code">
                   <Field label="6-digit code" htmlFor="login-code" hint={`Sent to +91 ${normMobile()}. Valid for a few minutes.`}>
-                    <TextInput id="login-code" autoComplete="one-time-code" inputMode="numeric" maxLength={6} placeholder="••••••" value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }} aria-invalid={!!error} />
+                    <TextInput id="login-code" autoComplete="one-time-code" inputMode="numeric" maxLength={6} placeholder="••••••" value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }} aria-invalid={!!error} autoFocus />
                   </Field>
                   <PrimaryButton type="submit" disabled={busy}>{busy ? "Verifying…" : "Verify & sign in →"}</PrimaryButton>
                   <div className="flex items-center justify-between text-[13px]">
@@ -242,7 +242,7 @@ export default function LoginPage() {
                 See <code>supabase/README.md</code>.
               </div>
               <Field label="Your first name" htmlFor="login-name" error={error || undefined} hint={error ? undefined : "Use the name the floor knows you by."}>
-                <TextInput id="login-name" autoComplete="given-name" placeholder="e.g. Riya" value={demoName} onChange={(e) => { setDemoName(e.target.value); setError(""); }} aria-invalid={!!error} />
+                <TextInput id="login-name" autoComplete="given-name" placeholder="e.g. Riya" value={demoName} onChange={(e) => { setDemoName(e.target.value); setError(""); }} aria-invalid={!!error} autoFocus />
               </Field>
               <fieldset>
                 <legend className="text-[13px] font-semibold text-[#44403c]">Sign in as</legend>

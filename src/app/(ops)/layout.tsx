@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { OpsShell } from "@/components/layout/ops-shell";
+import { FloorShell } from "@/components/floor/shell";
 
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
   const { user } = useStore();
@@ -13,11 +13,13 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
     if (!user) router.replace("/login");
   }, [user, router]);
 
-  if (!user) return <div className="flex min-h-dvh items-center justify-center text-[14px] text-[#78716c]">Checking sign-in…</div>;
+  if (!user) {
+    return (
+      <div className="floor-os flex min-h-dvh items-center justify-center">
+        <p className="text-[14px] text-[var(--fp-muted)]">Checking sign-in…</p>
+      </div>
+    );
+  }
 
-  return (
-    <div className="flex min-h-dvh flex-col bg-[#faf8f6]">
-      <OpsShell>{children}</OpsShell>
-    </div>
-  );
+  return <FloorShell>{children}</FloorShell>;
 }

@@ -70,10 +70,10 @@ export function PaginationControls({
   const hrefFor = (p: number) => (p <= 1 ? hrefBase! : `${hrefBase}?page=${p}`);
   const cls = (active: boolean) =>
     cn(
-      "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border px-2.5 text-[13.5px] font-semibold transition-all duration-150 active:scale-[0.95]",
+      "inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border px-2.5 text-[13.5px] font-semibold transition-colors duration-150 active:scale-[0.95]",
       active
         ? "border-[#1c1917] bg-[#1c1917] text-white shadow-[0_4px_12px_-4px_rgba(28,25,23,0.5)]"
-        : "border-[#d6c9bb] bg-white text-[#1c1917] hover:-translate-y-px hover:border-[#1c1917] hover:shadow-[0_8px_18px_-12px_rgba(28,25,23,0.4)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:shadow-none"
+        : "border-[#d6c9bb] bg-white text-[#1c1917] hover:border-[#1c1917] hover:bg-[#faf8f6] disabled:cursor-not-allowed disabled:opacity-40"
     );
 
   const renderBtn = (p: number, label: React.ReactNode, opts: { active?: boolean; disabled?: boolean; ariaLabel?: string }) => {

@@ -1,4 +1,6 @@
-import React from "react";
+"use client";
+
+import React, { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 /* ---------- Buttons: one system, obvious hierarchy ----------
@@ -211,13 +213,28 @@ export function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, on
   title: string; body: string; confirmLabel: string; danger?: boolean;
   onConfirm: () => void; onCancel: () => void; busy?: boolean;
 }) {
+  /* Dialog ergonomics: Escape cancels and the page behind can't scroll
+     while a decision is pending. The safe action owns initial focus. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onCancel]);
+
   return (
-    <div role="alertdialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-[2px] sm:items-center">
-      <div className="ui-rise w-full max-w-sm rounded-2xl bg-white p-5 shadow-[0_24px_60px_-16px_rgba(28,25,23,0.5)] ring-1 ring-black/5 sm:p-6">
+    <div role="alertdialog" aria-modal="true" aria-label={title} onClick={onCancel} className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 backdrop-blur-[2px] sm:items-center">
+      <div onClick={(e) => e.stopPropagation()} className="ui-rise w-full max-w-sm rounded-2xl bg-white p-5 shadow-[0_24px_60px_-16px_rgba(28,25,23,0.5)] ring-1 ring-black/5 sm:p-6">
         <h3 className="text-[16px] font-semibold tracking-tight text-[#1c1917] text-balance">{title}</h3>
         <p className="mt-1.5 text-[14px] leading-relaxed text-[#57534e] text-pretty">{body}</p>
         <div className="mt-5 flex gap-2">
-          <SecondaryButton onClick={onCancel} className="min-h-[48px] flex-1">Keep visit</SecondaryButton>
+          <SecondaryButton autoFocus onClick={onCancel} className="min-h-[48px] flex-1">Keep visit</SecondaryButton>
           <button
             onClick={onConfirm} disabled={busy}
             className={danger

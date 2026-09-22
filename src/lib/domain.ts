@@ -101,6 +101,22 @@ export function isValidMobileIN(raw: string): boolean {
   return /^[6-9]\d{9}$/.test(d);
 }
 
+/* ---------- Person-name normalization ----------
+   Two different people often share a first name — the surname is what keeps
+   them apart on the floor. Every create form requires a full name. */
+
+export function normalizeName(raw: string): string {
+  return (raw || "").trim().replace(/\s+/g, " ");
+}
+
+/** Full name = first name + surname at minimum ("Priya" alone is rejected). */
+export function isFullName(raw: string): boolean {
+  return normalizeName(raw).split(" ").length >= 2;
+}
+
+export const FULL_NAME_ERROR =
+  "Enter first name + surname (e.g. Priya Shah) — one name alone mixes two different people up.";
+
 /* ---------- Visit state machine ---------- */
 
 const TRANSITIONS: Record<VisitStatus, VisitStatus[]> = {
@@ -127,7 +143,7 @@ export function statusLabel(s: VisitStatus): string {
     case "IDENTIFYING": return "Identifying customer";
     case "ASSIGNED": return "FC assigned";
     case "ACTIVE": return "Active visit";
-    case "ON_FLOOR": return "On the floor · Stage 3";
+    case "ON_FLOOR": return "On the floor";
     case "COMPLETED": return "Completed";
     case "ABANDONED": return "Abandoned";
   }

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, type AuthContext } from "@/lib/authz";
-import { canTransition, toDTO, type VisitRow } from "./repository";
+import { canTransition, getTimeline, toDTO, type VisitRow } from "./repository";
 
 /* Start of the current day in IST (store timezone) — "today" for the
    dashboard/floor lists must follow the store's calendar, not UTC. */
@@ -149,6 +149,23 @@ export async function completeVisit(auth: AuthContext, visitId: string) {
   if (!canTransition(visit.status, "COMPLETED")) {
     throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, `Cannot complete from ${visit.status}`, 422);
   }
+  // Roadmap Stage 3: drop-off reason is required on anything liked or trialled
+  // but not billed. A close with outstanding pieces would silently lose the
+  // vendor-report field — block it with the exact count so the UI can route
+  // the FC back to the floor trial. SELECTED-only rows never started a trial
+  // and do not block the close.
+  const { count: outstanding } = await supabase
+    .from("visit_products")
+    .select("id", { count: "exact", head: true })
+    .eq("visit_id", visitId)
+    .in("status", ["LIKED", "TRIAL_IN_PROGRESS", "TRIAL_COMPLETED"]);
+  if ((outstanding ?? 0) > 0) {
+    throw new Stage2Error(
+      STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
+      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or trialled but not billed — mark each billed or dropped with a reason first`,
+      422,
+    );
+  }
   const { data: updated } = await supabase
     .from("visits")
     .update({ status: "COMPLETED", completed_at: new Date().toISOString() })
@@ -184,6 +201,72 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
   return dto;
 }
 
+/* Fitting suites (mockup "Direct Assignment Target"). Stored on the visit;
+   every change is also a SUITE_ASSIGNED event so the timeline shows it. */
+export const VISIT_SUITES = ["SUITE_01", "SUITE_02", "SUITE_03", "SALON_VIP"] as const;
+export type VisitSuite = (typeof VISIT_SUITES)[number];
+
+export const SUITE_LABELS: Record<VisitSuite, string> = {
+  SUITE_01: "Suite 01",
+  SUITE_02: "Suite 02",
+  SUITE_03: "Suite 03",
+  SALON_VIP: "Salon VIP",
+};
+
+export function suiteLabel(suite: string | null | undefined): string | null {
+  if (!suite) return null;
+  return (SUITE_LABELS as Record<string, string>)[suite] ?? suite;
+}
+
+export async function setVisitSuite(auth: AuthContext, visitId: string, suite: VisitSuite | null) {
+  const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  assertStoreAccess(auth, (visit as VisitRow).store_id);
+  if (visit.status === "COMPLETED" || visit.status === "CANCELLED") {
+    throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit is closed", 422);
+  }
+  if (suite !== null && !(VISIT_SUITES as readonly string[]).includes(suite)) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Unknown suite", 422);
+  }
+  const { data: updated, error } = await supabase
+    .from("visits")
+    .update({ suite })
+    .eq("id", visitId)
+    .select("*")
+    .single();
+  if (error || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not assign suite", 422);
+  await supabase.from("visit_events").insert({
+    visit_id: visitId,
+    event_type: "SUITE_ASSIGNED",
+    actor_id: auth.userId,
+    metadata: suite ? { suite } : {},
+  });
+  const [dto] = await enrichVisits(supabase, [updated as VisitRow]);
+  return dto;
+}
+
+/* Runner request (mockup "Call Runner"). One tap, optional note — stored as a
+   RUNNER_REQUESTED event with the current suite for context. No new table. */
+export async function requestRunner(auth: AuthContext, visitId: string, note: string | null = null) {
+  const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  assertStoreAccess(auth, (visit as VisitRow).store_id);
+  if (visit.status === "COMPLETED" || visit.status === "CANCELLED") {
+    throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit is closed", 422);
+  }
+  const clean = (note ?? "").trim().slice(0, 200) || null;
+  await supabase.from("visit_events").insert({
+    visit_id: visitId,
+    event_type: "RUNNER_REQUESTED",
+    actor_id: auth.userId,
+    metadata: { suite: (visit as VisitRow).suite ?? null, note: clean },
+  });
+  return { requested: true as const, suite: (visit as VisitRow).suite ?? null, note: clean };
+}
+
+/* Today's visits for one store (§10, §19): every operational status — not just
 /* Today's visits for one store (§10, §19): every operational status — not just
    active — so Today counts (walk-ins / active / completed / awaiting) and the
    Live Floor all derive from one honest query. CANCELLED is excluded: it is
@@ -200,4 +283,110 @@ export async function listTodayVisits(auth: AuthContext, storeId: string) {
     .order("created_at", { ascending: false })
     .limit(200);
   return enrichVisits(supabase, (data ?? []) as VisitRow[]);
+}
+
+/* Full journey timeline for one visit (Stage 2 + Stage 3 product events).
+   Store-scoped via parent visit; actor names + drop-reason labels resolved
+   server-side so the UI renders human lines, never raw event names. */
+export async function getVisitTimeline(auth: AuthContext, visitId: string) {
+  const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  if (!visit) {
+    throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  }
+  assertStoreAccess(auth, (visit as VisitRow).store_id);
+
+  const rows = await getTimeline(visitId);
+
+  const actorIds = [...new Set(rows.map((r) => r.actorId).filter((v): v is string => !!v))];
+  const actorNames = new Map<string, string>();
+  if (actorIds.length) {
+    const { data } = await supabase.from("staff_profiles").select("id, name").in("id", actorIds);
+    for (const s of data ?? []) actorNames.set(s.id as string, s.name as string);
+  }
+
+  // Drop-reason labels for PRODUCT_DROPPED metadata (code → label).
+  const reasonCodes = [
+    ...new Set(
+      rows
+        .map((r) => (r.metadata as Record<string, unknown> | null)?.drop_reason_code)
+        .filter((v): v is string => typeof v === "string"),
+    ),
+  ];
+  const reasonLabels = new Map<string, string>();
+  if (reasonCodes.length) {
+    const { data } = await supabase.from("drop_reasons").select("code, label").in("code", reasonCodes);
+    for (const r of data ?? []) reasonLabels.set(r.code as string, r.label as string);
+  }
+
+  return rows.map((r) => {
+    const meta = (r.metadata ?? {}) as Record<string, unknown>;
+    const sku = typeof meta.sku === "string" ? meta.sku : null;
+    const code = typeof meta.drop_reason_code === "string" ? meta.drop_reason_code : null;
+    const label = code ? reasonLabels.get(code) ?? null : null;
+    const bill = typeof meta.bill_number === "string" ? meta.bill_number : null;
+    const suite = typeof meta.suite === "string" ? suiteLabel(meta.suite) : null;
+    const note = typeof meta.note === "string" && meta.note.trim() ? meta.note.trim().slice(0, 120) : null;
+    let detail: string | null;
+    if (r.eventType === "PRODUCT_DROPPED" || r.eventType === "DROP_REASON_CAPTURED") {
+      detail = [sku, label ? `Reason: ${label}` : null].filter(Boolean).join(" · ") || null;
+    } else if (r.eventType === "PRODUCT_PURCHASED") {
+      detail = [sku, bill ? `Bill ${bill}` : null].filter(Boolean).join(" · ") || null;
+    } else if (r.eventType === "SUITE_ASSIGNED") {
+      detail = suite ? `Moved to ${suite}` : "Suite cleared";
+    } else if (r.eventType === "RUNNER_REQUESTED") {
+      detail = [suite, note].filter(Boolean).join(" · ") || "Runner called";
+    } else {
+      detail = sku;
+    }
+    return {
+      id: r.id,
+      type: r.eventType,
+      at: r.createdAt,
+      actorName: r.actorId ? actorNames.get(r.actorId) ?? undefined : undefined,
+      detail,
+    };
+  });
+}
+
+/* Floor summaries: per-visit Stage 3 counters for the manager live floor.
+   One query for today's operational visits + one narrow status query for
+   their visit_products (RLS store-scoped). Counts derived, never stored. */
+export async function listFloorSummaries(auth: AuthContext, storeId: string) {
+  assertStoreAccess(auth, storeId);
+  const supabase = await createClient();
+  const { data: visits } = await supabase
+    .from("visits")
+    .select("*")
+    .eq("store_id", storeId)
+    .in("status", ["ARRIVED", "IDENTIFYING", "ASSIGNED", "ACTIVE"])
+    .gte("created_at", startOfISTDayISO())
+    .order("created_at", { ascending: false })
+    .limit(200);
+  const rows = (visits ?? []) as VisitRow[];
+  const enriched = await enrichVisits(supabase, rows);
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((v) => v.id);
+  const { data: products } = await supabase
+    .from("visit_products")
+    .select("visit_id, status")
+    .in("visit_id", ids);
+  const counts = new Map<string, { selected: number; trialInProgress: number; trialCompleted: number; liked: number; dropped: number; purchased: number }>();
+  for (const id of ids) {
+    counts.set(id, { selected: 0, trialInProgress: 0, trialCompleted: 0, liked: 0, dropped: 0, purchased: 0 });
+  }
+  for (const p of (products ?? []) as Array<{ visit_id: string; status: string }>) {
+    const c = counts.get(p.visit_id);
+    if (!c) continue;
+    switch (p.status) {
+      case "SELECTED": c.selected++; break;
+      case "TRIAL_IN_PROGRESS": c.trialInProgress++; break;
+      case "TRIAL_COMPLETED": c.trialCompleted++; break;
+      case "LIKED": c.liked++; break;
+      case "DROPPED": c.dropped++; break;
+      case "PURCHASED": c.purchased++; break;
+    }
+  }
+  return enriched.map((v) => ({ visit: v, summary: counts.get(v.id) ?? { selected: 0, trialInProgress: 0, trialCompleted: 0, liked: 0, dropped: 0, purchased: 0 } }));
 }

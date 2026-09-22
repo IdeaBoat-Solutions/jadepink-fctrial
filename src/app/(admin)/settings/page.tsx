@@ -8,7 +8,8 @@ import { PageHeader } from "@/components/layout/page-header";
 import { ModeToggle } from "@/components/layout/mode-toggle";
 
 export default function SettingsPage() {
-  const { user } = useStore();
+  const { user, profile, storeId, loadingSession } = useStore();
+  const displayName = loadingSession ? "Loading…" : user?.name?.trim() ? user.name : "—";
   return (
     <div className="staff-page mx-auto w-full max-w-2xl">
       <PageHeader kicker="System" title="Settings" sub="Store prefs, theme, demo data." />
@@ -28,10 +29,16 @@ export default function SettingsPage() {
       </Card>
       <Card>
         <CardHeader><CardTitle>Session</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
+        <CardContent className="flex flex-col gap-1.5" aria-live="polite">
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-            Signed in as <strong className="font-semibold text-foreground">{user?.name ?? "—"}</strong> ({user?.role === "manager" ? "Manager" : "Salesperson"}).
+            Signed in as <strong className="font-semibold text-foreground">{displayName}</strong> ({user?.role === "manager" ? "Manager" : "Salesperson"}).
           </p>
+          {user?.email && (
+            <p className="tnum text-[13px] leading-relaxed text-muted-foreground">{user.email}</p>
+          )}
+          {profile?.role && (
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">Role {profile.role}{storeId ? ` · Store ${storeId}` : " · No store assigned"}</p>
+          )}
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">Floor data is live in Supabase — there is no demo reset.</p>
         </CardContent>
       </Card>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PrimaryButton, TextInput, Field } from "@/components/ui";
+import { FULL_NAME_ERROR, isFullName, normalizeName } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 type Me = { user: { id: string; email?: string } | null; profile: { name: string; role: string } | null };
@@ -30,12 +31,14 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
     setDone("");
+    const cleanName = normalizeName(name);
+    if (!isFullName(cleanName)) { setError(FULL_NAME_ERROR); return; }
     setBusy(true);
     try {
       const res = await fetch("/api/staff/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role, phone }),
+        body: JSON.stringify({ name: cleanName, email, password, role, phone }),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.message || "Could not register staff."); return; }
@@ -111,8 +114,8 @@ export default function RegisterPage() {
             <form onSubmit={submit} className="mt-5 flex flex-col gap-4" aria-label="Register staff">
               {error && <p role="alert" className="rounded-lg border border-[#f0b6b9] bg-[#fdecec] px-3 py-2.5 text-[13.5px] font-medium text-[#7d1a1f]">{error}</p>}
               {done && <p role="status" className="rounded-lg border border-[#bfe3cd] bg-[#e6f4ec] px-3 py-2.5 text-[13.5px] font-medium text-[#177245]">{done}</p>}
-              <Field label="Full name" htmlFor="reg-name">
-                <TextInput id="reg-name" autoComplete="name" placeholder="e.g. Aakash" value={name} onChange={(e) => setName(e.target.value)} />
+              <Field label="Full name" htmlFor="reg-name" hint="First name + surname — two staff members often share a first name.">
+                <TextInput id="reg-name" autoComplete="name" placeholder="e.g. Aakash Shah" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
               </Field>
               <Field label="Staff email" htmlFor="reg-email">
                 <TextInput id="reg-email" type="email" autoComplete="email" placeholder="name@jadepink.in" value={email} onChange={(e) => setEmail(e.target.value)} />

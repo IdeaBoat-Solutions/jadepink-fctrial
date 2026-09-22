@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export function Spotlight({ className, fill = "white" }: { className?: string; fill?: string }) {
@@ -27,27 +27,37 @@ export function Spotlight({ className, fill = "white" }: { className?: string; f
 
 export function CardSpotlight({ children, className }: { children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: -400, y: -400 });
-  const [opacity, setOpacity] = useState(0);
+  const glowRef = useRef<HTMLDivElement>(null);
+  const raf = useRef(0);
 
   return (
     <div
       ref={ref}
       onMouseMove={(e) => {
-        const r = ref.current?.getBoundingClientRect();
-        if (!r) return;
-        setPos({ x: e.clientX - r.left, y: e.clientY - r.top });
+        // rAF-throttled + direct DOM write: no React re-render per pixel,
+        // so hovering KPI cards never janks the dashboard.
+        cancelAnimationFrame(raf.current);
+        raf.current = requestAnimationFrame(() => {
+          const host = ref.current;
+          const glow = glowRef.current;
+          if (!host || !glow) return;
+          const r = host.getBoundingClientRect();
+          glow.style.opacity = "1";
+          glow.style.background = `radial-gradient(480px circle at ${e.clientX - r.left}px ${e.clientY - r.top}px, rgba(180,35,77,0.12), transparent 65%)`;
+        });
       }}
-      onMouseEnter={() => setOpacity(1)}
-      onMouseLeave={() => setOpacity(0)}
+      onMouseEnter={() => {
+        if (glowRef.current) glowRef.current.style.opacity = "1";
+      }}
+      onMouseLeave={() => {
+        cancelAnimationFrame(raf.current);
+        if (glowRef.current) glowRef.current.style.opacity = "0";
+      }}
       className={cn("group relative overflow-hidden", className)}
     >
       <div
-        className="pointer-events-none absolute inset-0 transition-opacity duration-300"
-        style={{
-          opacity,
-          background: `radial-gradient(480px circle at ${pos.x}px ${pos.y}px, rgba(180,35,77,0.12), transparent 65%)`,
-        }}
+        ref={glowRef}
+        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300"
       />
       {children}
     </div>

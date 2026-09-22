@@ -16,8 +16,12 @@ export type ProductEventType =
   | "PRODUCT_REMOVED"
   | "TRIAL_STARTED"
   | "TRIAL_COMPLETED"
+  | "TRIAL_REOPENED"
+  | "TRIAL_CANCELLED"
   | "PRODUCT_LIKED"
+  | "PRODUCT_UNLIKED"
   | "PRODUCT_DROPPED"
+  | "PRODUCT_UNDROPPED"
   | "DROP_REASON_CAPTURED"
   | "PRODUCT_PURCHASED";
 
@@ -36,6 +40,10 @@ export interface ProductVariantRow {
   /** joined product fields (optional, populated by repository) */
   product_name?: string;
   product_category?: string;
+  /** Real product photo (products.image_url) — variants carry image_key=null
+      for SJ imports, so the card falls back to the parent product image. */
+  product_image_url?: string | null;
+  product_image_urls?: string[];
 }
 
 export interface DropReasonRow {
@@ -60,6 +68,9 @@ export interface VisitProductRow {
   dropped_at: string | null;
   drop_reason_id: string | null;
   note: string | null;
+  /** Roadmap Stage 3 "Billed — scanned": bill number + close timestamp. */
+  bill_number: string | null;
+  purchased_at: string | null;
   created_at: string;
   updated_at: string;
   /** joined fields (optional, populated by repository) */
@@ -73,6 +84,7 @@ export interface VisitProductRow {
     colour: string;
     price: number;
     image_key: string | null;
+    image_url?: string | null;
   };
   drop_reason?: DropReasonRow;
 }
@@ -148,6 +160,7 @@ export interface ResolvedProduct {
   size: string;
   colour: string;
   price: number;
+  imageUrl: string | null;
 }
 
 /* ---------- Event metadata shapes ---------- */

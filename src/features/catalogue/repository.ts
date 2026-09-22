@@ -296,6 +296,25 @@ export async function listOrders(opts: { page?: number; pageSize?: number; statu
   return { items, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)), start: total === 0 ? 0 : from + 1, end: Math.min(total, from + pageSize) };
 }
 
+/* Recent orders for honest "today / last 7 days" sales math. Narrow column set,
+   capped rows — the browser aggregates, it never ships the whole ledger. */
+export async function listOrdersSince(sinceISO: string, limit = 500) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("orders")
+    .select("total, status, fc_name, created_at")
+    .gte("created_at", sinceISO)
+    .order("created_at", { ascending: false })
+    .limit(Math.min(1000, Math.max(1, limit)));
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    total: Number((r as { total: number }).total ?? 0),
+    status: String((r as { status: string }).status ?? "pending"),
+    fcName: ((r as { fc_name: string | null }).fc_name ?? "").trim() || null,
+    createdAt: String((r as { created_at: string }).created_at),
+  }));
+}
+
 /* ---------- Stock movements ---------- */
 
 export async function listMovements(productId?: string): Promise<StockMovement[]> {
@@ -317,6 +336,55 @@ export async function listMovements(productId?: string): Promise<StockMovement[]
     at: m.created_at as string,
     actor: (m.actor as string) ?? "system",
   }));
+}
+
+/* ---------- Purchases for one product ----------
+   Detail list of the users who purchased this item: every order_items row for
+   the product, joined to its order for customer / date / channel. Bounded to
+   the 50 most recent so a bestseller never fans out to an unbounded query. */
+
+export interface ProductPurchase {
+  orderId: string;
+  orderCode: string;
+  customerName: string;
+  customerPhone: string;
+  qty: number;
+  price: number;
+  channel: string;
+  fcName?: string;
+  orderedAt: string;
+}
+
+export async function listPurchasesForProduct(productId: string, limit = 50): Promise<{ items: ProductPurchase[]; totalQty: number; totalRevenue: number }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("order_items")
+    .select("qty, price, orders(id, code, customer_name, customer_phone, channel, fc_name, created_at)")
+    .eq("product_id", productId)
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  const items: ProductPurchase[] = (data ?? []).map((r) => {
+    const o = (r as unknown as { qty: number; price: number; orders: { id: string; code: string; customer_name: string; customer_phone: string; channel: string; fc_name: string | null; created_at: string } | null }).orders;
+    return {
+      orderId: o?.id ?? "",
+      orderCode: o?.code ?? "—",
+      customerName: o?.customer_name ?? "Walk-in customer",
+      customerPhone: o?.customer_phone ?? "",
+      qty: Number((r as { qty: number }).qty ?? 0),
+      price: Number((r as { price: number }).price ?? 0),
+      channel: o?.channel ?? "walk-in",
+      fcName: o?.fc_name ?? undefined,
+      orderedAt: o?.created_at ?? "",
+    };
+  }).filter((i) => i.orderId);
+  // Most recent first when the join carries a timestamp.
+  items.sort((a, b) => (b.orderedAt || "").localeCompare(a.orderedAt || ""));
+  return {
+    items,
+    totalQty: items.reduce((s, i) => s + i.qty, 0),
+    totalRevenue: items.reduce((s, i) => s + i.qty * i.price, 0),
+  };
 }
 
 /* ---------- Dashboard aggregate ---------- */

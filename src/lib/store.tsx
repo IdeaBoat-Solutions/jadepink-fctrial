@@ -10,10 +10,11 @@ import { formatMobileIN, normalizeMobile } from "@/lib/domain";
 import {
   type CustomerSnapshotLive, type SalespersonLive, type StaffProfile, type VisitLive,
   assignFC, attachCustomer, cancelVisit, completeVisit, createCustomer, createWalkIn,
-  getCustomerById, getMe, listActiveVisits, listSalespersons, searchCustomerByPhone, startVisit,
+  getCustomerById, getMe, listActiveVisits, listSalespersons, searchCustomerByPhone, searchCustomersByName, startVisit,
+  updateCustomerRecord,
 } from "@/lib/api";
 
-export interface SessionUser { name: string; role: "fc" | "manager"; id: string; }
+export interface SessionUser { name: string; role: "fc" | "manager"; id: string; email?: string | null; }
 interface Toast { id: number; title: string; body?: string; }
 
 export interface LiveCustomer extends CustomerSnapshotLive {
@@ -36,15 +37,19 @@ interface StoreCtx {
   toasts: Toast[];
   online: boolean;
   pushToast: (title: string, body?: string) => void;
+  dismissToast: (id: number) => void;
   createWalkIn: () => Promise<VisitLive | null>;
   searchCustomer: (q: string) => Promise<CustomerSnapshotLive | null>;
+  /** Name lookup — every close match, so same names are picked by mobile. */
+  searchCustomersByName: (name: string) => Promise<CustomerSnapshotLive[]>;
   /** Reads one record from the database and caches it. null = no such record. */
   fetchCustomer: (id: string) => Promise<CustomerSnapshotLive | null>;
-  createCustomer: (input: { name: string; mobile: string; source?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
+  createCustomer: (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
+  updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string } } | { ok: false; code: string; message?: string }>;
   attachCustomerToVisit: (visitId: string, customerId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
-  completeVisit: (visitId: string) => Promise<void>;
+  completeVisit: (visitId: string) => Promise<boolean>;
   abandonVisit: (visitId: string) => Promise<void>;
   getVisit: (id: string) => VisitLive | undefined;
   getCustomer: (id: string) => LiveCustomer | undefined;
@@ -65,6 +70,7 @@ function mapRole(role: StaffProfile["role"] | undefined): "fc" | "manager" {
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [customers, setCustomers] = useState<LiveCustomer[]>([]);
   const [salespeople, setSalespeople] = useState<SalespersonLive[]>([]);
@@ -75,8 +81,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------- Session ---------- */
 
-  const applySession = useCallback((p: StaffProfile | null) => {
+  const applySession = useCallback((p: StaffProfile | null, email?: string | null) => {
     setProfile(p);
+    if (email !== undefined) setSessionEmail(email);
     try {
       if (p) localStorage.setItem(LS_USER, JSON.stringify(p));
       else localStorage.removeItem(LS_USER);
@@ -86,7 +93,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     const r = await getMe();
-    applySession(r.ok && r.data.user && r.data.profile ? r.data.profile : null);
+    applySession(r.ok && r.data.user && r.data.profile ? r.data.profile : null, r.ok ? r.data.user?.email ?? null : null);
   }, [applySession]);
 
   // Initial session load — setState runs after the await, never synchronously
@@ -98,6 +105,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       const p = r.ok && r.data.user && r.data.profile ? r.data.profile : null;
       setProfile(p);
+      setSessionEmail(r.ok ? r.data.user?.email ?? null : null);
       try {
         if (p) localStorage.setItem(LS_USER, JSON.stringify(p));
         else localStorage.removeItem(LS_USER);
@@ -109,16 +117,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const user: SessionUser | null = useMemo(() => {
     if (!profile) return null;
+    const fallback = sessionEmail?.trim() ? sessionEmail.split("@")[0] : "Staff";
     return {
       id: profile.id,
-      name: profile.name,
+      name: profile.name?.trim() ? profile.name : fallback,
       role: mapRole(profile.role),
+      email: sessionEmail,
     };
-  }, [profile]);
+  }, [profile, sessionEmail]);
 
   const signOutViaSupabase = useCallback(async () => {
     await fetch("/api/auth/signout", { method: "POST" }).catch(() => undefined);
     setProfile(null);
+    setSessionEmail(null);
     try { localStorage.removeItem(LS_USER); } catch { /* ignore */ }
   }, []);
 
@@ -130,6 +141,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const id = toastId.current++;
     setToasts((t) => [...t, { id, title, body }]);
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((t) => t.filter((x) => x.id !== id));
   }, []);
 
   /* ---------- Data loading ---------- */
@@ -185,6 +200,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return r.ok ? r.data : null;
   }, []);
 
+  const searchCustomersByNameOp = useCallback(async (name: string): Promise<CustomerSnapshotLive[]> => {
+    if (name.trim().length < 2) return [];
+    const r = await searchCustomersByName(name.trim());
+    return r.ok && Array.isArray(r.data) ? r.data : [];
+  }, []);
+
   /* Single-record read. The cache only holds customers seen in today's visits,
      so anything reached by URL, reload or history link is resolved from the
      database and remembered locally. CUSTOMER_NOT_FOUND (404) → null, which is
@@ -204,8 +225,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return c;
   }, []);
 
-  const createCustomerOp = useCallback(async (input: { name: string; mobile: string; source?: string }) => {
-    const r = await createCustomer({ name: input.name, phone: input.mobile, source: input.source });
+  const createCustomerOp = useCallback(async (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => {
+    const r = await createCustomer({ name: input.name, phone: input.mobile, source: input.source, area: input.area, budget: input.budget });
     if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
     const c = r.data;
     setCustomers((prev) => [
@@ -227,6 +248,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ok: true as const,
       customer: { id: c.id, name: c.name, phone: c.phone, visitCount: 0, lastVisitAt: null, purchaseCount: 0 },
     };
+  }, []);
+
+  const updateCustomerOp = useCallback(async (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string }) => {
+    const r = await updateCustomerRecord(id, input);
+    if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
+    const c = r.data;
+    setCustomers((prev) => prev.map((x) => (
+      x.id === c.id
+        ? { ...x, name: c.name, phone: c.phone, displayMobile: formatMobileIN(c.phone) }
+        : x
+    )));
+    return { ok: true as const, customer: c };
   }, []);
 
   const attachCustomerOp = useCallback(async (visitId: string, customerId: string) => {
@@ -262,13 +295,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const };
   }, [visits]);
 
-  const completeVisitOp = useCallback(async (visitId: string) => {
+  const completeVisitOp = useCallback(async (visitId: string): Promise<boolean> => {
     const r = await completeVisit(visitId);
     if (!r.ok) {
       pushToast("Could not complete visit", r.message);
-      return;
+      return false;
     }
     setVisits((prev) => prev.filter((v) => v.id !== visitId));
+    return true;
   }, [pushToast]);
 
   const abandonVisitOp = useCallback(async (visitId: string) => {
@@ -294,7 +328,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       todayCounts: {
         walkIns: visits.length,
         active: visits.filter((v) => v.status === "ACTIVE").length,
-        completed: 0,
+        completed: visits.filter((v) => v.status === "COMPLETED").length,
         awaiting: awaiting.length,
       } as { walkIns: number; active: number; completed: number; awaiting: number },
     };
@@ -308,11 +342,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       void refreshSession();
     },
     signOut, signOutViaSupabase,
-    customers, salespeople, visits, toasts, online, pushToast,
+    customers, salespeople, visits, toasts, online, pushToast, dismissToast,
     createWalkIn: createWalkInOp,
     searchCustomer: searchCustomerOp,
+    searchCustomersByName: searchCustomersByNameOp,
     fetchCustomer: fetchCustomerOp,
     createCustomer: createCustomerOp,
+    updateCustomer: updateCustomerOp,
     attachCustomerToVisit: attachCustomerOp,
     assignSalesperson: assignOp,
     startVisit: startVisitOp,
