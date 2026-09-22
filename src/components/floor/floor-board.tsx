@@ -1049,18 +1049,18 @@ export function FloorBoard({
                 <Btn tone="ok" disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</Btn>
                 <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
                 <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
-                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>↩ Reopen</Btn>
+                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Reopen</Btn>
               </>
             )}
             {detail.status === "LIKED" && (
               <>
                 <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
                 <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
-                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>↩ Unlike</Btn>
+                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>Unlike</Btn>
               </>
             )}
             {detail.status === "DROPPED" && (
-              <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>↩ Undo drop</Btn>
+              <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</Btn>
             )}
           </div>
         </Drawer>
@@ -1239,6 +1239,48 @@ export function FloorBoard({
         </Drawer>
       )}
     </div>
+  );
+}
+
+function SideSection({
+  label,
+  title,
+  meta,
+  children,
+  defaultOpen = true,
+  onCollapse,
+}: {
+  label: string;
+  title: ReactNode;
+  meta?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  onCollapse?: () => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    if (open) onCollapse?.();
+    setOpen((v) => !v);
+  };
+  return (
+    <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label={label}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">{title}</div>
+        <div className="flex shrink-0 items-center gap-2">
+          {meta}
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+            className="inline-flex min-h-[32px] items-center rounded-lg bg-[#f1ece4] px-2.5 text-[12px] font-bold text-[#57534e] transition-colors hover:bg-[#e7dfd3]"
+          >
+            {open ? "Hide" : "Show"}
+          </button>
+        </div>
+      </div>
+      {open && <div className="mt-2.5">{children}</div>}
+    </section>
   );
 }
 
