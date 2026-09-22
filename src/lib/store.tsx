@@ -240,6 +240,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         displayMobile: formatMobileIN(c.phone),
         visitsCount: 0,
         purchasesCount: 0,
+        tier: null,
       },
       // Dedupe by id — a customer must never appear twice in the list.
       ...prev.filter((x) => x.id !== c.id),
