@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useStore } from "@/lib/store";
 import { RouteFocus } from "@/components/layout/route-focus";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 type Role = "fc" | "manager";
 
@@ -29,9 +30,9 @@ interface NavItem {
 }
 
 const NAV: { title: string; items: NavItem[] }[] = [
-  { title: "Floor · Stage 2", items: [
+  { title: "Floor", items: [
     { href: "/today", label: "Today", icon: Sun },
-    { href: "/floor", label: "Live floor", icon: Activity },
+    { href: "/floor", label: "Live floor", icon: Activity, roles: ["manager"] },
     { href: "/customers", label: "Customers", icon: Users },
   ]},
   { title: "Manage", items: [
@@ -65,6 +66,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
   })).filter((g) => g.items.length > 0);
 
   return (
+    <TooltipProvider delayDuration={200}>
     <SidebarProvider>
       <Sidebar variant="inset">
         <SidebarHeader>
@@ -162,5 +164,6 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
+    </TooltipProvider>
   );
 }
