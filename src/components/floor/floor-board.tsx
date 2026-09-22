@@ -856,14 +856,17 @@ export function FloorBoard({
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4" aria-label="Scanner and floor tools">
-          <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label="Live tag scanner">
-            <div className="flex items-center justify-between gap-2">
+          <SideSection
+            label="Live tag scanner"
+            onCollapse={closeScan}
+            title={
               <p className="inline-flex items-center gap-2 text-[14px] font-bold text-[#211d18]">
                 <span aria-hidden className="size-2 rounded-full bg-[#b23a48]" /> Live Tag Scanner
               </p>
-              <span className="text-[11px] font-semibold text-[#7a736a]">{scanOpen ? "Camera live" : "Manual entry"}</span>
-            </div>
-            <div className="relative mt-3 overflow-hidden rounded-lg bg-[#23403a]">
+            }
+            meta={<span className="text-[11px] font-semibold text-[#7a736a]">{scanOpen ? "Camera live" : "Manual entry"}</span>}
+          >
+            <div className="relative overflow-hidden rounded-lg bg-[#23403a]">
               <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full object-cover opacity-90" />
               <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
                 <div className="h-[55%] w-[72%] rounded border-2 border-dashed border-white/60" />
@@ -898,12 +901,14 @@ export function FloorBoard({
             </div>
             <p className="mt-2.5 text-center text-[12.5px] text-[#7a736a]">Align tag barcode within reticle</p>
             {scanning && <p className="mt-2 text-center text-[13px] font-semibold text-[#57534e]">Looking up…</p>}
-          </section>
+          </SideSection>
 
-          <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label="Last tag read">
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Last tag read</p>
+          <SideSection
+            label="Last tag read"
+            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Last tag read</p>}
+          >
             {scanResult ? (
-              <div className="mt-2.5">
+              <div>
                 <p className="truncate font-mono text-[13px] font-semibold text-[#211d18]">{scanResult.product.sku}</p>
                 <p className="mt-0.5 truncate text-[13px] text-[#7a736a]">{scanResult.product.product.name}</p>
                 <div className="mt-2.5">
@@ -922,13 +927,15 @@ export function FloorBoard({
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-[13.5px] text-[#7a736a]">No tag read yet — scan or enter a code below.</p>
+              <p className="text-[13.5px] text-[#7a736a]">No tag read yet — scan or enter a code below.</p>
             )}
-          </section>
+          </SideSection>
 
-          <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label="Manual SKU entry">
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Manual SKU entry</p>
-            <form className="mt-2.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); void lookup(identifier); }}>
+          <SideSection
+            label="Manual SKU entry"
+            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Manual SKU entry</p>}
+          >
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void lookup(identifier); }}>
               <div className="flex min-h-[44px] flex-1 items-center gap-1.5 rounded-lg border border-[#e0d7c9] bg-white px-3">
                 <span aria-hidden className="font-mono text-[15px] text-[#a8a29e]">#</span>
                 <input
@@ -949,14 +956,14 @@ export function FloorBoard({
                 {scanning ? "…" : "Enter"}
               </button>
             </form>
-          </section>
+          </SideSection>
 
-          <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label="Direct assignment target">
-            <div className="flex items-baseline justify-between gap-2">
-              <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Direct Assignment Target</p>
-              <p className="text-[11.5px] font-semibold text-[#57534e]">Active: {suiteLabelLocal(suite) ?? "—"}</p>
-            </div>
-            <div className="mt-2.5 grid grid-cols-4 gap-1.5" role="group" aria-label="Assign fitting suite">
+          <SideSection
+            label="Direct assignment target"
+            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Direct Assignment Target</p>}
+            meta={<p className="text-[11.5px] font-semibold text-[#57534e]">Active: {suiteLabelLocal(suite) ?? "—"}</p>}
+          >
+            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Assign fitting suite">
               {SUITES.map((s) => {
                 const active = suite === s.id;
                 return (
@@ -975,11 +982,13 @@ export function FloorBoard({
                 );
               })}
             </div>
-          </section>
+          </SideSection>
 
-          <section className="rounded-xl border border-[#e9e2d8] bg-white p-4" aria-label="Runner request">
-            <p className="text-[14px] font-bold text-[#211d18]">Runner Request</p>
-            <p className="mt-0.5 text-[13px] text-[#7a736a]">Size swap or steamer{suiteLabelLocal(suite) ? ` to ${suiteLabelLocal(suite)}` : ""}</p>
+          <SideSection
+            label="Runner request"
+            title={<p className="text-[14px] font-bold text-[#211d18]">Runner Request</p>}
+          >
+            <p className="text-[13px] text-[#7a736a]">Size swap or steamer{suiteLabelLocal(suite) ? ` to ${suiteLabelLocal(suite)}` : ""}</p>
             <form
               className="mt-2.5 flex gap-2"
               onSubmit={(e) => { e.preventDefault(); void callRunner(); }}
@@ -1001,7 +1010,7 @@ export function FloorBoard({
                 {runnerBusy ? "…" : "Call Runner"}
               </button>
             </form>
-          </section>
+          </SideSection>
         </aside>
       </div>
 
