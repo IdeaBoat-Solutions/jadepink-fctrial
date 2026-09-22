@@ -16,10 +16,10 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-30 px-4 pt-4 sm:px-8 sm:pt-5">
       <div className="mx-auto max-w-6xl">
-        <div className="glass-panel-strong reveal flex items-center justify-between gap-4 rounded-full px-4 py-2.5 ring-1 ring-shadow backdrop-blur-lg sm:px-5">
+        <div className="glass-panel-strong reveal grid grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-full px-4 py-2.5 ring-1 ring-shadow backdrop-blur-lg sm:px-5">
           <a
             href="#top"
-            className="group flex shrink-0 items-center gap-2.5 rounded-full"
+            className="group flex shrink-0 items-center gap-2.5 justify-self-start rounded-full"
             aria-label="JadePink home"
           >
             <span className="grid size-7 place-items-center rounded-full bg-brand/10 transition-colors duration-200 group-hover:bg-brand/20">
@@ -31,7 +31,7 @@ export function Navbar() {
           </a>
 
           <nav
-            className="hidden items-center gap-6 text-[0.9375rem] leading-none text-ink/65 md:flex lg:gap-8"
+            className="hidden items-center justify-self-center gap-6 text-[0.9375rem] leading-none text-ink/65 md:flex lg:gap-8"
             aria-label="Main navigation"
           >
             {LINKS.map((link) => (
@@ -45,7 +45,7 @@ export function Navbar() {
             ))}
           </nav>
 
-          <div className="ml-auto flex shrink-0 items-center gap-4 sm:gap-5">
+          <div className="flex shrink-0 items-center justify-self-end gap-4 sm:gap-5">
             <Link
               href="/login"
               className="link-line hidden py-1 text-[0.9375rem] leading-none text-ink/65 transition-colors duration-200 hover:text-brand min-[400px]:inline"
