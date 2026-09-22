@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { Btn, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
+import { CreateCustomerCard } from "@/components/customers/create-customer-card";
 import { formatMobileIN, isValidMobileIN, normalizeMobile } from "@/lib/domain";
 import type { CustomerSnapshotLive } from "@/lib/api";
 
@@ -31,6 +32,8 @@ function CustomersInner() {
   const [searched, setSearched] = useState(false);
   const [err, setErr] = useState("");
   const [startingId, setStartingId] = useState<string | null>(null);
+  const [created, setCreated] = useState<CustomerSnapshotLive | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -39,9 +42,11 @@ function CustomersInner() {
     const t = window.setTimeout(async () => {
       const digits = normalizeMobile(query);
       if (query.length < 2 || (digits.length < 3 && query.length < 3)) {
-        setRemote(null); setMatches([]); setSearching(false); setSearched(false); return;
+        setRemote(null); setMatches([]); setCreated(null); setShowCreate(false); setSearching(false); setSearched(false); return;
       }
       setSearching(true);
+      setCreated(null);
+      setShowCreate(false);
       /* Mobile digits → the unique record. A name → every close match, so two
          people sharing one name are picked by mobile, never guessed. */
       if (digits.length >= 3) {
@@ -71,6 +76,13 @@ function CustomersInner() {
   const idle = !searched && q.trim().length < 3;
   const known = idle ? customers.slice(0, 8) : [];
   const hasResults = !!remote || matches.length > 0;
+
+  /* Same names are common — count them so the list can call out which rows
+     are ambiguous and lead with the mobile number instead. */
+  const nameCounts = new Map<string, number>();
+  for (const c of matches) nameCounts.set(c.name, (nameCounts.get(c.name) ?? 0) + 1);
+  const sharedNames = [...nameCounts.values()].filter((n) => n > 1).length;
+  const isShared = (name: string) => (nameCounts.get(name) ?? 0) > 1;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -105,11 +117,49 @@ function CustomersInner() {
       {err && <div className="mt-1"><ErrorNote title="Could not start the visit." body={err} /></div>}
 
       {searched && !searching && !hasResults && (
-        <EmptyNote
-          title="No customer matches that search."
-          body={isValidMobileIN(q) ? `${formatMobileIN(normalizeMobile(q))} is not on file. Start a walk-in and create them there.` : "Try the full mobile number, or a longer name."}
-          action={<Btn tone="brand" onClick={() => router.push("/today")}>New walk-in</Btn>}
-        />
+        <div className="mt-2">
+          <EmptyNote
+            title="No customer matches that search."
+            body={isValidMobileIN(q) ? `${formatMobileIN(normalizeMobile(q))} is not on file. Create the record — they can start a visit right away.` : "No name match. Create the record with the details you have."}
+          />
+          {/* Search stays clean: one button starts the record. The form only
+              appears once it is wanted, prefilled from what was searched, so a
+              walk-in becomes a record without cluttering the search screen. */}
+          {!showCreate ? (
+            <div className="mt-4">
+              <Btn tone="brand" onClick={() => setShowCreate(true)}>Create customer</Btn>
+            </div>
+          ) : (
+            <div className="mt-4">
+              <CreateCustomerCard
+                prefillName={isValidMobileIN(q) ? "" : q}
+                prefillMobile={isValidMobileIN(q) ? normalizeMobile(q) : ""}
+                autoFocus={isValidMobileIN(q)}
+                title="New customer"
+                body="Name, mobile and how they found the store — the record is usable the moment it saves."
+                onCreated={(c) => {
+                  setShowCreate(false);
+                  setCreated(c);
+                  pushToast("Customer created", `${c.name} · ${formatMobileIN(c.phone)}`);
+                }}
+                onCancel={() => setShowCreate(false)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {created && (
+        <article className="fp-rise mt-4 rounded-xl border border-[#bfe3cd] bg-[#f2faf5] p-5">
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#177245]">Record created</p>
+          <p className="fp-name mt-1.5 text-[26px] leading-none">{created.name}</p>
+          <p className="fp-num mt-1.5 text-[13.5px] text-[#43544c]">{formatMobileIN(created.phone)}</p>
+          <div className="mt-3">
+            <Btn tone="brand" disabled={startingId === created.id} onClick={() => void start(created)}>
+              {startingId === created.id ? "Opening…" : "Start their visit"}
+            </Btn>
+          </div>
+        </article>
       )}
 
       {remote && (
@@ -131,14 +181,22 @@ function CustomersInner() {
       {matches.length > 0 && (
         <section className="mt-1" aria-label="Matching customers">
           <p className="text-[13px] font-semibold text-[var(--fp-muted)]">
-            {matches.length} match{matches.length > 1 ? "es" : ""} — check the mobile before continuing.
+            {matches.length} match{matches.length > 1 ? "es" : ""}
+            {sharedNames > 0
+              ? ` — ${sharedNames} name${sharedNames > 1 ? "s are" : " is"} shared; the mobile number tells them apart.`
+              : " — check the mobile before continuing."}
           </p>
           <ul className="fp-rise mt-2">
             {matches.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-4">
                 <div className="min-w-0">
                   <p className="fp-name text-[20px] leading-none">{c.name}</p>
-                  <p className="fp-num mt-1.5 text-[13px] text-[var(--fp-muted)]">{formatMobileIN(c.phone)} · {c.visitCount} visits · {c.purchaseCount} purchases</p>
+                  <p className={`fp-num mt-1.5 text-[13px] ${isShared(c.name) ? "font-semibold text-[var(--fp-ink)]" : "text-[var(--fp-muted)]"}`}>
+                    {isShared(c.name) ? `${formatMobileIN(c.phone)} — pick by mobile` : `${formatMobileIN(c.phone)} · ${c.visitCount} visits · ${c.purchaseCount} purchases`}
+                  </p>
+                  {isShared(c.name) && (
+                    <p className="fp-num text-[12.5px] text-[var(--fp-muted)]">{c.visitCount} visits · {c.purchaseCount} purchases</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Link href={`/customers/${c.id}`} className="inline-flex min-h-11 items-center px-3 text-[14px] font-semibold text-[var(--fp-muted)] hover:text-[var(--fp-ink)]">History</Link>

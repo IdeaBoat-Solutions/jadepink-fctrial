@@ -23,7 +23,7 @@ export default async function CategoriesPage() {
           <CardContent className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
             <p className="text-[15px] font-semibold">No categories yet.</p>
             <p className="text-[13.5px] text-muted-foreground">
-              Categories are created from the Department column on the client&apos;s barcode export — run <code className="rounded bg-muted px-1.5 py-0.5 text-[12.5px]">npm run seed:sj</code>.
+              Categories appear here from the product catalogue — add a product with a category to file it.
             </p>
           </CardContent>
         </Card>
@@ -48,7 +48,6 @@ export default async function CategoriesPage() {
           </Card>
         ))}
       </div>
-      <p className="rounded-xl bg-muted/50 px-4 py-3 text-[13px] leading-relaxed text-muted-foreground">Tip: filtering lives on /inventory via the category select. This page is the taxonomy home for the API /api/categories.</p>
     </div>
   );
 }

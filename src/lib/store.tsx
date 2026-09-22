@@ -153,7 +153,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   /* ---------- Data loading ---------- */
 
   // Load today's visits + the FC list whenever the store changes. setState runs
-  // after the awaits — never synchronously in the effect body.
+  // after the awaits — never synchronously in the effect body. pushToast is
+  // stable (useCallback with []), so listing it is safe and silences the lint.
   useEffect(() => {
     const storeId = profile?.storeId;
     if (!storeId) return;
@@ -162,10 +163,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const [v, s] = await Promise.all([listActiveVisits(storeId), listSalespersons(storeId)]);
       if (cancelled) return;
       if (v.ok) setVisits(v.data);
-      if (s.ok) setSalespeople(s.data);
+      // Roster failure must be loud: an empty list here renders as "No
+      // salesperson is available" — the exact demo-killer for FC selection.
+      if (s.ok) {
+        setSalespeople(s.data);
+      } else {
+        console.error("[store] roster load failed:", s.code, s.message);
+        pushToast("FC list didn't load", s.message || "Reload the page — assignment needs the roster.");
+      }
     })();
     return () => { cancelled = true; };
-  }, [profile?.storeId]);
+  }, [profile?.storeId, pushToast]);
 
   /* ---------- Online state ---------- */
 
@@ -282,8 +290,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const assignOp = useCallback(async (visitId: string, spId: string) => {
     const prev = visits.find((v) => v.id === visitId);
-    // Optimistic: show the assignment immediately (§7)
-    setVisits((all) => all.map((v) => (v.id === visitId ? { ...v, assignedSalespersonId: spId, status: prev && v.status === "IDENTIFYING" ? "ASSIGNED" : v.status } : v)));
+    // Optimistic: show the assignment immediately (§7). Promote ARRIVED too —
+    // the server promotes both ARRIVED and IDENTIFYING to ASSIGNED.
+    setVisits((all) => all.map((v) => (v.id === visitId ? { ...v, assignedSalespersonId: spId, status: prev && (v.status === "IDENTIFYING" || v.status === "ARRIVED") ? "ASSIGNED" : v.status } : v)));
     const r = await assignFC(visitId, spId);
     if (!r.ok) {
       // Rollback

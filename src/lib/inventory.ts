@@ -6,7 +6,7 @@ import { z } from "zod";
 
 export type StockStatus = "in-stock" | "low-stock" | "out-of-stock";
 export type OrderStatus = "pending" | "confirmed" | "shipped" | "delivered" | "cancelled";
-export type MovementType = "IN" | "OUT" | "ADJUST";
+type MovementType = "IN" | "OUT" | "ADJUST";
 
 export interface Category {
   id: string;
@@ -139,8 +139,6 @@ export const orderSchema = z.object({
   channel: z.enum(["walk-in", "instagram", "website", "meta-lead"]).default("walk-in"),
 });
 
-export type OrderInput = z.infer<typeof orderSchema>;
-
 /* ---------- Sample catalogue DELETED (was: 8 fake products, 6 categories,
    4 invented suppliers, 3 fake orders, 3 fake stock movements) ----------
    Removed on request: it served no purpose and any of it reaching a screen would
@@ -152,14 +150,6 @@ export type OrderInput = z.infer<typeof orderSchema>;
 
 /* ---------- Dashboard aggregates (pure, testable) ---------- */
 
-export function dashboardKPIs(products: Product[], orders: Order[]) {
-  const revenue = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total, 0);
-  const units = products.reduce((s, p) => s + p.stock, 0);
-  const low = products.filter((p) => stockStatus(p) === "low-stock").length;
-  const out = products.filter((p) => stockStatus(p) === "out-of-stock").length;
-  return { revenue, units, low, out, orders: orders.length };
-}
-
 export function revenueByDay(orders: Order[]) {
   const map = new Map<string, number>();
   orders.forEach((o) => {
@@ -168,19 +158,3 @@ export function revenueByDay(orders: Order[]) {
   });
   return [...map.entries()].map(([day, revenue]) => ({ day, revenue }));
 }
-
-/* ---------- Intentionally empty (kept for import compatibility) ----------
-   These names are still imported by the (admin) pages and the API fallbacks, so
-   they remain as empty typed arrays rather than being deleted outright. There is
-   no fixture data behind them any more.
-
-   TODO: the (admin) dashboard / reports / orders / suppliers / inventory screens
-   import these directly and therefore render empty. They should read Supabase the
-   way /api/products already does (products, categories, suppliers, orders are all
-   populated there). Remove these exports once that wiring lands. */
-
-export const SEED_CATEGORIES: Category[] = [];
-export const SEED_SUPPLIERS: Supplier[] = [];
-export const SEED_PRODUCTS: Product[] = [];
-export const SEED_ORDERS: Order[] = [];
-export const SEED_MOVEMENTS: StockMovement[] = [];

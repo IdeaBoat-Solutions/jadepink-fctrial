@@ -56,6 +56,7 @@ interface RawVisitProduct {
   liked_at: string | null;
   dropped_at: string | null;
   drop_reason_id: string | null;
+  drop_subcategory: string | null;
   note: string | null;
   staff_note: string | null;
   bill_number: string | null;
@@ -110,6 +111,7 @@ export function mapVisitProduct(row: RawVisitProduct): VisitProductRow {
     liked_at: row.liked_at,
     dropped_at: row.dropped_at,
     drop_reason_id: row.drop_reason_id,
+    drop_subcategory: row.drop_subcategory ?? null,
     note: row.note,
     staff_note: row.staff_note ?? null,
     bill_number: row.bill_number ?? null,
@@ -316,6 +318,32 @@ export async function deleteVisitProduct(id: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.from("visit_products").delete().eq("id", id);
   if (error) throw error;
+}
+
+/* ---------- Sales ledger (orders / order_items) ----------
+   Billing closes the sale on visit_products, but the Orders page, Reports,
+   Dashboard revenue, Activity sales and the inventory "Purchased by" list all
+   read orders + order_items. The record_sale RPC (migration 210) writes that
+   ledger in one transaction and is idempotent: pieces already linked to an
+   order (visit_products.order_id) are skipped, so a retry after a partial
+   failure records only what is still missing. Returns null when there was
+   nothing left to record. */
+export async function recordSale(
+  visitId: string,
+  billNumber: string | null,
+  visitProductIds: string[],
+  actorId: string,
+): Promise<{ id: string; code: string } | null> {
+  if (visitProductIds.length === 0) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("record_sale", {
+    p_visit_id: visitId,
+    p_bill_number: billNumber,
+    p_visit_product_ids: visitProductIds,
+    p_actor: actorId,
+  });
+  if (error) throw new Error(`record_sale failed: ${error.message}`);
+  return (data as { id: string; code: string } | null) ?? null;
 }
 
 /* ---------- Drop reasons ---------- */

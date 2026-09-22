@@ -50,6 +50,8 @@ export interface ProductCardDTO {
     purchasedAt: string | null;
   };
   dropReason: { id: string; code: string; label: string } | null;
+  /** Curated refinement of the reason ("Tight on bust" under FIT). Null when none was picked. */
+  dropSubcategory: string | null;
   note: string | null;
   /** FC handling note for this piece. Null when none — UI hides the line. */
   staffNote: string | null;

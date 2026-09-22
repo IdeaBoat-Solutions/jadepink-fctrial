@@ -51,9 +51,9 @@ export function productStatusLabel(s: ProductVisitStatus): string {
     case "SELECTED":
       return "Selected";
     case "TRIAL_IN_PROGRESS":
-      return "Trial in progress";
     case "TRIAL_COMPLETED":
-      return "Trial completed";
+      // One merged display label for both trial states.
+      return "Trial";
     case "LIKED":
       return "Liked";
     case "DROPPED":

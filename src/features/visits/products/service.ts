@@ -25,6 +25,7 @@ import {
   listDropReasons,
   listVisitProducts,
   patchVisitProduct,
+  recordSale,
   resolveVariantByIdentifier,
   searchVariants,
   transitionVisitProduct,
@@ -118,6 +119,7 @@ export function toProductCard(vp: VisitProductRow): ProductCardDTO {
     dropReason: vp.drop_reason
       ? { id: vp.drop_reason.id, code: vp.drop_reason.code, label: vp.drop_reason.label }
       : null,
+    dropSubcategory: vp.drop_subcategory ?? null,
     note: vp.note,
     staffNote: vp.staff_note,
     billNumber: vp.bill_number ?? null,
@@ -379,9 +381,13 @@ export async function markProductPurchased(
         },
       });
     }
+    // Heal the ledger: pieces billed before migration 210 (or after a failed
+    // ledger write) still have order_id NULL — record_sale picks them up and
+    // is a no-op when the order already exists.
+    await recordSale(vp.visit_id, bill || vp.bill_number || null, [vp.id], auth.userId);
     return refreshCard(vp.id);
   }
-  return runTransition(
+  const card = await runTransition(
     auth,
     vp.visit_id,
     vp.id,
@@ -395,6 +401,11 @@ export async function markProductPurchased(
       bill_number: bill || null,
     },
   );
+  // Ledger write AFTER the state change (same ordering rule as events): if it
+  // throws, the sale is still recorded on visit_products and the next retry
+  // lands in the idempotent branch above, which records only the missing order.
+  await recordSale(vp.visit_id, bill || null, [card.id], auth.userId);
+  return card;
 }
 
 /** markProductsPurchased(): bill 2–3 liked pieces together on ONE bill,
@@ -410,11 +421,13 @@ export async function markProductsPurchased(
   const billed: ProductCardDTO[] = [];
   const failed: Array<{ visitProductId: string; code: string; message: string }> = [];
   const seen = new Set<string>();
+  let visitId: string | null = null;
   for (const id of visitProductIds) {
     if (seen.has(id)) continue;
     seen.add(id);
     try {
       const { vp, visit } = await loadVisitProduct(auth, id);
+      visitId = visit.id;
       assertVisitActive(visit);
       if (vp.status === "PURCHASED") {
         if (bill && !vp.bill_number) {
@@ -454,6 +467,12 @@ export async function markProductsPurchased(
       failed.push({ visitProductId: id, ...payload });
     }
   }
+  // One ledger order for this whole billing action. Already-PURCHASED rows
+  // are included on purpose: record_sale skips pieces whose order_id is set,
+  // so a retry after a partial failure records only the missing order.
+  if (visitId && billed.length > 0) {
+    await recordSale(visitId, bill || null, billed.map((c) => c.id), auth.userId);
+  }
   return { billed, failed, billNumber: bill || null };
 }
 
@@ -463,6 +482,7 @@ export async function dropProduct(
   visitProductId: string,
   dropReasonId: string,
   note: string | null = null,
+  subCategory: string | null = null,
 ) {
   if (!dropReasonId) {
     throw new Stage2Error(STAGE2_ERRORS.DROP_REASON_REQUIRED, "Choose a drop reason", 422);
@@ -485,13 +505,14 @@ export async function dropProduct(
     vp.id,
     vp.status,
     "DROPPED",
-    { dropped_at: nowIso(), drop_reason_id: dropReasonId, note },
+    { dropped_at: nowIso(), drop_reason_id: dropReasonId, drop_subcategory: subCategory || null, note },
     "PRODUCT_DROPPED",
     {
       product_variant_id: vp.product_variant_id,
       sku: vp.product?.sku ?? null,
       drop_reason_id: reason.id,
       drop_reason_code: reason.code,
+      drop_subcategory: subCategory || null,
       note,
     },
   );
@@ -503,6 +524,7 @@ export async function captureDropReason(
   visitProductId: string,
   dropReasonId: string,
   note: string | null = null,
+  subCategory: string | null = null,
 ) {
   const { vp, visit } = await loadVisitProduct(auth, visitProductId);
   assertStoreAccess(auth, visit.store_id);
@@ -513,7 +535,7 @@ export async function captureDropReason(
   if (!reason || !reason.is_active) {
     throw new Stage2Error(STAGE2_ERRORS.DROP_REASON_NOT_FOUND, "Drop reason not found", 404);
   }
-  await patchVisitProduct(vp.id, { drop_reason_id: dropReasonId, note });
+  await patchVisitProduct(vp.id, { drop_reason_id: dropReasonId, drop_subcategory: subCategory || null, note });
   await insertVisitEvent({
     visitId: vp.visit_id,
     eventType: "DROP_REASON_CAPTURED",
@@ -524,6 +546,7 @@ export async function captureDropReason(
       product_variant_id: vp.product_variant_id,
       drop_reason_id: reason.id,
       drop_reason_code: reason.code,
+      drop_subcategory: subCategory || null,
       note,
     },
   });

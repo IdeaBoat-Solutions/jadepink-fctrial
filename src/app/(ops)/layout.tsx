@@ -6,12 +6,15 @@ import { useStore } from "@/lib/store";
 import { FloorShell } from "@/components/floor/shell";
 
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useStore();
+  const { user, loadingSession } = useStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!user) router.replace("/login");
-  }, [user, router]);
+    /* Only redirect once the session check has actually finished — a hard
+       reload lands here with `user` still null while getMe() is in flight,
+       and redirecting then would kick the FC off the visit they opened. */
+    if (!loadingSession && !user) router.replace("/login");
+  }, [loadingSession, user, router]);
 
   if (!user) {
     return (

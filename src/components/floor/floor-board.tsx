@@ -6,9 +6,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Btn, Drawer, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
+import { DropReasonModal, type DropModalState } from "@/components/floor/drop-reason-modal";
 import { useStore } from "@/lib/store";
 import { searchTokens } from "@/lib/fuzzy";
-import { requestRunner, setVisitSuite } from "@/lib/api";
+import { requestRunner, setVisitSuite, lookupBarcode } from "@/lib/api";
 import type { ProductCardDTO, VisitWithProductsDTO } from "@/features/visits/products/dto";
 import { useVisitProductsRealtime } from "@/features/visits/products/use-visit-products-realtime";
 import type { ProductVisitStatus } from "@/features/visits/products/types";
@@ -80,7 +81,7 @@ function friendly(code: string, message: string): { title: string; body: string 
     case "BILL_NUMBER_REQUIRED":
       return { title: "Bill number required.", body: "Enter the bill number to close the sale against this piece." };
     case "VISIT_HAS_UNBILLED_ITEMS":
-      return { title: "Unbilled items remain.", body: message || "Mark each liked or trialled piece billed — or drop it with a reason — before closing." };
+      return { title: "Unbilled items remain.", body: message || "Mark each liked or in-trial piece billed — or drop it with a reason — before closing." };
     case "INVALID_PRODUCT_STATE":
       return { title: "That step isn't available.", body: message || "The product moved to a different state. The board just refreshed." };
     case "VISIT_NOT_ACTIVE":
@@ -129,8 +130,9 @@ function statusKey(status: ProductVisitStatus): string {
 }
 
 function statusLabel(status: ProductVisitStatus): string {
-  if (status === "TRIAL_IN_PROGRESS") return "Trial in progress";
-  if (status === "TRIAL_COMPLETED") return "Trial completed";
+  /* UI shows one merged "Trial" label — TRIAL_IN_PROGRESS and TRIAL_COMPLETED
+     both display as "Trial" (state machine keeps them distinct internally). */
+  if (status === "TRIAL_IN_PROGRESS" || status === "TRIAL_COMPLETED") return "Trial";
   if (status === "LIKED") return "Liked";
   if (status === "DROPPED") return "Dropped";
   if (status === "PURCHASED") return "Purchased";
@@ -193,15 +195,18 @@ export function FloorBoard({
   const [runnerNote, setRunnerNote] = useState("");
   const [runnerBusy, setRunnerBusy] = useState(false);
   const [suiteBusy, setSuiteBusy] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
+  /* Camera lifecycle: permission is requested ONLY on an explicit "Start
+     camera" tap — never as a side effect of opening the scanner panel.
+     "denied" / "unsupported" render their own recovery UI instead of a
+     dead video frame. */
+  const [camState, setCamState] = useState<"off" | "starting" | "live" | "denied" | "unsupported">("off");
   const [searchOpen, setSearchOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [endingVisit, setEndingVisit] = useState(false);
   const [detail, setDetail] = useState<ProductCardDTO | null>(null);
-  const [dropFor, setDropFor] = useState<ProductCardDTO | null>(null);
-  const [dropReasonId, setDropReasonId] = useState("");
-  const [dropNote, setDropNote] = useState("");
+  const [dropModal, setDropModal] = useState<DropModalState | null>(null);
+  const [dropBusy, setDropBusy] = useState(false);
   /* Combined bill (Amazon-cart style): liked pieces ticked on the board share
      ONE bill drawer and ONE optional bill number. */
   const [billIds, setBillIds] = useState<string[]>([]);
@@ -242,6 +247,7 @@ export function FloorBoard({
   const stopCamera = useCallback(() => {
     camStop.current?.();
     camStop.current = null;
+    setCamState("off");
   }, []);
 
   useEffect(() => () => stopCamera(), [stopCamera]);
@@ -283,13 +289,33 @@ export function FloorBoard({
     } catch (e) {
       const apiCode = e instanceof ApiError ? e.code : "INTERNAL";
       if (apiCode === "PRODUCT_NOT_FOUND" && code.length >= 2) {
+        // Product-level exact match first (GET /api/barcode): SJ exports carry
+        // company_barcode / parent SKU on the product row, which the variant
+        // resolver never sees — a hit re-runs the search by that product's
+        // name so its variants surface instead of dead-ending on "not found".
+        try {
+          const exact = await lookupBarcode(code);
+          if (exact.ok && exact.data.length > 0) {
+            const hit = exact.data[0];
+            const query = hit.name || hit.sku;
+            const found = await callApi(visitId, "search", { query });
+            if (found.results.length > 0) {
+              setSearchResults(found.results);
+              setSearchQuery(query);
+              setActiveIdx(0);
+              setSearchOpen(true);
+              stopCamera();
+              pushToast("Matched by barcode", hit.name);
+              return;
+            }
+          }
+        } catch { /* fall through to the typed search */ }
         try {
           const found = (await callApi(visitId, "search", { query: code })) as { results: SearchCandidate[] };
           if (found.results.length > 0) {
             setSearchResults(found.results);
             setSearchQuery(code);
             setSearchOpen(true);
-            setScanOpen(false);
             stopCamera();
             return;
           }
@@ -301,53 +327,74 @@ export function FloorBoard({
     }
   }, [pushToast, stopCamera, visitId]);
 
+  /* Opening the panel must NEVER trigger the permission prompt — it only
+     reveals the viewport and focuses the manual field (handheld USB/Bluetooth
+     scanners type straight into it, no camera needed). */
   const openScan = () => {
     setScanResult(null);
     setIdentifier("");
     setErr(null);
-    setScanOpen(true);
     window.setTimeout(() => scanRef.current?.focus(), 40);
-    void (async () => {
-      const Detector = (window as unknown as { BarcodeDetector?: new (o?: { formats?: string[] }) => { detect: (src: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
-      if (!Detector || !navigator.mediaDevices?.getUserMedia) return;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        const video = videoRef.current;
-        if (!video) { stream.getTracks().forEach((t) => t.stop()); return; }
-        video.srcObject = stream;
-        await video.play();
-        const detector = new Detector({ formats: ["ean_13", "ean_8", "code_128", "qr_code", "upc_a", "upc_e"] });
-        let stopped = false;
-        camStop.current = () => {
-          stopped = true;
-          stream.getTracks().forEach((t) => t.stop());
-        };
-        const tick = async () => {
-          if (stopped) return;
-          try {
-            const codes = await detector.detect(video);
-            const raw = codes[0]?.rawValue;
-            if (raw) {
-              stopped = true;
-              stream.getTracks().forEach((t) => t.stop());
-              setIdentifier(raw);
-              void lookup(raw);
-              return;
-            }
-          } catch { /* keep listening */ }
-          requestAnimationFrame(() => void tick());
-        };
-        void tick();
-      } catch {
-        /* camera denied — handheld / manual entry still works */
+  };
+
+  /* Camera starts only from the explicit "Start camera" tap, so the browser
+     prompt arrives with context. Every failure mode gets a human state:
+     denied → how to re-enable; insecure context / no BarcodeDetector →
+     manual entry is the fallback, never a silently dead frame. */
+  const startCamera = async () => {
+    const Detector = (window as unknown as { BarcodeDetector?: new (o?: { formats?: string[] }) => { detect: (src: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+    if (!Detector || !navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
+      setCamState("unsupported");
+      return;
+    }
+    setCamState("starting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      const video = videoRef.current;
+      if (!video) { stream.getTracks().forEach((t) => t.stop()); setCamState("off"); return; }
+      video.srcObject = stream;
+      await video.play();
+      const detector = new Detector({ formats: ["ean_13", "ean_8", "code_128", "qr_code", "upc_a", "upc_e"] });
+      let stopped = false;
+      camStop.current = () => {
+        stopped = true;
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      const tick = async () => {
+        if (stopped) return;
+        try {
+          const codes = await detector.detect(video);
+          const raw = codes[0]?.rawValue;
+          if (raw) {
+            stopped = true;
+            stream.getTracks().forEach((t) => t.stop());
+            camStop.current = null;
+            setCamState("off"); // tracks are gone — don't claim "live"
+            setIdentifier(raw);
+            void lookup(raw);
+            return;
+          }
+        } catch { /* keep listening */ }
+        requestAnimationFrame(() => void tick());
+      };
+      void tick();
+      setCamState("live");
+    } catch (e) {
+      const name = e instanceof DOMException ? e.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") {
+        setCamState("denied");
+      } else {
+        /* NotReadableError (camera in use), NotFoundError (no camera) —
+           manual entry / handheld scanner still works. */
+        setCamState("unsupported");
       }
-    })();
+    }
   };
 
   const closeScan = () => {
     stopCamera();
     setTorchOn(false);
-    setScanOpen(false);
+    setErr(null);
   };
 
   /* Workspace header buttons (Scan product / Add SKU / summary) trigger the
@@ -365,7 +412,6 @@ export function FloorBoard({
       else setSummaryOpen(true);
     }, 0);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- openScan read fresh on purpose; seq guard prevents repeats
   }, [externalAction]);
 
   const toggleTorch = useCallback(async () => {
@@ -462,15 +508,52 @@ export function FloorBoard({
     if (c && !c.alreadyAdded) addVariant(c.id, c.product.name);
   };
 
-  const confirmDrop = () => {
-    if (!dropFor || !dropReasonId || state.status !== "ready") return;
-    const card = dropFor;
-    const reason = state.data.dropReasons.find((r) => r.id === dropReasonId)?.label ?? "";
-    void run(`drop-${card.id}`, async () => {
-      await callApi(visitId, "drop", { visitProductId: card.id, dropReasonId, note: dropNote || undefined });
-      setDropFor(null);
-      setDetail(null);
-    }, { title: "Dropped", body: reason ? `${card.product.name} — ${reason}` : card.product.name });
+  /* Opens the drop modal for `card`. Trialled/liked pieces get chained into a
+     review queue (screenshot's "Item X of Y") so the FC can churn through a
+     whole wardrobe in one pass; a quick drop straight from SELECTED (never
+     tried on) stays a single-item flow. */
+  const openDrop = useCallback((card: ProductCardDTO) => {
+    const source = state.status === "ready" ? state.data.products : [];
+    const pool = card.status === "SELECTED"
+      ? [card]
+      : source.filter((p) => p.status === "TRIAL_IN_PROGRESS" || p.status === "TRIAL_COMPLETED" || p.status === "LIKED");
+    const queue = pool.some((p) => p.id === card.id) ? pool : [card];
+    const index = Math.max(0, queue.findIndex((p) => p.id === card.id));
+    setDropModal({ card, queue, index });
+  }, [state]);
+
+  const advanceOrClose = () => {
+    setDropModal((cur) => {
+      if (!cur) return null;
+      const { queue, index } = cur;
+      return index < queue.length - 1 ? { card: queue[index + 1], queue, index: index + 1 } : null;
+    });
+  };
+
+  const saveDrop = ({ reasonId, subCategory, note }: { reasonId: string; subCategory: string | null; note: string }) => {
+    if (!dropModal || state.status !== "ready" || dropBusy) return;
+    const card = dropModal.card;
+    const reasonLabel = state.data.dropReasons.find((r) => r.id === reasonId)?.label ?? "";
+    setDropBusy(true);
+    setErr(null);
+    void (async () => {
+      try {
+        await callApi(visitId, "drop", {
+          visitProductId: card.id,
+          dropReasonId: reasonId,
+          subCategory: subCategory || undefined,
+          note: note || undefined,
+        });
+        await refresh();
+        pushToast("Dropped", reasonLabel ? `${card.product.name} — ${reasonLabel}` : card.product.name);
+        setDetail(null);
+        advanceOrClose();
+      } catch (e) {
+        setErr(friendly(e instanceof ApiError ? e.code : "INTERNAL", e instanceof Error ? e.message : ""));
+      } finally {
+        setDropBusy(false);
+      }
+    })();
   };
 
   const openBill = (card: ProductCardDTO) => {
@@ -655,7 +738,7 @@ export function FloorBoard({
           pct={products.length ? Math.round(((summary?.selected ?? 0) / products.length) * 100) : 0}
         />
         <StatCard
-          label="Trialled"
+          label="Trials"
           value={(summary?.trialInProgress ?? 0) + (summary?.trialCompleted ?? 0)}
           sub={`${decidedPct}% evaluated`}
           pct={trialledTotal ? Math.round((decided / trialledTotal) * 100) : 0}
@@ -688,7 +771,7 @@ export function FloorBoard({
           {([
             ["ALL", "All", counts.all, false],
             ["SELECTED", "Selected", counts.selected, false],
-            ["TRIAL", "Trial in progress", counts.trial, true],
+            ["TRIAL", "Trials", counts.trial, true],
             ["LIKED", "Liked", counts.liked, false],
             ["DROPPED", "Dropped", counts.dropped, false],
             ["BILLED", "Billed", counts.billed, false],
@@ -820,7 +903,7 @@ export function FloorBoard({
                   onUnlike={() => void run(`unlike-${card.id}`, () => callApi(visitId, "unlike", { visitProductId: card.id }), { title: "Like removed", body: `${card.product.name} is back where it was.` })}
                   onReopen={() => void run(`reopen-${card.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: card.id }), { title: "Trial reopened", body: card.product.name })}
                   onCancelTrial={() => void run(`canceltrial-${card.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: card.id }), { title: "Trial cancelled", body: `${card.product.name} is back on selected.` })}
-                  onDrop={() => { setDropReasonId(""); setDropNote(""); setDropFor(card); }}
+                  onDrop={() => { openDrop(card); }}
                   onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
                   selectable={!readOnly && card.status === "LIKED"}
@@ -840,9 +923,9 @@ export function FloorBoard({
             {billTotal > 0 && <span className="fp-num font-semibold"> · {formatINR(billTotal)}</span>}
           </p>
           <span className="flex gap-2 sm:ml-auto">
-            <Btn tone="brand" disabled={busy === "bill-many"} onClick={() => { setBillNumber(""); setBillOpen(true); }}>
+            <ConsoleBtn disabled={busy === "bill-many"} onClick={() => { setBillNumber(""); setBillOpen(true); }}>
               Bill together
-            </Btn>
+            </ConsoleBtn>
             <Btn tone="quiet" onClick={() => setBillIds([])}>Clear</Btn>
           </span>
         </div>
@@ -870,7 +953,7 @@ export function FloorBoard({
                 <span aria-hidden className="size-2 rounded-full bg-[var(--fp-brand)]" /> Live Tag Scanner
               </p>
             }
-            meta={<span className="text-[11px] font-semibold text-[#7a736a]">{scanOpen ? "Camera live" : "Manual entry"}</span>}
+            meta={<span className="text-[11px] font-semibold text-[#7a736a]">{camState === "live" ? "Camera live" : camState === "denied" ? "Camera blocked" : "Manual entry"}</span>}
           >
             <div className="relative overflow-hidden rounded-lg bg-[#23403a]">
               <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full object-cover opacity-90" />
@@ -878,12 +961,50 @@ export function FloorBoard({
                 <div className="h-[55%] w-[72%] rounded border-2 border-dashed border-white/60" />
               </div>
               <div aria-hidden className="pointer-events-none absolute left-[14%] right-[14%] top-1/2 h-[2px] -translate-y-1/2 bg-[#e5485a]/90" />
-              {!scanOpen && (
-                <button type="button" onClick={openScan} className="absolute inset-0 grid place-items-center bg-[#23403a]/55 text-[13.5px] font-bold text-white transition-colors hover:bg-[#23403a]/40">
+              {camState === "off" && (
+                <button
+                  type="button"
+                  onClick={() => { openScan(); void startCamera(); }}
+                  className="absolute inset-0 grid place-items-center bg-[#23403a]/55 text-[13.5px] font-bold text-white transition-colors hover:bg-[#23403a]/40"
+                >
                   Start camera
                 </button>
               )}
-              {scanOpen && (
+              {camState === "starting" && (
+                <p role="status" className="absolute inset-0 grid place-items-center bg-[#23403a]/70 text-[13.5px] font-bold text-white">
+                  Starting camera…
+                </p>
+              )}
+              {camState === "denied" && (
+                <div className="absolute inset-0 grid place-items-center bg-[#23403a]/85 p-4 text-center">
+                  <div className="text-white">
+                    <p className="text-[13.5px] font-bold">Camera access blocked</p>
+                    <p className="mt-1 text-[12.5px] text-white/80">
+                      Allow the camera for this site in your browser&apos;s address-bar settings, then tap Retry.
+                      Manual entry and a handheld scanner work without it.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void startCamera()}
+                      className="mt-3 inline-flex min-h-[36px] items-center rounded-full bg-white px-4 text-[12.5px] font-bold text-[#23403a]"
+                    >
+                      Retry camera
+                    </button>
+                  </div>
+                </div>
+              )}
+              {camState === "unsupported" && (
+                <div className="absolute inset-0 grid place-items-center bg-[#23403a]/85 p-4 text-center">
+                  <div className="text-white">
+                    <p className="text-[13.5px] font-bold">Camera unavailable</p>
+                    <p className="mt-1 text-[12.5px] text-white/80">
+                      No camera on this device, or the site is not on HTTPS. Type the barcode below, or use a
+                      handheld scanner — it types into the field like a keyboard.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {camState === "live" && (
                 <div className="absolute right-2 top-2 flex gap-1.5">
                   <button
                     type="button"
@@ -905,7 +1026,11 @@ export function FloorBoard({
                 </div>
               )}
             </div>
-            <p className="mt-2.5 text-center text-[12.5px] text-[#7a736a]">Align tag barcode within reticle</p>
+            <p className="mt-2.5 text-center text-[12.5px] text-[#7a736a]">
+              {camState === "live"
+                ? "Align tag barcode within reticle"
+                : "Type the barcode, or tap Start camera — a handheld scanner types here too."}
+            </p>
             {scanning && <p role="status" className="mt-2 text-center text-[13px] font-semibold text-[#57534e]">Looking up…</p>}
           </SideSection>
 
@@ -1032,7 +1157,11 @@ export function FloorBoard({
             )}
           </div>
           {detail.status === "DROPPED" && detail.dropReason && (
-            <p className="mt-3 text-[14px]">Reason: <span className="font-semibold">{detail.dropReason.label}</span>{detail.note ? ` — ${detail.note}` : ""}</p>
+            <p className="mt-3 text-[14px]">
+              Reason: <span className="font-semibold">{detail.dropReason.label}</span>
+              {detail.dropSubcategory ? <span className="font-semibold"> — {detail.dropSubcategory}</span> : null}
+              {detail.note ? ` · ${detail.note}` : ""}
+            </p>
           )}
           {!readOnly && (
           <NoteEditor
@@ -1058,92 +1187,51 @@ export function FloorBoard({
           <div className="mt-5 flex flex-wrap gap-2">
             {detail.status === "SELECTED" && (
               <>
-                <Btn tone="brand" disabled={!!busy} onClick={() => void run(`start-${detail.id}`, () => callApi(visitId, "start-trial", { visitProductId: detail.id }), { title: "Trial started", body: detail.product.name })}>Start trial</Btn>
-                <Btn tone="ok" disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</Btn>
-                <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
-                <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`start-${detail.id}`, () => callApi(visitId, "start-trial", { visitProductId: detail.id }), { title: "Trial started", body: detail.product.name })}>Start trial</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
               </>
             )}
             {detail.status === "TRIAL_IN_PROGRESS" && (
               <>
-                <Btn tone="brand" disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Complete trial</Btn>
-                <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
-                <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
-                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`canceltrial-${detail.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: detail.id }), { title: "Trial cancelled", body: `${detail.product.name} is back on selected.` })}>Cancel trial</Btn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Complete trial</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`canceltrial-${detail.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: detail.id }), { title: "Trial cancelled", body: `${detail.product.name} is back on selected.` })}>Cancel trial</ConsoleBtn>
               </>
             )}
             {detail.status === "TRIAL_COMPLETED" && (
               <>
-                <Btn tone="ok" disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</Btn>
-                <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
-                <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
-                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Reopen</Btn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Reopen</ConsoleBtn>
               </>
             )}
             {detail.status === "LIKED" && (
               <>
-                <Btn tone="brand" disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</Btn>
-                <Btn tone="drop" onClick={() => { setDropReasonId(""); setDropNote(""); setDropFor(detail); }}>Drop</Btn>
-                <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>Unlike</Btn>
+                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>Unlike</ConsoleBtn>
               </>
             )}
             {detail.status === "DROPPED" && (
-              <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</Btn>
+              <ConsoleBtn disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</ConsoleBtn>
             )}
           </div>)}
         </Drawer>
       )}
 
-      {dropFor && (
-        <Drawer
-          kicker={`${dropFor.product.name} · ${dropFor.product.sku}`}
-          title="Why didn’t the customer take it?"
-          onClose={() => setDropFor(null)}
-          footer={
-            <Btn tone="brand" className="w-full" disabled={!dropReasonId || (state.data.dropReasons.find((r) => r.id === dropReasonId)?.code === "OTHER" && !dropNote.trim()) || busy === `drop-${dropFor.id}`} onClick={confirmDrop}>
-              {busy === `drop-${dropFor.id}` ? "Saving…" : "Save drop reason"}
-            </Btn>
-          }
-        >
-          <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
-            Required on anything liked or trialled but not billed: size, colour, price, design, material, other.
-            This is the field the vendor reports are built on.
-          </p>
-          <label className="block text-[13px] font-semibold" htmlFor="drop-reason">Reason</label>
-          <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
-            <select
-              id="drop-reason"
-              value={dropReasonId}
-              onChange={(e) => setDropReasonId(e.target.value)}
-              className="min-h-12 flex-1 rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 text-[14.5px] text-[var(--fp-ink)]"
-            >
-              <option value="">Choose a reason…</option>
-              {state.data.dropReasons.map((r) => (
-                <option key={r.id} value={r.id}>{r.label}</option>
-              ))}
-            </select>
-            {state.data.dropReasons.find((r) => r.id === dropReasonId)?.code === "OTHER" && (
-              <input
-                id="drop-note"
-                value={dropNote}
-                onChange={(e) => setDropNote(e.target.value)}
-                placeholder="Type the reason…"
-                aria-label="Type the reason"
-                maxLength={500}
-                autoFocus
-                className="min-h-12 flex-1 rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 text-[14.5px] text-[var(--fp-ink)] placeholder:text-[var(--fp-faint)]"
-              />
-            )}
-          </div>
-          {state.data.dropReasons.find((r) => r.id === dropReasonId)?.code === "OTHER" ? (
-            <p className="mt-1.5 text-[12.5px] text-[var(--fp-muted)]">Tell us in your words — it goes to the vendor report.</p>
-          ) : (
-            <>
-              <label className="mt-4 block text-[13px] font-semibold" htmlFor="drop-note">Add note</label>
-              <textarea id="drop-note" value={dropNote} onChange={(e) => setDropNote(e.target.value)} rows={2} maxLength={500} placeholder="Optional" className="mt-1.5 w-full rounded-lg border border-[var(--fp-line-strong)] px-3 py-2 text-[14.5px]" />
-            </>
-          )}
-        </Drawer>
+      {dropModal && state.status === "ready" && (
+        <DropReasonModal
+          state={dropModal}
+          reasons={state.data.dropReasons}
+          saving={dropBusy}
+          onClose={() => setDropModal(null)}
+          onSkip={advanceOrClose}
+          onSave={saveDrop}
+        />
       )}
 
       {summaryOpen && summary && (
@@ -1165,7 +1253,7 @@ export function FloorBoard({
           </div>)}>
           <dl className="grid grid-cols-2 gap-y-4">
             <Sum k="Selected" v={summary.selected} />
-            <Sum k="Trialled" v={summary.trialInProgress + summary.trialCompleted} />
+            <Sum k="Trials" v={summary.trialInProgress + summary.trialCompleted} />
             <Sum k="Liked" v={summary.liked + summary.purchased} />
             <Sum k="Dropped" v={summary.dropped} />
             <Sum k="Billed" v={summary.purchased} />
@@ -1176,7 +1264,7 @@ export function FloorBoard({
                 Still to close · {outstanding.length}
               </p>
               <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
-                Billing needs every liked or trialled piece resolved — mark it billed, or drop it with a reason.
+                Billing needs every liked or in-trial piece resolved — mark it billed, or drop it with a reason.
               </p>
               <ul className="mt-2">
                 {outstanding.map((p) => (
@@ -1229,9 +1317,9 @@ export function FloorBoard({
                   maxLength={50}
                   className="min-h-11 flex-1 rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 text-[15px]"
                 />
-                <Btn type="submit" tone="brand" disabled={billItems.length === 0 || busy === "bill-many"}>
+                <ConsoleBtn type="submit" disabled={billItems.length === 0 || busy === "bill-many"}>
                   {busy === "bill-many" ? "Saving…" : billItems.length > 1 ? `Bill ${billItems.length} items` : "Mark billed"}
-                </Btn>
+                </ConsoleBtn>
               </div>
               <p className="text-[12.5px] text-[var(--fp-muted)]">Bill number is attached and the sale is closed against the piece. Leave blank only for a cash sale with no bill yet.</p>
             </form>
@@ -1440,17 +1528,11 @@ const EDGE: Record<ProductVisitStatus, string> = {
 };
 
 function StatePill({ status }: { status: ProductVisitStatus }) {
-  if (status === "TRIAL_IN_PROGRESS") {
+  if (status === "TRIAL_IN_PROGRESS" || status === "TRIAL_COMPLETED") {
+    const active = status === "TRIAL_IN_PROGRESS";
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--fp-brand-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--fp-brand)]">
-        <span aria-hidden className="size-1.5 rounded-full bg-[var(--fp-brand)]" /> Trial in progress
-      </span>
-    );
-  }
-  if (status === "TRIAL_COMPLETED") {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eef2ee] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#43544c]">
-        Trial completed — Decision Pending
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${active ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)]" : "bg-[#eef2ee] text-[#43544c]"}`}>
+        {active && <span aria-hidden className="size-1.5 rounded-full bg-[var(--fp-brand)]" />} Trial
       </span>
     );
   }
@@ -1482,21 +1564,16 @@ function StatePill({ status }: { status: ProductVisitStatus }) {
   );
 }
 
-function ConsoleBtn({ children, onClick, disabled, tone }: { children: ReactNode; onClick?: () => void; disabled?: boolean; tone: "dark" | "green" | "rose" | "ghost" }) {
-  const cls =
-    tone === "dark"
-      ? "bg-[#23403a] text-white hover:bg-[#1a312c]"
-      : tone === "green"
-        ? "bg-[#1c6b46] text-white hover:bg-[#155739]"
-        : tone === "rose"
-          ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)] hover:bg-[#f3ddd7]"
-          : "bg-[#f1ece4] text-[#211d18] hover:bg-[#e7dfd3]";
+/* One uniform action style for every product action (Trial, Like, Drop, Bill,
+   Complete, Cancel, Undo …) — same color for all of them, per the floor spec.
+   No per-action colors: the busy state is enough of a signal. */
+function ConsoleBtn({ children, onClick, disabled, type = "button" }: { children: ReactNode; onClick?: () => void; disabled?: boolean; type?: "button" | "submit" }) {
   return (
     <button
-      type="button"
+      type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-4 text-[13.5px] font-bold transition-all active:scale-[0.98] disabled:opacity-60 ${cls}`}
+      className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[#23403a] px-4 text-[13.5px] font-bold text-white transition-all hover:bg-[#1a312c] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
     >
       {children}
     </button>
@@ -1559,7 +1636,8 @@ function ProductRow({
           )}
           {dropped && (
             <p className="mt-2 rounded-lg bg-[#faf7f2] px-2.5 py-1.5 text-[12.5px] text-[#57534e]">
-              <strong className="font-semibold">Client Feedback:</strong> {card.note || card.dropReason?.label || "No reason recorded"}
+              <strong className="font-semibold">Client Feedback:</strong>{" "}
+              {[card.dropReason?.label, card.dropSubcategory, card.note].filter(Boolean).join(" — ") || "No reason recorded"}
             </p>
           )}
           {card.status === "PURCHASED" && (
@@ -1593,54 +1671,54 @@ function ProductRow({
         )}
         {card.status === "SELECTED" && (
           <>
-            <ConsoleBtn tone="dark" disabled={busy === `start-${card.id}`} onClick={onStart}>
+            <ConsoleBtn disabled={busy === `start-${card.id}`} onClick={onStart}>
               {busy === `start-${card.id}` ? "Starting…" : "Trial"}
             </ConsoleBtn>
-            <ConsoleBtn tone="dark" disabled={busy === `like-${card.id}`} onClick={onLike}>
+            <ConsoleBtn disabled={busy === `like-${card.id}`} onClick={onLike}>
               {busy === `like-${card.id}` ? "Saving…" : "Like"}
             </ConsoleBtn>
-            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_IN_PROGRESS" && (
           <>
             <p className="mr-auto inline-flex items-center gap-1.5 text-[13px] text-[#57534e]">Client is currently trying this on</p>
-            <ConsoleBtn tone="dark" disabled={busy === `complete-${card.id}`} onClick={onComplete}>
+            <ConsoleBtn disabled={busy === `complete-${card.id}`} onClick={onComplete}>
               {busy === `complete-${card.id}` ? "Saving…" : "Complete Trial"}
             </ConsoleBtn>
-            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
-            <ConsoleBtn tone="ghost" disabled={busy === `canceltrial-${card.id}`} onClick={onCancelTrial}>
+            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn disabled={busy === `canceltrial-${card.id}`} onClick={onCancelTrial}>
               {busy === `canceltrial-${card.id}` ? "Saving…" : "Cancel trial"}
             </ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_COMPLETED" && (
           <>
-            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" disabled={busy === `like-${card.id}`} onClick={onLike}>
+            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn disabled={busy === `like-${card.id}`} onClick={onLike}>
               {busy === `like-${card.id}` ? "Saving…" : "Like"}
             </ConsoleBtn>
-            <ConsoleBtn tone="dark" onClick={onBill}>Bill</ConsoleBtn>
-            <ConsoleBtn tone="ghost" disabled={busy === `reopen-${card.id}`} onClick={onReopen}>
+            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn disabled={busy === `reopen-${card.id}`} onClick={onReopen}>
               {busy === `reopen-${card.id}` ? "Saving…" : "Reopen"}
             </ConsoleBtn>
           </>
         )}
         {card.status === "LIKED" && (
           <>
-            <ConsoleBtn tone="rose" onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn tone="dark" disabled={busy === `bill-${card.id}`} onClick={onBill}>
+            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
+            <ConsoleBtn disabled={busy === `bill-${card.id}`} onClick={onBill}>
               {busy === `bill-${card.id}` ? "Saving…" : "Mark billed"}
             </ConsoleBtn>
-            <ConsoleBtn tone="ghost" disabled={busy === `unlike-${card.id}`} onClick={onUnlike}>
+            <ConsoleBtn disabled={busy === `unlike-${card.id}`} onClick={onUnlike}>
               {busy === `unlike-${card.id}` ? "Saving…" : "Unlike"}
             </ConsoleBtn>
           </>
         )}
         {card.status === "DROPPED" && (
-          <ConsoleBtn tone="ghost" disabled={busy === `undrop-${card.id}`} onClick={onUndrop}>
+          <ConsoleBtn disabled={busy === `undrop-${card.id}`} onClick={onUndrop}>
             {busy === `undrop-${card.id}` ? "Saving…" : "Undo drop"}
           </ConsoleBtn>
         )}

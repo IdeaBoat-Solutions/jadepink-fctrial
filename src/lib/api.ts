@@ -3,7 +3,7 @@
    UI can map codes to human copy (§21) instead of catching JSON shape errors. */
 
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
-import type { Category, Order, Product, Supplier } from "@/lib/inventory";
+import type { Category, Order, Product, StockMovement, Supplier } from "@/lib/inventory";
 
 
 export interface VisitLive {
@@ -273,8 +273,58 @@ export const listProducts = (f: { q?: string; category?: string; stock?: string;
 export const listCategories = () => callBody<{ data: Category[] }>("/api/categories");
 export const listSuppliers = () => callBody<{ data: Supplier[] }>("/api/suppliers");
 
-export const listOrdersPage = (page = 1, pageSize = DEFAULT_PAGE_SIZE) =>
-  callBody<Paged<Order>>(`/api/orders?page=${page}&pageSize=${pageSize}`);
+export const listOrdersPage = (page = 1, pageSize = DEFAULT_PAGE_SIZE, status?: string) => {
+  const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (status && status !== "all") p.set("status", status);
+  return callBody<Paged<Order>>(`/api/orders?${p.toString()}`);
+};
+
+/** Manual / remote order (instagram, website, meta-lead). The server recomputes
+    the total from its own prices — the client total is a preview only. */
+export const createOrder = (input: {
+  customerName: string;
+  customerPhone: string;
+  channel?: Order["channel"];
+  items: Array<{ productId: string; qty: number }>;
+}) => call<Order>("/api/orders", { method: "POST", body: JSON.stringify(input) });
+
+/* Exact product lookup for a scanned code. Answers barcode / company_barcode /
+   SKU against `products` — SJ exports carry company_barcode on the product row,
+   not on a variant, so an exact variant scan can miss a code this finds. */
+export interface BarcodeProduct {
+  id: string;
+  sku: string;
+  name: string;
+  barcode?: string | null;
+  company_barcode?: string | null;
+}
+
+export const lookupBarcode = (code: string) =>
+  call<BarcodeProduct[]>(`/api/barcode?code=${encodeURIComponent(code)}`);
+
+/** One product + its stock ledger in a single round trip. */
+export interface ProductDetailLive {
+  product: Product;
+  movements: StockMovement[];
+}
+
+export const getProductDetail = (id: string) =>
+  call<ProductDetailLive>(`/api/products/${encodeURIComponent(id)}`);
+
+/* ---------- Floor team roster ---------- */
+
+export interface StaffRosterRow {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  role: string;
+  active?: boolean;
+  /** From v_floor_team; the table fallback derives it from `role`. */
+  role_label?: string;
+}
+
+export const listStaffRoster = () => call<StaffRosterRow[]>("/api/staff?role=all");
 
 export interface DashboardLive {
   source: string;

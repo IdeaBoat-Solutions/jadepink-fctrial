@@ -9,9 +9,15 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { RevenueChartSkeleton } from "@/components/admin/revenue-chart";
 import { useApi } from "@/hooks/use-api";
-import { getDashboard } from "@/lib/api";
+import { getDashboard, getVisitFunnel, type FunnelMetricsLive } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { formatINR } from "@/lib/utils";
+
+const EMPTY_FUNNEL: FunnelMetricsLive = {
+  footfall: 0, trials: 0, billedVisits: 0, billedPieces: 0, billedValue: 0,
+  footfallToTrialPct: null, trialToBillPct: null, footfallConversionPct: null,
+  billedValuePerVisitor: 0,
+};
 
 /* Manager overview, top-down: today's floor first (what needs me right now),
    then money + stock KPIs, revenue chart beside the FULL restock list
@@ -41,7 +47,11 @@ const JUMP_LINKS = [
 
 export default function DashboardPage() {
   const { data, loading, error, reload } = useApi("dashboard", getDashboard);
-  const { todayCounts, visits } = useStore();
+  const { todayCounts, visits, profile } = useStore();
+  const storeId = profile?.storeId ?? "";
+  const funnel = useApi<FunnelMetricsLive>(`funnel|${storeId}`, () =>
+    storeId ? getVisitFunnel(storeId) : Promise.resolve({ ok: true, data: EMPTY_FUNNEL })
+  );
   const completed = visits.filter((v) => v.status === "COMPLETED").length;
 
   const attention = (data?.lowStock ?? []).slice().sort((a, b) => {
@@ -93,6 +103,44 @@ export default function DashboardPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      {/* Today's conversion funnel — GET /api/visits/funnel, computed from
+          live visits + visit_products, never invented client-side. */}
+      <section aria-label="Today's funnel">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-1">
+            <CardTitle>Today&apos;s funnel</CardTitle>
+            <p className="text-[13px] text-muted-foreground">Footfall → trial → bill</p>
+          </CardHeader>
+          <CardContent aria-busy={funnel.loading && !funnel.data}>
+            {funnel.error && !funnel.data && (
+              <p className="text-[13.5px] text-muted-foreground">Funnel unavailable right now — the numbers above are unaffected.</p>
+            )}
+            {funnel.data ? (
+              <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: "Footfall", value: String(funnel.data.footfall), note: "visits today" },
+                  { label: "Trials", value: String(funnel.data.trials), note: funnel.data.footfallToTrialPct != null ? `${funnel.data.footfallToTrialPct}% of footfall` : "no trials yet" },
+                  { label: "Billed visits", value: String(funnel.data.billedVisits), note: funnel.data.trialToBillPct != null ? `${funnel.data.trialToBillPct}% of trials` : "nothing billed yet" },
+                  { label: "Billed value", value: formatINR(funnel.data.billedValue), note: `${funnel.data.billedPieces} piece${funnel.data.billedPieces === 1 ? "" : "s"} billed` },
+                ].map((f) => (
+                  <div key={f.label} className="rounded-2xl border border-[#e8dfd6] bg-white px-4 py-3.5">
+                    <p className="tnum text-[26px] font-semibold leading-none tracking-tight text-[#1c1917]">{f.value}</p>
+                    <p className="mt-1 block text-[12.5px] font-medium text-[#78716c]">{f.label}</p>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">{f.note}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton-soft h-[92px] rounded-2xl" style={{ animationDelay: `${i * 110}ms` }} />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       {/* Money + stock KPIs */}

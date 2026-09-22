@@ -140,20 +140,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         const parsed = dropProductSchema.parse({
           visitProductId: body.visitProductId,
           dropReasonId: body.dropReasonId,
+          subCategory: body.subCategory,
           note: body.note,
         });
         return NextResponse.json({
-          data: await dropProduct(auth, parsed.visitProductId, parsed.dropReasonId, parsed.note ?? null),
+          data: await dropProduct(auth, parsed.visitProductId, parsed.dropReasonId, parsed.note ?? null, parsed.subCategory ?? null),
         });
       }
       case "capture-drop-reason": {
         const parsed = captureDropReasonSchema.parse({
           visitProductId: body.visitProductId,
           dropReasonId: body.dropReasonId,
+          subCategory: body.subCategory,
           note: body.note,
         });
         return NextResponse.json({
-          data: await captureDropReason(auth, parsed.visitProductId, parsed.dropReasonId, parsed.note ?? null),
+          data: await captureDropReason(auth, parsed.visitProductId, parsed.dropReasonId, parsed.note ?? null, parsed.subCategory ?? null),
         });
       }
       case "remove": {

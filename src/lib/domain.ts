@@ -102,8 +102,9 @@ export function isValidMobileIN(raw: string): boolean {
 }
 
 /* ---------- Person-name normalization ----------
-   Two different people often share a first name — the surname is what keeps
-   them apart on the floor. Every create form requires a full name. */
+   Customers may be recorded with a single name — the mobile number is what
+   keeps same-named people apart on the floor (full name still required for
+   STAFF registration only). */
 
 export function normalizeName(raw: string): string {
   return (raw || "").trim().replace(/\s+/g, " ");
@@ -160,38 +161,16 @@ export function visitContradiction(v: Visit): string | null {
   return null;
 }
 
-/* ---------- Staff roster (offline fallback only) ----------
-   Salespeople/managers are kept deliberately: they are the real team. Every other
-   fixture that used to live here - 5 invented customers with plausible Indian
-   mobile numbers, 3 fake walk-in visits and fabricated per-customer purchase
-   history - has been DELETED as unnecessary and misleading.
+/* ---------- Staff roster ----------
+    Fixture rosters were DELETED as unnecessary and misleading: 5 invented
+    customers with plausible Indian mobile numbers, 3 fake walk-in visits,
+    fabricated per-customer purchase history ("Trialled 8 / Liked 5 /
+    Purchased 2" for ANY id) and the 2-entry SEED_SALESPEOPLE list all
+    reached screens as though they were JadePink's real data.
 
-   That history was the worst of them: seedHistory() returned invented
-   "Trialled 8 / Liked 5 / Purchased 2" rows for ANY id passed in, so a REAL
-   customer opening on the floor would have been shown fabricated trial history as
-   though it were their own. Real behavioural facts come from
-   visits + visit_products + visit_events. Do not reintroduce fixtures. */
-
-export const SEED_SALESPEOPLE: Salesperson[] = [
-  { id: "sp-kkshah", name: "KK Shah", status: "available", role: "fc" },
-  { id: "sp-smit", name: "Smit (Manager)", status: "available", role: "manager" },
-];
-
-/* Removed: 5 invented customers with plausible mobile numbers, 3 fake walk-in
-   visits, and fabricated per-customer "Trialled 8 / Liked 5 / Purchased 2"
-   history. Kept as empty stubs so existing imports and call sites still compile.
-   Real facts live in customers / visits / visit_products / visit_events. */
-
-export const SEED_CUSTOMERS: Customer[] = [];
-
-export function seedVisits(): Visit[] {
-  return [];
-}
-
-export function seedHistory(customerId: string): PastVisitSummary[] {
-  void customerId; // stub — history will come from the API; keep the signature
-  return [];
-}
+    Real behavioural facts come from visits + visit_products + visit_events;
+    the staff roster comes from GET /api/staff (role views over
+    staff_profiles). Do not reintroduce fixtures. */
 
 /* ---------- Pure search ---------- */
 

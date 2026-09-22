@@ -39,10 +39,10 @@ const STATUS: Record<string, { label: string; mark: string; text: string; bg: st
   offline: { label: "Offline", mark: "bg-[var(--fp-faint)]", text: "text-[var(--fp-muted)]", bg: "bg-[var(--fp-ink-soft)]" },
   liked: { label: "Liked", mark: "bg-[var(--fp-ok)]", text: "text-[var(--fp-ok)]", bg: "bg-[var(--fp-ok-bg)]" },
   dropped: { label: "Dropped", mark: "bg-[var(--fp-drop)]", text: "text-[var(--fp-drop)]", bg: "bg-[var(--fp-drop-bg)]" },
-  trial: { label: "Trial in progress", mark: "bg-[var(--fp-brand)]", text: "text-[var(--fp-brand-deep)]", bg: "bg-[var(--fp-brand-soft)]" },
+  trial: { label: "Trial", mark: "bg-[var(--fp-brand)]", text: "text-[var(--fp-brand-deep)]", bg: "bg-[var(--fp-brand-soft)]" },
   completed: { label: "Completed", mark: "bg-[var(--fp-ok)]", text: "text-[var(--fp-ok)]", bg: "bg-[var(--fp-ok-bg)]" },
   selected: { label: "Selected", mark: "bg-[var(--fp-ink)]", text: "text-[var(--fp-ink)]", bg: "bg-[var(--fp-ink-soft)]" },
-  ready: { label: "Trial completed", mark: "bg-[#3d5270]", text: "text-[#3d5270]", bg: "bg-[#eef2f6]" },
+  ready: { label: "Trial", mark: "bg-[#3d5270]", text: "text-[#3d5270]", bg: "bg-[#eef2f6]" },
 };
 
 export function StatusMark({ value, label }: { value: string; label?: string }) {
@@ -255,8 +255,4 @@ export function Drawer({
       </div>
     </div>
   );
-}
-
-export function Hairline({ className }: { className?: string }) {
-  return <div className={cn("h-px bg-[var(--fp-line)]", className)} />;
 }

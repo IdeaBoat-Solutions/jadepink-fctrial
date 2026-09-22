@@ -1,0 +1,10 @@
+import pg from "pg";
+const c = new pg.Client({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL });
+await c.connect();
+const cu = await c.query("select id, name, mobile from customers where name ilike 'zzq%'");
+console.log("CUSTOMER:", JSON.stringify(cu.rows, null, 1));
+const v = await c.query("select id, status, customer_id, assigned_salesperson_id from visits where id in ('be4de8cc-0f4f-4ac8-9f47-efa185b9b13f','461a4d7e-2816-4183-a58a-42a465ffd099')");
+console.log("VISITS:", JSON.stringify(v.rows, null, 1));
+const ev = await c.query("select visit_id, event_type, metadata from visit_events where visit_id in ('be4de8cc-0f4f-4ac8-9f47-efa185b9b13f','461a4d7e-2816-4183-a58a-42a465ffd099') order by created_at");
+console.log("EVENTS:", JSON.stringify(ev.rows, null, 1));
+await c.end();

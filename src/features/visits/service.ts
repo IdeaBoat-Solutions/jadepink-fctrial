@@ -31,7 +31,10 @@ async function enrichVisits(supabase: Awaited<ReturnType<typeof createClient>>, 
   }
   const spNames = new Map<string, string>();
   if (spIds.length) {
-    const { data } = await supabase.from("staff_profiles").select("id, name").in("id", spIds);
+    // v_salespeople, not staff_profiles: FC callers can't read colleagues'
+    // rows through staff_profiles RLS, which left every visit header showing
+    // "FC: Unassigned" for other people's visits.
+    const { data } = await supabase.from("v_salespeople").select("id, name").in("id", spIds);
     for (const sp of data ?? []) spNames.set(sp.id, sp.name);
   }
   return rows.map((v) => ({
@@ -149,7 +152,7 @@ export async function completeVisit(auth: AuthContext, visitId: string) {
   if ((outstanding ?? 0) > 0) {
     throw new Stage2Error(
       STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
-      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or trialled but not billed — mark each billed or dropped with a reason first`,
+      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or in trial but not billed — mark each billed or dropped with a reason first`,
       422,
     );
   }
@@ -187,7 +190,7 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
   if ((outstanding ?? 0) > 0) {
     throw new Stage2Error(
       STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
-      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or trialled but not billed — mark each billed or dropped with a reason first`,
+      `${outstanding} item${outstanding === 1 ? " is" : "s are"} still liked or in trial but not billed — mark each billed or dropped with a reason first`,
       422,
     );
   }
@@ -348,7 +351,9 @@ export async function getVisitTimeline(auth: AuthContext, visitId: string) {
   const actorIds = [...new Set(rows.map((r) => r.actorId).filter((v): v is string => !!v))];
   const actorNames = new Map<string, string>();
   if (actorIds.length) {
-    const { data } = await supabase.from("staff_profiles").select("id, name").in("id", actorIds);
+    // v_floor_team is owner-privileged: staff_profiles RLS hides colleagues
+    // from FC callers, which would blank every actor name but their own.
+    const { data } = await supabase.from("v_floor_team").select("id, name").in("id", actorIds);
     for (const s of data ?? []) actorNames.set(s.id as string, s.name as string);
   }
 

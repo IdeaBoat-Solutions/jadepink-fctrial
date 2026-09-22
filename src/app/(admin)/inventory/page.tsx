@@ -10,26 +10,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/page-header";
+import { listCategories, listProducts } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { PaginationControls, usePageParam } from "@/components/pagination";
 
-/* Products showcase over the LIVE catalogue (/api/products + /api/categories).
-   Search / category / stock filter in SQL — the catalogue is ~900 rows and
-   growing, so it is never fetched whole. Each row opens its detail page, which
-   carries the "Purchased by" detail list of the users who bought that item. */
-
-interface ProductsResponse {
-  source: string;
-  data: Product[];
-  items?: Product[];
-  total: number;
-  totalPages: number;
-  start: number;
-  end: number;
-}
+/* Products showcase over the LIVE catalogue (/api/products + /api/categories)
+   through the typed src/lib/api wrappers. Search / category / stock filter in
+   SQL — the catalogue is ~900 rows and growing, so it is never fetched whole.
+   Each row opens its detail page, which carries the "Purchased by" detail
+   list of the users who bought that item. */
 
 function InventoryInner() {
   const [q, setQ] = useState("");
@@ -54,11 +46,8 @@ function InventoryInner() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetch("/api/categories", { cache: "no-store" });
-        const json = await res.json().catch(() => ({}));
-        if (!cancelled && Array.isArray(json.data)) setCats(json.data);
-      } catch { /* categories stay empty — filter still works */ }
+      const r = await listCategories();
+      if (!cancelled && r.ok && Array.isArray(r.data.data)) setCats(r.data.data);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -68,23 +57,22 @@ function InventoryInner() {
     void (async () => {
       setLoading(true);
       setErr("");
-      const p = new URLSearchParams();
-      if (debouncedQ) p.set("q", debouncedQ);
-      if (cat !== "all") p.set("category", cat);
-      if (stock !== "all") p.set("stock", stock);
-      p.set("page", String(page));
-      p.set("pageSize", String(DEFAULT_PAGE_SIZE));
       try {
-        const res = await fetch(`/api/products?${p.toString()}`, { cache: "no-store" });
-        const json: ProductsResponse = await res.json().catch(() => ({ data: [], total: 0 } as unknown as ProductsResponse));
+        const r = await listProducts({
+          q: debouncedQ,
+          category: cat,
+          stock,
+          page,
+          pageSize: DEFAULT_PAGE_SIZE,
+        });
         if (cancelled) return;
-        if (!res.ok) throw new Error((json as { error?: string }).error ?? "Could not load products");
-        const items = json.data ?? json.items ?? [];
-        setRows(items);
-        setTotal(json.total ?? items.length);
+        if (!r.ok) throw new Error(r.message);
+        const json = r.data;
+        setRows(json.data ?? []);
+        setTotal(json.total ?? 0);
         setTotalPages(json.totalPages ?? 1);
         setStart(json.start ?? 0);
-        setEnd(json.end ?? items.length);
+        setEnd(json.end ?? 0);
       } catch (e) {
         if (!cancelled) {
           setRows([]);

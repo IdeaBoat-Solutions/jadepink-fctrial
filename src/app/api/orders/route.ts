@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listOrders } from "@/features/catalogue/repository";
+import { listOrders, mapOrder } from "@/features/catalogue/repository";
 import { orderSchema } from "@/lib/inventory";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -10,7 +10,7 @@ import { parsePage, parsePageSize } from "@/lib/pagination";
    typed against Order got undefined fields) and fell back to a fixture list. */
 export async function GET(req: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ source: "none", data: [], total: 0, page: 1, pageSize: 20, totalPages: 1 });
+    return NextResponse.json({ source: "none", data: [], total: 0, page: 1, pageSize: 20, totalPages: 1, start: 0, end: 0 });
   }
   const { searchParams } = new URL(req.url);
   try {
@@ -29,7 +29,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const parsed = orderSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid order", issues: parsed.error.flatten() }, { status: 400 });
+    const issues = parsed.error.flatten();
+    const first = issues.formErrors[0] ?? Object.values(issues.fieldErrors).flat()[0] ?? "Check the order details.";
+    return NextResponse.json({ code: "INVALID_ORDER", message: first, issues }, { status: 400 });
   }
   const v = parsed.data;
   if (isSupabaseConfigured()) {
@@ -67,11 +69,15 @@ export async function POST(req: Request) {
         )
         .select("*");
       if (itemsErr) throw new Error(itemsErr.message);
-      return NextResponse.json({ source: "db", data: { ...order, items } }, { status: 201 });
+      // Map through the shared DTO so the client gets the same camelCase Order
+      // shape the list endpoint serves, not raw inserted rows.
+      const dto = mapOrder({ ...(order as Record<string, unknown>), order_items: items } as Parameters<typeof mapOrder>[0]);
+      return NextResponse.json({ source: "db", data: dto }, { status: 201 });
     } catch (e) {
-      return NextResponse.json({ error: "DB write failed", detail: String(e) }, { status: 500 });
+      return NextResponse.json({ code: "DB_WRITE_FAILED", message: "Could not save the order.", detail: String(e) }, { status: 500 });
     }
   }
-  const total = 0;
-  return NextResponse.json({ source: "seed-echo", data: { id: `o-${Date.now()}`, code: "JP-9XXX", ...v, total, status: "pending" } }, { status: 201 });
+  // No Supabase: refuse rather than echo a fabricated success — an order the
+  // operator believes was saved but never was is worse than a clear failure.
+  return NextResponse.json({ code: "NOT_CONFIGURED", message: "Order storage is not available." }, { status: 503 });
 }

@@ -34,10 +34,6 @@ export default function LoginPage() {
   const [step, setStep] = useState<"mobile" | "code">("mobile");
   const [code, setCode] = useState("");
 
-  // Demo fallback (works before Supabase is wired)
-  const [demoName, setDemoName] = useState("");
-  const [demoRole, setDemoRole] = useState<"fc" | "manager">("fc");
-
   /* Managers own the store (dashboard); salespeople own their customers (today).
      Same rule as src/lib/policy.ts. */
   const landingFor = (r: "fc" | "manager") => (r === "manager" || r === "fc" ? "/today" : "/today");
@@ -129,14 +125,6 @@ export default function LoginPage() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const submitDemo = (e: React.FormEvent) => {
-    e.preventDefault();
-    const n = demoName.trim() || "Riya";
-    if (demoName.trim() && demoName.trim().length < 2) { setError("Enter your first name as the team knows you."); return; }
-    signIn(n, demoRole);
-    router.push(landingFor(demoRole));
   };
 
   return (
@@ -235,32 +223,12 @@ export default function LoginPage() {
               )}
             </>
           ) : (
-            <form onSubmit={submitDemo} className="mt-5 flex flex-col gap-4" aria-label="Sign in (demo mode)">
-              <div className="rounded-lg border border-dashed border-[#d6c9bb] bg-[#faf8f6] p-3 text-[12.5px] leading-relaxed text-[#78716c]">
-                Supabase isn&apos;t connected yet — demo mode. Add <code>NEXT_PUBLIC_SUPABASE_URL</code> +{" "}
-                <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to <code>.env</code>, then this screen becomes email + password / OTP.
-                See <code>supabase/README.md</code>.
-              </div>
-              <Field label="Your first name" htmlFor="login-name" error={error || undefined} hint={error ? undefined : "Use the name the floor knows you by."}>
-                <TextInput id="login-name" autoComplete="given-name" placeholder="e.g. Riya" value={demoName} onChange={(e) => { setDemoName(e.target.value); setError(""); }} aria-invalid={!!error} autoFocus />
-              </Field>
-              <fieldset>
-                <legend className="text-[13px] font-semibold text-[#44403c]">Sign in as</legend>
-                <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Role">
-                  {(["fc", "manager"] as const).map((r) => (
-                    <button
-                      key={r} type="button" role="radio" aria-checked={demoRole === r} onClick={() => setDemoRole(r)}
-                      className={demoRole === r ? "min-h-[52px] rounded-lg border border-[var(--staff-brand)] bg-[#fdf0f4] px-3 text-left" : "min-h-[52px] rounded-lg border border-[#d6c9bb] bg-white px-3 text-left hover:border-[#1c1917]"}
-                    >
-                      <span className="block text-[14px] font-semibold">{r === "fc" ? "Salesperson" : "Manager"}</span>
-                      <span className="block text-[12px] text-[#78716c]">{r === "fc" ? "Floor workflow" : "Live floor + reassign"}</span>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-              <PrimaryButton type="submit">Sign in →</PrimaryButton>
-              <p className="text-center text-[12px] text-[var(--fp-muted)]">Demo build · data stays on this device until Supabase is connected</p>
-            </form>
+            <div className="mt-5 rounded-lg border border-dashed border-[#d6c9bb] bg-[#faf8f6] p-4 text-[13.5px] leading-relaxed text-[#57534e]">
+              <p className="font-semibold text-[#1c1917]">Sign-in isn&apos;t configured.</p>
+              <p className="mt-1">
+                Ask your manager to set up the store connection, then sign in here with your staff email and password.
+              </p>
+            </div>
           )}
         </div>
       </main>

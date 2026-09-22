@@ -1,6 +1,5 @@
 import { Star } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/page-header";
 import { listSuppliers } from "@/features/catalogue/repository";
 
@@ -11,14 +10,14 @@ export default async function SuppliersPage() {
 
   return (
     <div className="staff-page">
-      <PageHeader kicker="Catalogue" title="Suppliers" sub={`${suppliers.length} sourcing partners · reorder + ratings.`} actions={<Button className="min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0">Add supplier</Button>} />
+      <PageHeader kicker="Catalogue" title="Suppliers" sub={`${suppliers.length} sourcing partners · reorder + ratings.`} />
 
       {!suppliers.length && (
         <Card>
           <CardContent className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
             <p className="text-[15px] font-semibold">No suppliers yet.</p>
             <p className="text-[13.5px] text-muted-foreground">
-              These are created from the client&apos;s barcode export — run <code className="rounded bg-muted px-1.5 py-0.5 text-[12.5px]">npm run seed:sj</code>.
+              Suppliers appear here from the product catalogue — add a product with a supplier to start sourcing.
             </p>
           </CardContent>
         </Card>
@@ -39,7 +38,6 @@ export default async function SuppliersPage() {
             </CardHeader>
             <CardContent className="flex flex-wrap items-center justify-between gap-2 border-t border-dashed pt-3">
               <p className="tnum text-[13px] text-muted-foreground">{s.activeProducts} active SKUs · {s.phone || "no phone"}</p>
-              <Button variant="outline" size="sm" className="min-h-[40px] transition-all duration-150 hover:-translate-y-px hover:border-foreground">Raise PO</Button>
             </CardContent>
           </Card>
         ))}

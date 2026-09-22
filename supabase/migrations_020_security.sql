@@ -149,9 +149,16 @@ create policy "manager update orders" on public.orders for update to authenticat
   using (public.is_manager());
 
 -- Staff profiles: own row always readable; managers may read the team list.
+-- Plus: every active staff member can read their store's roster. The floor
+-- needs the whole FC list for assignment (Assign FC / Select FC pickers, round
+-- robin) — without this an FC sees only themselves and the Select FC dropdown
+-- is empty of colleagues. Scopes through can_access_store() (SECURITY DEFINER
+-- helper), never an inline self-reference (§0 recursion rule).
 create policy "staff read own profile" on public.staff_profiles for select to authenticated using (id = auth.uid());
 create policy "manager read team profiles" on public.staff_profiles for select to authenticated
   using (public.is_manager());
+create policy "staff read own store roster" on public.staff_profiles for select to authenticated
+  using (public.can_access_store(store_id));
 create policy "manager write team profiles" on public.staff_profiles for all to authenticated
   using (public.is_manager()) with check (public.is_manager());
 

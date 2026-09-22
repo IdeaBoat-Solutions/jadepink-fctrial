@@ -1,17 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, assertCanAssign, type AuthContext } from "@/lib/authz";
-import { canAssignOthers, canReassignVisit } from "@/lib/policy";
+import { canReassignVisit } from "@/lib/policy";
 import { toDTO, type VisitRow } from "../visits/repository";
 
 /* FC assignment (§22–23): 7 checks + same-store invariant + audit event. Idempotent (§31).
-   Role rule: an FC may only assign themselves; assigning a different FC
-   needs a managing role. The UI mirrors this (FCSelector shows self only). */
+   Role rule: any active FC on the roster may take a walk-in — salespeople see
+   and pick every FC account, not just themselves. Taking a visit that is
+   already with a colleague is still a manager override, so two FCs cannot
+   pull the same customer. */
 export async function assignSalesperson(auth: AuthContext, visitId: string, salespersonId: string) {
   assertCanAssign(auth);
-  if (!canAssignOthers(auth.role) && salespersonId !== auth.userId) {
-    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only managers assign other FCs — you can take the customer yourself", 403);
-  }
   const supabase = await createClient();
   const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
   if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
@@ -21,7 +20,18 @@ export async function assignSalesperson(auth: AuthContext, visitId: string, sale
   }
   if (!visit.customer_id) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_REQUIRED, "Attach a customer first", 422);
 
-  const { data: sp } = await supabase.from("staff_profiles").select("id, active, store_id").eq("id", salespersonId).single();
+  // Validate the target FC through the owner-privileged view — the base table's
+  // RLS hides colleagues from FC callers, which made every colleague pick fail
+  // with a false "Salesperson not found".
+  const { data: sp, error: spErr } = await supabase
+    .from("v_salespeople")
+    .select("id, active, store_id")
+    .eq("id", salespersonId)
+    .single();
+  if (spErr && spErr.code !== "PGRST116") {
+    console.error("[assignSalesperson] roster lookup error", spErr.code, spErr.message);
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not verify the FC", 500);
+  }
   if (!sp) throw new Stage2Error(STAGE2_ERRORS.SALESPERSON_NOT_FOUND, "Salesperson not found", 404);
   if (!sp.active) throw new Stage2Error(STAGE2_ERRORS.SALESPERSON_NOT_AVAILABLE, "Salesperson inactive", 422);
   if (!sp.store_id || sp.store_id !== visit.store_id) {
@@ -48,14 +58,22 @@ export async function assignSalesperson(auth: AuthContext, visitId: string, sale
     assigned_at: new Date().toISOString(),
   };
   if (visit.status === "IDENTIFYING" || visit.status === "ARRIVED") patch.status = "ASSIGNED";
-  const { data: updated } = await supabase.from("visits").update(patch).eq("id", visitId).select("*").single();
-  await supabase.from("visit_events").insert({
+  const { data: updated, error: updateErr } = await supabase.from("visits").update(patch).eq("id", visitId).select("*").single();
+  if (updateErr || !updated) {
+    console.error("[assignSalesperson] visit update error", updateErr?.code, updateErr?.message);
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not assign the FC", 422);
+  }
+  const { error: eventErr } = await supabase.from("visit_events").insert({
     visit_id: visitId,
     event_type: isReassign ? "FC_REASSIGNED" : "FC_ASSIGNED",
     actor_id: auth.userId,
     metadata: { previous_salesperson_id: visit.assigned_salesperson_id, new_salesperson_id: salespersonId },
   });
-  return toDTO((updated ?? visit) as VisitRow);
+  if (eventErr) {
+    // Assignment already committed — log loudly, don't fail the user.
+    console.error("[assignSalesperson] event insert failed", eventErr.code, eventErr.message);
+  }
+  return toDTO(updated as VisitRow);
 }
 
 export async function reassignSalesperson(auth: AuthContext, visitId: string, salespersonId: string) {
@@ -65,16 +83,25 @@ export async function reassignSalesperson(auth: AuthContext, visitId: string, sa
   return assignSalesperson(auth, visitId, salespersonId);
 }
 
-/* Available FCs: active, same store. Load balancing stays in UI (fewest active visits). */
+/* Available FCs: active, same store. Load balancing stays in UI (fewest active visits).
+   Reads the owner-privileged v_salespeople view, NOT staff_profiles directly:
+   staff_profiles RLS lets an FC read only their own row, so querying the base
+   table here would hand every FC a one-person roster (colleagues missing →
+   "Salesperson not found" on pick, round-robin stuck on self). The view exists
+   precisely for this read and is documented in supabase/README.md. */
 export async function getAvailableSalespersons(auth: AuthContext, storeId: string) {
   assertStoreAccess(auth, storeId);
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("staff_profiles")
+  const { data, error } = await supabase
+    .from("v_salespeople")
     .select("id, name, store_id, active")
     .eq("store_id", storeId)
-    .eq("active", true)
-    .eq("role", "FC")
     .order("name", { ascending: true });
+  // Never swallow DB errors as an empty roster — a broken view/permission must
+  // surface as a loud failure, not as "No salesperson is available to assign."
+  if (error) {
+    console.error("[getAvailableSalespersons] supabase error", error.code, error.message);
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not load the FC roster", 500);
+  }
   return (data ?? []).map((sp) => ({ id: sp.id, name: sp.name, storeId: sp.store_id, active: sp.active }));
 }

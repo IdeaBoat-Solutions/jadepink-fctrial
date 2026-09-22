@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Minus, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,10 +44,6 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 )}
                 <p>Reorder at ≤ {p.lowStockAt} units</p>
               </div>
-              <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
-                <Button variant="outline" className="min-h-[48px] flex-1 transition-all duration-150 hover:-translate-y-px hover:border-foreground active:translate-y-0 sm:flex-none"><Plus data-icon="inline-start" /> Stock in</Button>
-                <Button variant="outline" className="min-h-[48px] flex-1 transition-all duration-150 hover:-translate-y-px hover:border-foreground active:translate-y-0 sm:flex-none"><Minus data-icon="inline-start" /> Stock out</Button>
-              </div>
             </CardContent>
           </Card>
           <Card className="overflow-hidden">
@@ -65,7 +60,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       <TableCell className="text-muted-foreground">{m.actor}</TableCell>
                     </TableRow>
                   ))}
-                  {!moves.length && <TableRow><TableCell colSpan={4} className="py-10 text-center text-muted-foreground">No movements yet. POST /api/products/{p.id}/movements to record.</TableCell></TableRow>}
+                  {!moves.length && <TableRow><TableCell colSpan={4} className="py-10 text-center text-muted-foreground">No stock movements recorded for this item yet.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>

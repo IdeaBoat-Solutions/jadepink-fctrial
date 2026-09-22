@@ -50,9 +50,11 @@ export function Navbar() {
             className="group flex shrink-0 items-center gap-2.5 justify-self-start rounded-full"
             aria-label="JadePink home"
           >
-            <span className="grid size-7 place-items-center rounded-full bg-brand/10 transition-colors duration-200 group-hover:bg-brand/20">
-              <span className="size-2 rounded-full bg-brand transition-transform duration-200 group-hover:scale-125" />
-            </span>
+            <img
+              src="/logo.jpeg"
+              alt="JadePink logo"
+              className="h-8 w-auto shrink-0 object-contain rounded-full"
+            />
             <span className="font-display text-xl leading-none font-medium tracking-[-0.01em] text-ink">
               JadePink
             </span>

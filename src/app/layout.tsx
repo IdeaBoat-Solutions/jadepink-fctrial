@@ -54,6 +54,11 @@ export const metadata: Metadata = {
     template: "%s · JadePink",
   },
   description: "Considered clothing for real days — heritage and luxury labels plus young designers, trialled in store. Thaltej, Ahmedabad, open daily 10:30 AM–8 PM.",
+  icons: {
+    icon: "/logo.jpeg",
+    shortcut: "/logo.jpeg",
+    apple: "/logo.jpeg",
+  },
 };
 
 export const viewport: Viewport = {

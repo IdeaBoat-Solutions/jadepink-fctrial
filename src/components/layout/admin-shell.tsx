@@ -57,7 +57,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <Sidebar variant="inset">
         <SidebarHeader>
           <Link href="/dashboard" className="group flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted">
-            <span className="grid size-8 place-items-center rounded-xl bg-[var(--staff-brand)] text-[15px] font-bold text-white shadow-[0_4px_12px_-4px_rgba(180,35,77,0.6)] transition-transform duration-150 group-hover:scale-105">J</span>
+            <img src="/logo.jpeg" alt="JadePink logo" className="h-8 w-auto shrink-0 object-contain rounded-xl" />
             <span className="flex flex-col leading-none">
               <span className="text-[13px] font-bold tracking-[0.14em]">JADEPINK</span>
               <span className="mt-0.5 text-[11px] text-muted-foreground">Store OS</span>

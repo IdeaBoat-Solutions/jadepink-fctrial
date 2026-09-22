@@ -1,21 +1,98 @@
+"use client";
+
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { getProduct } from "@/features/catalogue/repository";
+import { useParams } from "next/navigation";
+import { getProductDetail, type ProductDetailLive } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { BackButton, Gallery } from "./gallery";
 
 /* FC-facing product page: every photo on top, all details below.
-   Lives in the (ops) shell so floor staff can open it from a scanned
-   product name; commercials (cost/margin) stay on the manager-only
-   /inventory/[id] page. Parent product id — variant size/colour is shown
-   on the floor card that linked here. */
+   Loads GET /api/products/[id] — one round trip for the product AND its
+   stock ledger, so the FC can see what moved (restock, sale, adjustment)
+   without fanning out to N endpoints. Commercials (cost/margin) stay on the
+   manager-only /inventory/[id] page. Parent product id — variant size/colour
+   is shown on the floor card that linked here. */
 
-export default async function OpsProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const p = await getProduct(id);
-  if (!p) notFound();
+type State =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "missing" }
+  | { status: "ready"; data: ProductDetailLive };
 
+export default function OpsProductPage() {
+  const { id } = useParams<{ id: string }>();
+  const [state, setState] = useState<State>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ status: "loading" });
+    void (async () => {
+      const r = await getProductDetail(id);
+      if (cancelled) return;
+      if (r.ok) setState({ status: "ready", data: r.data });
+      else if (r.code === "PRODUCT_NOT_FOUND") setState({ status: "missing" });
+      else setState({ status: "error", message: r.message });
+    })();
+    return () => { cancelled = true; };
+  }, [id, attempt]);
+
+  if (state.status === "loading") {
+    return (
+      <div className="mx-auto w-full max-w-2xl" aria-busy="true" aria-label="Loading product">
+        <div className="skeleton-soft h-11 w-40 rounded-lg" />
+        <div className="skeleton-soft mt-4 h-8 w-2/3 rounded-lg" />
+        <div className="skeleton-soft mt-3 aspect-[4/3] w-full rounded-xl" />
+        <div className="mt-4 flex flex-col gap-2">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="skeleton-soft h-9 rounded-lg" style={{ animationDelay: `${i * 90}ms` }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (state.status === "missing" || state.status === "error") {
+    const missing = state.status === "missing";
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <BackButton />
+        <div className="mt-4 flex flex-col items-start gap-3 rounded-xl border border-[#e9e2d8] bg-white p-5">
+          <h1 className="text-[20px] font-bold tracking-tight text-[#211d18]">
+            {missing ? "Product not found." : "Couldn't load this product."}
+          </h1>
+          <p className="text-[14px] text-[#57534e]">
+            {missing
+              ? "It may have been removed from the catalogue. Check the SKU with a manager."
+              : state.message}
+          </p>
+          <div className="flex gap-2">
+            {!missing && (
+              <button
+                onClick={() => setAttempt((a) => a + 1)}
+                className="inline-flex min-h-[44px] items-center rounded-lg bg-[#f1ece4] px-4 text-[13.5px] font-bold text-[#211d18] transition-colors hover:bg-[#e7dfd3]"
+              >
+                Try again
+              </button>
+            )}
+            <Link
+              href="/products"
+              className="inline-flex min-h-[44px] items-center rounded-lg border border-[#d6c9bb] px-4 text-[13.5px] font-bold text-[#57534e] transition-colors hover:border-[#211d18] hover:text-[#211d18]"
+            >
+              All products
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const p = state.data.product;
+  const movements = state.data.movements;
   const s = stockStatus(p);
   const images = (p.imageUrls ?? []).filter(Boolean);
   const stockLabel = s === "in-stock" ? `In stock · ${p.stock}` : s === "low-stock" ? `Low · ${p.stock}` : "Out of stock";
@@ -70,6 +147,34 @@ export default async function OpsProductPage({ params }: { params: Promise<{ id:
           ))}
         </dl>
       </div>
+
+      {/* Stock ledger — served by the same /api/products/[id] payload. */}
+      <section className="mt-4 rounded-xl border border-[#e9e2d8] bg-white p-4 sm:p-5" aria-label="Stock activity">
+        <h2 className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Stock activity</h2>
+        {movements.length === 0 ? (
+          <p className="mt-2 text-[14px] text-[#7a736a]">No stock movements recorded yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col">
+            {movements.slice(0, 5).map((m) => (
+              <li key={m.id} className="flex items-center justify-between gap-3 border-b border-[#f1ece4] py-2 text-[14px] last:border-b-0">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden
+                    className={`size-1.5 shrink-0 rounded-full ${m.type === "IN" ? "bg-[#1c6b46]" : m.type === "OUT" ? "bg-[#b23a48]" : "bg-[#9a5b00]"}`}
+                  />
+                  <span className="tnum shrink-0 font-semibold text-[#211d18]">
+                    {m.type === "IN" ? "+" : m.type === "OUT" ? "−" : "±"}{m.qty}
+                  </span>
+                  <span className="min-w-0 truncate text-[#57534e]">{m.reason || m.type.toLowerCase()}</span>
+                </span>
+                <span className="tnum shrink-0 text-[12.5px] text-[#7a736a]">
+                  {new Date(m.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

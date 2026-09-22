@@ -71,6 +71,7 @@ export type MarkPurchasedManyInput = z.infer<typeof markPurchasedManySchema>;
 export const dropProductSchema = z.object({
   visitProductId: z.string().min(1, "Visit product ID required"),
   dropReasonId: z.string().min(1, "Choose why the customer dropped it"),
+  subCategory: z.string().max(80).optional(),
   note: z.string().max(500).optional(),
 });
 export type DropProductInput = z.infer<typeof dropProductSchema>;
@@ -80,6 +81,7 @@ export type DropProductInput = z.infer<typeof dropProductSchema>;
 export const captureDropReasonSchema = z.object({
   visitProductId: z.string().min(1, "Visit product ID required"),
   dropReasonId: z.string().min(1, "Drop reason required"),
+  subCategory: z.string().max(80).optional(),
   note: z.string().max(500).optional(),
 });
 export type CaptureDropReasonInput = z.infer<typeof captureDropReasonSchema>;

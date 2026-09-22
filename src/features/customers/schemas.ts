@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FULL_NAME_ERROR, isFullName, normalizeName } from "@/lib/domain";
+import { normalizeName } from "@/lib/domain";
 
 export const createCustomerSchema = z.object({
   name: z
@@ -7,8 +7,7 @@ export const createCustomerSchema = z.object({
     .trim()
     .min(2, "Name needs at least 2 characters")
     .max(120)
-    .transform((v) => normalizeName(v))
-    .refine((v) => isFullName(v), { message: FULL_NAME_ERROR }),
+    .transform((v) => normalizeName(v)),
   phone: z.string().min(7, "Phone required").max(20),
   email: z.string().trim().email().optional().or(z.literal("").transform(() => undefined)),
   city: z.string().trim().max(80).optional(),
@@ -28,7 +27,6 @@ export const updateCustomerSchema = z.object({
     .min(2, "Name needs at least 2 characters")
     .max(120)
     .transform((v) => normalizeName(v))
-    .refine((v) => isFullName(v), { message: FULL_NAME_ERROR })
     .optional(),
   phone: z.string().trim().min(7, "Phone required").max(20).optional(),
   area: z.string().trim().max(80).optional(),

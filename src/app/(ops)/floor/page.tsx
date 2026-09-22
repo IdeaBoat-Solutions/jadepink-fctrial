@@ -7,7 +7,7 @@ import { useStore } from "@/lib/store";
 import { AccessNote, Btn, EmptyNote } from "@/components/floor/ui";
 import { DeleteVisitButton, FCQuickAssign } from "@/components/ops";
 import { timeAgo } from "@/lib/utils";
-import type { FloorSummary } from "@/lib/api";
+import { listFloorVisits, type FloorSummary } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { canViewLiveFloor } from "@/lib/policy";
@@ -21,11 +21,10 @@ export default function FloorPage() {
   const refresh = useCallback(async () => {
     if (!storeId) return;
     try {
-      const res = await fetch(`/api/visits/floor?storeId=${encodeURIComponent(storeId)}`, { cache: "no-store" });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) return;
+      const r = await listFloorVisits(storeId);
+      if (!r.ok) return;
       const next = new Map<string, FloorSummary>();
-      for (const row of (json.data ?? []) as Array<{ visit: { id: string }; summary: FloorSummary }>) {
+      for (const row of r.data) {
         next.set(row.visit.id, row.summary);
       }
       setSummaries(next);
@@ -120,7 +119,7 @@ export default function FloorPage() {
           <ul>
             {active.map((v) => {
               const s = summaries.get(v.id);
-              const trialled = s ? s.trialInProgress + s.trialCompleted : null;
+              const trials = s ? s.trialInProgress + s.trialCompleted : null;
               return (
                 <li key={v.id} className="grid gap-3 border-b border-[var(--fp-line)] py-4 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:items-center">
                   <div>
@@ -136,7 +135,7 @@ export default function FloorPage() {
                       <>
                         <span className="font-semibold text-[var(--fp-ink)]">{s.selected}</span> selected
                         <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
-                        <span className="font-semibold text-[var(--fp-ink)]">{trialled}</span> trialled
+                        <span className="font-semibold text-[var(--fp-ink)]">{trials}</span> trials
                         <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>
                         <span className="font-semibold text-[var(--fp-ink)]">{s.liked}</span> liked
                         <span className="mx-1.5 text-[var(--fp-line-strong)]">·</span>

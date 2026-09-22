@@ -69,7 +69,9 @@ export async function getCustomerHistory(
   const spIds = [...new Set(rows.map((v) => v.assigned_salesperson_id).filter(Boolean))] as string[];
   const spNames = new Map<string, string>();
   if (spIds.length) {
-    const { data: sps } = await supabase.from("staff_profiles").select("id, name").in("id", spIds);
+    // v_floor_team is owner-privileged: staff_profiles RLS hides colleagues
+    // from FC callers, which would show "FC unassigned" for every other FC.
+    const { data: sps } = await supabase.from("v_floor_team").select("id, name").in("id", spIds);
     for (const sp of sps ?? []) spNames.set(sp.id, sp.name);
   }
 

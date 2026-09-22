@@ -42,6 +42,8 @@ export function assertStoreAccess(auth: AuthContext, storeId: string) {
 }
 
 export function assertCanAssign(auth: AuthContext) {
-  if (auth.role === "FC" || auth.role === "STORE_MANAGER" || auth.role === "ADMIN") return;
+  // MANAGEMENT has cross-store oversight (see is_manager() in SQL) — the client
+  // already shows them assign controls, so the server must not 403 them here.
+  if (auth.role === "FC" || auth.role === "STORE_MANAGER" || auth.role === "ADMIN" || auth.role === "MANAGEMENT") return;
   throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Role cannot assign FCs");
 }

@@ -48,6 +48,7 @@ describe("computeVisitProductSummary (§43)", () => {
     liked_at: null,
     dropped_at: null,
     drop_reason_id: null,
+    drop_subcategory: null,
     note: null,
     staff_note: null,
     bill_number: null,

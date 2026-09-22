@@ -184,10 +184,18 @@ for (const s of staff) {
   //    revert a real rename. Pass --force-names to push names from the file.
   const { data: hadProfile } = await admin
     .from("staff_profiles").select("id").eq("id", userId).maybeSingle();
-  const payload = hadProfile && !FORCE_NAMES
-    ? { id: userId, email: s.email, role: s.role, store_id: s.store_id, active: s.active }
-    : { id: userId, email: s.email, name: s.name, role: s.role, store_id: s.store_id, active: s.active };
-  const { error: upErr } = await admin.from("staff_profiles").upsert(payload, { onConflict: "id" });
+  /* Existing profile (name possibly renamed live): UPDATE the mutable fields
+     only. An upsert would attempt an INSERT first, and `staff_profiles.name`
+     is NOT NULL with no default — so omitting it fails on the not-null
+     constraint before the id conflict is ever resolved. */
+  const { error: upErr } = hadProfile && !FORCE_NAMES
+    ? await admin
+        .from("staff_profiles")
+        .update({ email: s.email, role: s.role, store_id: s.store_id, active: s.active })
+        .eq("id", userId)
+    : await admin
+        .from("staff_profiles")
+        .upsert({ id: userId, email: s.email, name: s.name, role: s.role, store_id: s.store_id, active: s.active }, { onConflict: "id" });
   if (upErr) {
     console.error(`profile ${s.email}: ${upErr.message}`);
     failed++;

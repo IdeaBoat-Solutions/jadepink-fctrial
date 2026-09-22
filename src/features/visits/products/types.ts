@@ -68,6 +68,8 @@ export interface VisitProductRow {
   liked_at: string | null;
   dropped_at: string | null;
   drop_reason_id: string | null;
+  /** Curated refinement of the reason ("Tight on bust" under FIT). Optional. */
+  drop_subcategory: string | null;
   note: string | null;
   /** FC handling note ("pack with sleeve", "ask about fit") — free text,
       independent of the drop verdict stored in `note`. */

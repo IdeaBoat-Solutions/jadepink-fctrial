@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/page-header";
 import { useStore } from "@/lib/store";
+import { listCategories, listProducts } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
@@ -68,11 +69,8 @@ function ProductsInner() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetch("/api/categories", { cache: "no-store" });
-        const json = await res.json().catch(() => ({}));
-        if (!cancelled && Array.isArray(json.data)) setCats(json.data);
-      } catch { /* filter still works without categories */ }
+      const r = await listCategories();
+      if (!cancelled && r.ok && Array.isArray(r.data.data)) setCats(r.data.data);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -82,18 +80,11 @@ function ProductsInner() {
     void (async () => {
       setLoading(true);
       setErr("");
-      const p = new URLSearchParams();
-      if (debouncedQ) p.set("q", debouncedQ);
-      if (cat !== "all") p.set("category", cat);
-      if (stock !== "all") p.set("stock", stock);
-      p.set("page", "1");
-      p.set("pageSize", String(FETCH_SIZE));
       try {
-        const res = await fetch(`/api/products?${p.toString()}`, { cache: "no-store" });
-        const json = await res.json().catch(() => ({ data: [] }));
+        const r = await listProducts({ q: debouncedQ, category: cat, stock, page: 1, pageSize: FETCH_SIZE });
         if (cancelled) return;
-        if (!res.ok) throw new Error(json.error ?? "Could not load products");
-        setRows(Array.isArray(json.data) ? json.data : []);
+        if (!r.ok) throw new Error(r.message);
+        setRows(r.data.data ?? []);
       } catch (e) {
         if (!cancelled) {
           setRows([]);

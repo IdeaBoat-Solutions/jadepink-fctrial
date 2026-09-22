@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { HistoryLayers } from "@/components/ops";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
-import { FULL_NAME_ERROR, formatMobileIN, isFullName, isValidMobileIN, normalizeMobile, normalizeName } from "@/lib/domain";
+import { formatMobileIN, isValidMobileIN, normalizeMobile, normalizeName } from "@/lib/domain";
 import { getVisitTimeline, type CustomerSnapshotLive, type VisitLive, type VisitTimelineEventLive } from "@/lib/api";
 import { canAssignOthers, canReassignVisit } from "@/lib/policy";
 import { roundRobinNext } from "@/lib/round-robin";
@@ -200,7 +202,7 @@ function VisitBody({ visit }: { visit: VisitLive }) {
       // need a bill number or a drop reason. Store already toasted the count;
       // stay on the floor board so the FC can resolve them.
       setBilling("err");
-      setHandoffErr("Some liked or trialled pieces are still unbilled. Mark each billed — or drop it with a reason — then continue.");
+      setHandoffErr("Some liked or in-trial pieces are still unbilled. Mark each billed — or drop it with a reason — then continue.");
       return;
     }
     setBilling("done");
@@ -291,6 +293,12 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           </li>
         ))}
       </ol>
+
+      {/* Returning customer → their past history shows on the visit itself,
+          not only behind the History button. New customers skip this entirely. */}
+      {customer && customer.visitCount > 0 && (
+        <PastHistoryPanel customerId={customer.id} visitCount={customer.visitCount} />
+      )}
 
       {blocked && (
         <div className="mt-5">
@@ -410,7 +418,9 @@ function ArrivalFlow({
   const [, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
-  const [budget, setBudget] = useState(BUDGETS[1]);
+  /* No fabricated default: budget stays unset ("Not asked") unless the FC
+     actually asks. The old ₹5–15k default stamped a guess onto records. */
+  const [budget, setBudget] = useState("");
   const [source, setSource] = useState("Walk-in");
   const [fcId, setFcId] = useState(() =>
     store.user && !canAssignOthers(store.user.role) ? store.user.id : "",
@@ -437,8 +447,17 @@ function ArrivalFlow({
      index, letters hit name search, and every match shows its mobile inline
      so same names are told apart on the spot. Quiet mode powers the
      type-as-you-go suggestions: no error flashes, no create form — the
-     explicit Search tap owns those. */
+     explicit Search tap owns those.
+
+     Race guard: a quiet (type-ahead) lookup that fires just after the
+     Search tap must never supersede it. The debounce timer runs 260ms
+     behind the keystroke, so it can start AFTER the explicit call and win
+     searchReq — the explicit call then aborts as "stale" and the create
+     form renders with no name/mobile prefilled. An explicit search owns
+     the screen until it resolves; quiet calls made while one is in flight
+     are dropped. */
   const searchReq = useRef(0);
+  const explicitInFlight = useRef(false);
   const runLookup = async (raw: string, opts?: { quiet?: boolean }) => {
     const q = raw.trim();
     const d = normalizeMobile(q);
@@ -448,7 +467,9 @@ function ArrivalFlow({
       setSearched(false);
       return;
     }
+    if (opts?.quiet && explicitInFlight.current) return; // an explicit Search owns the screen
     const my = ++searchReq.current;
+    if (!opts?.quiet) explicitInFlight.current = true;
     setSearching(true);
     if (!opts?.quiet) setErr(null);
     try {
@@ -476,7 +497,10 @@ function ArrivalFlow({
         setErr({ title: "Search didn't go through.", body: "Check your connection and try again." });
       }
     } finally {
-      if (my === searchReq.current) setSearching(false);
+      if (my === searchReq.current) {
+        setSearching(false);
+        if (!opts?.quiet) explicitInFlight.current = false;
+      }
     }
   };
 
@@ -503,21 +527,26 @@ function ArrivalFlow({
     await runLookup(q);
   };
 
-  const attach = async (id: string, label: string) => {
+  const attach = async (id: string, label: string): Promise<boolean> => {
     setAttaching(true);
     const r = await store.attachCustomerToVisit(visit.id, id);
     setAttaching(false);
     if (!r.ok) {
       setErr({ title: "We couldn't attach this customer.", body: r.message || "Check your connection and try again." });
-      return;
+      return false;
     }
     store.pushToast("Customer attached", label);
     setCreating(false);
+    return true;
   };
 
   const create = async () => {
-    const cleanName = normalizeName(name || query);
-    if (!isFullName(cleanName)) { setErr({ title: "Full name is required.", body: FULL_NAME_ERROR }); return; }
+    /* The searched text may be a mobile number — it must never become the
+       customer's name. Only a lettered query can stand in for an empty
+       name field (the operator searched by name and the field lost it). */
+    const cleanName = normalizeName(name || (/[a-zA-Z\u0900-\u097F]/.test(query) ? query : ""));
+    if (!cleanName) { setErr({ title: "Name is required.", body: "Enter the customer's name — the mobile tells same names apart." }); return; }
+    if (cleanName.length < 2) { setErr({ title: "Name is required.", body: "Enter the customer's name — one name is enough; the mobile tells same names apart." }); return; }
     const mobile = normalizeMobile(phone);
     if (!isValidMobileIN(mobile)) { setErr({ title: "Enter a valid 10-digit mobile number.", body: "The number is the lookup key — it must be exact." }); return; }
     setSaving(true);
@@ -530,23 +559,42 @@ function ArrivalFlow({
       budget: budget || undefined,
     });
     setSaving(false);
+    /* Duplicate (registered after our search showed "no record", or a double
+       tap): resolve the existing record and continue with it — the same
+       recovery the directory's create card offers. Never strand the FC on a
+       dead-end error mid-visit. */
+    const isNew = r.ok;
+    let target: { id: string; name: string } | null = r.ok ? r.customer : null;
     if (!r.ok) {
-      setErr(r.code === "DUPLICATE_MOBILE" || r.code === "CUSTOMER_ALREADY_EXISTS"
-        ? { title: "That mobile number is already registered.", body: "Search again and continue with the existing customer." }
-        : { title: "We couldn't create the customer.", body: r.message || "Check the number and try again." });
+      if (r.code !== "CUSTOMER_ALREADY_EXISTS") {
+        setErr({ title: "We couldn't create the customer.", body: r.message || "Check the number and try again." });
+        return;
+      }
+      const found = await store.searchCustomer(mobile);
+      if (!found) {
+        setErr({ title: "That mobile number is already registered.", body: "Search it above and continue with the existing customer." });
+        return;
+      }
+      target = found;
+    }
+    if (!target) {
+      setErr({ title: "That mobile number is already registered.", body: "Search it above and continue with the existing customer." });
       return;
     }
-    await attach(r.customer.id, r.customer.name);
+    /* Attach first: without it the visit means nothing. Never assign an FC
+       or toast success when the attach failed. */
+    const attached = await attach(target.id, target.name);
+    if (!attached) return;
     if (fcId) {
       const a = await store.assignSalesperson(visit.id, fcId);
       const fcName = store.salespeople.find((s) => s.id === fcId)?.name;
       store.pushToast(
-        a.ok ? "Customer created" : "Customer created — FC not assigned",
-        a.ok ? `${r.customer.name} is with ${fcName ?? "the FC"}.` : (a.message || "Pick the FC on the next step."),
+        a.ok ? (isNew ? "Customer created" : "Existing customer attached") : "Customer created — FC not assigned",
+        a.ok ? `${target.name} is with ${fcName ?? "the FC"}.` : (a.message || "Pick the FC on the next step."),
       );
       return;
     }
-    store.pushToast("Customer created", `${r.customer.name} is on this visit.`);
+    store.pushToast(isNew ? "Customer created" : "Existing customer attached", `${target.name} is on this visit.`);
   };
 
   const start = async () => {
@@ -592,22 +640,40 @@ function ArrivalFlow({
             <p className="mt-1.5 text-[12.5px] text-[var(--fp-muted)]">Same names are common — every match shows its mobile.</p>
             {err && <div className="mt-4"><ErrorNote title={err.title} body={err.body} /></div>}
 
-            {searched && results.length > 0 && (
-              <div className="fp-rise mt-5 border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
-                <p className="text-[13px] font-semibold text-[var(--fp-muted)]">{results.length} match{results.length > 1 ? "es" : ""} — confirm the mobile before continuing.</p>
-                <ul className="mt-2">
-                  {results.map((c) => (
-                    <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0">
-                      <div className="min-w-0">
-                        <p className="text-[15px] font-semibold">{c.name}</p>
-                        <p className="fp-num text-[13px] text-[var(--fp-muted)]">{formatMobileIN(c.phone)} · {c.visitCount} visits · {c.purchaseCount} purchases</p>
-                      </div>
-                      <Btn tone="brand" disabled={attaching} onClick={() => void attach(c.id, c.name)}>Continue visit</Btn>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {searched && results.length > 0 && (() => {
+              /* Same-name rows bifurcate on mobile — count them so ambiguous
+                 matches lead with the number instead of the name. */
+              const counts = new Map<string, number>();
+              for (const c of results) counts.set(c.name, (counts.get(c.name) ?? 0) + 1);
+              const shared = [...counts.values()].filter((n) => n > 1).length;
+              const isShared = (n: string) => (counts.get(n) ?? 0) > 1;
+              return (
+                <div className="fp-rise mt-5 border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
+                  <p className="text-[13px] font-semibold text-[var(--fp-muted)]">
+                    {results.length} match{results.length > 1 ? "es" : ""}
+                    {shared > 0
+                      ? ` — ${shared} name${shared > 1 ? "s are" : " is"} shared; the mobile number tells them apart.`
+                      : " — confirm the mobile before continuing."}
+                  </p>
+                  <ul className="mt-2">
+                    {results.map((c) => (
+                      <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0">
+                        <div className="min-w-0">
+                          <p className="text-[15px] font-semibold">{c.name}</p>
+                          <p className={`fp-num text-[13px] ${isShared(c.name) ? "font-semibold text-[var(--fp-ink)]" : "text-[var(--fp-muted)]"}`}>
+                            {isShared(c.name) ? `${formatMobileIN(c.phone)} — pick by mobile` : `${formatMobileIN(c.phone)} · ${c.visitCount} visits · ${c.purchaseCount} purchases`}
+                          </p>
+                          {isShared(c.name) && (
+                            <p className="fp-num text-[12.5px] text-[var(--fp-muted)]">{c.visitCount} visits · {c.purchaseCount} purchases</p>
+                          )}
+                        </div>
+                        <Btn tone="brand" disabled={attaching} onClick={() => void attach(c.id, c.name)}>Continue visit</Btn>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
 
             {submitted && searched && results.length === 0 && (
               <form className="fp-rise mt-5 max-w-md" onSubmit={(e) => { e.preventDefault(); void create(); }}>
@@ -617,8 +683,8 @@ function ArrivalFlow({
                   Name, number, area, budget and how they heard about the store — 30 seconds while they are with you.
                 </p>
                 <div className="mt-4 flex flex-col gap-3">
-                  <Field label="Full name" htmlFor="nc-name" required hint="First name + surname — one name alone mixes two different people up.">
-                    <input id="nc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya Shah" className={inputClass} autoFocus />
+                  <Field label="Name" htmlFor="nc-name" required hint="One name is fine — same-named customers are told apart by mobile.">
+                    <input id="nc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya" className={inputClass} autoFocus />
                   </Field>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Mobile" htmlFor="nc-mobile" required>
@@ -638,6 +704,7 @@ function ArrivalFlow({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Budget" htmlFor="nc-budget">
                       <select id="nc-budget" value={budget} onChange={(e) => setBudget(e.target.value)} className={inputClass}>
+                        <option value="">Not asked</option>
                         {BUDGETS.map((b) => <option key={b}>{b}</option>)}
                       </select>
                     </Field>
@@ -647,18 +714,28 @@ function ArrivalFlow({
                       </select>
                     </Field>
                   </div>
-                  <Field label="Serving FC" htmlFor="nc-fc" hint="Registered salesperson — optional, skips the assign step.">
-                    <select id="nc-fc" value={fcId} onChange={(e) => setFcId(e.target.value)} className={inputClass}>
-                      <option value="">Select FC…</option>
-                      {fcRoster.map((sp) => {
-                        const n = fcLoad.get(sp.id) ?? 0;
-                        return (
-                          <option key={sp.id} value={sp.id}>
-                            {sp.name}{sp.id === store.user?.id ? " (you)" : ""} — {n === 0 ? "free now" : `${n} active`}
-                          </option>
-                        );
-                      })}
-                    </select>
+                  <Field label="Serving FC" hint="Registered salesperson — optional, skips the assign step.">
+                    <Select value={fcId || undefined} onValueChange={(v) => setFcId(v)}>
+                      <SelectTrigger id="nc-fc" aria-label="Serving FC" className="w-full">
+                        <SelectValue placeholder="Select FC…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fcRoster.length === 0 && (
+                          <SelectItem value="none" disabled>
+                            No FCs available
+                          </SelectItem>
+                        )}
+                        {fcRoster.map((sp) => {
+                          const n = fcLoad.get(sp.id) ?? 0;
+                          return (
+                            <SelectItem key={sp.id} value={sp.id} className="min-h-[40px] text-[14px]">
+                              {sp.name}{sp.id === store.user?.id ? " (you)" : ""}
+                              <span className="text-[12px] text-muted-foreground">· {n === 0 ? "free now" : `${n} active`}</span>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                   </Field>
                   <Btn type="submit" tone="brand" disabled={saving}>{saving ? "Creating…" : "Create customer"}</Btn>
                 </div>
@@ -747,6 +824,37 @@ function Snapshot({ customer }: { customer: { name: string; phone: string; visit
   );
 }
 
+/* Inline past-history panel for returning customers. Loads the real record
+   (visits + trialled/liked/billed items) from the server and defaults open to
+   the most recent visit, so an FC sees history without tapping anything.
+   Collapsible — today's trial is the task, history is supporting context. */
+function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visitCount: number }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <section className="mt-5 rounded-xl border border-[#e9e2d8] bg-white" aria-label="Past visit history">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex min-h-[52px] w-full flex-wrap items-center justify-between gap-2 px-5 py-3 text-left"
+      >
+        <span>
+          <span className="block text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">Past visits</span>
+          <span className="block text-[12.5px] text-[#78716c]">
+            Returning customer · {visitCount} previous visit{visitCount > 1 ? "s" : ""} on record
+          </span>
+        </span>
+        <span aria-hidden className={`text-[#78716c] transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+      {open && (
+        <div className="border-t border-[#f1ece4] px-5 pb-4 pt-2">
+          <HistoryLayers customerId={customerId} />
+        </div>
+      )}
+    </section>
+  );
+}
+
 function CustomerFacts({ customer }: { customer: { visitCount: number; purchaseCount: number; lastVisitAt: string | null; phone: string } }) {
   return (
     <dl className="grid grid-cols-3 gap-3 border-b border-[var(--fp-line)] pb-4 text-[14px]">
@@ -758,23 +866,33 @@ function CustomerFacts({ customer }: { customer: { visitCount: number; purchaseC
 }
 
 function PastVisits({ customerId }: { customerId: string }) {
+  /* Real past history comes from the server (/api/customers/:id/history) —
+     the client store only holds TODAY's visits, so without this a returning
+     customer would look like they'd never been in. HistoryLayers shows each
+     past visit with its trialled / liked / billed items. */
   const { visits } = useStore();
-  const rows = useMemo(
+  const live = useMemo(
     () => visits.filter((v) => v.customerId === customerId).sort((a, b) => +new Date(b.arrivedAt) - +new Date(a.arrivedAt)),
     [visits, customerId],
   );
-  if (rows.length === 0) {
-    return <EmptyNote title="No previous visits recorded." body="Today's visit will be the start of their history." />;
-  }
+
   return (
-    <ul className="mt-3">
-      {rows.map((v) => (
-        <li key={v.id} className="border-b border-[var(--fp-line)] py-3 text-[14px]">
-          <p className="font-semibold">{formatDateIN(v.arrivedAt) || clockTime(v.arrivedAt)}</p>
-          <p className="text-[13px] text-[var(--fp-muted)]">{v.fcName || "FC unassigned"} · {v.status === "ACTIVE" ? "On the floor now" : v.status === "COMPLETED" ? "Completed" : "In progress"}</p>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <HistoryLayers customerId={customerId} />
+      {live.length > 0 && (
+        <div className="mt-4 border-t border-[var(--fp-line)] pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">On the floor today</p>
+          <ul className="mt-1">
+            {live.map((v) => (
+              <li key={v.id} className="border-b border-[var(--fp-line)] py-3 text-[14px]">
+                <p className="font-semibold">{formatDateIN(v.arrivedAt) || clockTime(v.arrivedAt)}</p>
+                <p className="text-[13px] text-[var(--fp-muted)]">{v.fcName || "FC unassigned"} · {v.status === "ACTIVE" ? "On the floor now" : "In progress"}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -785,7 +903,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
   return (
     <Drawer kicker="Assignment · round robin" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC — round robin"} onClose={onClose}>
       {!manager && (
-        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">Everyone on today&apos;s roster is listed — tap a name to assign. Moving someone else&apos;s active visit needs a manager.</p>
+        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">The whole roster is listed — tap any FC to put them on this visit. Moving a visit that is already with a colleague needs a manager.</p>
       )}
       {manager && (
         <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
@@ -861,7 +979,6 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
   const { salespeople, visits, assignSalesperson, pushToast, user } = useStore();
   const [saving, setSaving] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(visit.assignedSalespersonId);
-  const manager = canAssignOthers(user?.role);
   const load = new Map<string, number>();
   visits.forEach((v) => {
     if (v.assignedSalespersonId && (v.status === "ACTIVE" || v.status === "ASSIGNED")) {
@@ -871,34 +988,41 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
   const roster = salespeople;
 
   const pick = async (id: string, name: string) => {
-    if (locked) return;
-    if (visit.assignedSalespersonId && visit.assignedSalespersonId !== id && !canReassignVisit(user?.role)) return;
+    if (locked) {
+      pushToast("Pick the customer first", "Attach the customer, then choose who serves them.");
+      return;
+    }
+    if (visit.assignedSalespersonId && visit.assignedSalespersonId !== id && !canReassignVisit(user?.role)) {
+      const holder = salespeople.find((s) => s.id === visit.assignedSalespersonId)?.name ?? "another FC";
+      pushToast("Already with " + holder, "A manager can reassign an active visit.");
+      return;
+    }
     setSaving(id);
     const r = await assignSalesperson(visit.id, id);
     setSaving(null);
     if (!r.ok) {
-      pushToast(r.code === "CUSTOMER_REQUIRED" ? "Attach a customer first." : "FC unavailable", r.message || "Try another salesperson.");
+      pushToast("Could not assign " + name, r.message || "Try another salesperson.");
       return;
     }
     setDone(id);
-    pushToast("Assigned", name);
+    pushToast("Assigned", `${name} is serving this visit.`);
     onAssigned?.();
   };
 
   return (
     <div>
       {locked && (
-        <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">Identify the customer first — then pick who serves them.</p>
+        <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">Identify the customer first — then every FC below can be picked.</p>
       )}
       {roster.length === 0 && <EmptyNote title="No salesperson is available to assign." body="Ask a manager to activate staff for this store." />}
       {(() => {
         const next = roundRobinNext(salespeople, visits);
-        if (!next || !manager) return null;
+        if (!next) return null;
         const isCurrent = visit.assignedSalespersonId === next.id;
         return (
           <button
             type="button"
-            disabled={saving !== null || isCurrent || locked}
+            disabled={saving !== null || isCurrent}
             onClick={() => void pick(next.id, next.name)}
             className="mb-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-lg bg-[#23403a] px-4 text-left text-white disabled:opacity-50"
           >
@@ -918,7 +1042,7 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
             <li key={sp.id}>
               <button
                 onClick={() => void pick(sp.id, sp.name)}
-                disabled={saving !== null || state === "offline" || locked}
+                disabled={saving !== null || state === "offline"}
                 className={`flex min-h-[64px] w-full items-center justify-between gap-3 border px-3 text-left ${selected ? "border-[var(--fp-ok)] bg-[var(--fp-ok-bg)]" : "border-[var(--fp-line)] bg-white hover:border-[var(--fp-ink)]"}`}
               >
                 <span>
