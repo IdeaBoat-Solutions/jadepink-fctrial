@@ -14,7 +14,7 @@ import type { CustomerSnapshotLive } from "@/lib/api";
 
 function WalkInInner() {
   const store = useStore();
-  const { getVisit, getCustomer, searchCustomer, createCustomer, attachCustomerToVisit, startVisit, abandonVisit, pushToast, salespeople } = store;
+  const { getVisit, getCustomer, searchCustomer, createCustomer, attachCustomerToVisit, assignSalesperson, startVisit, abandonVisit, pushToast, salespeople, user } = store;
   const params = useSearchParams();
   const router = useRouter();
   const visitId = params.get("visit") || "";
@@ -34,6 +34,7 @@ function WalkInInner() {
   const [ncName, setNcName] = useState("");
   const [ncMobile, setNcMobile] = useState("");
   const [ncSource, setNcSource] = useState("Walk-in");
+  const [ncFcId, setNcFcId] = useState("");
   const [ncBusy, setNcBusy] = useState(false);
   const [ncErr, setNcErr] = useState("");
 
@@ -108,15 +109,36 @@ function WalkInInner() {
       }
       return;
     }
-    // Auto-attach (§15): never make the salesperson reconnect manually
+    // Auto-attach (§15): never make the salesperson reconnect manually.
+    // Optional same-screen FC assignment: attach first (assignment requires
+    // an identified customer), then assign. Assignment failure is non-fatal —
+    // the customer stays attached and Step 2 remains available.
     const a = await attachCustomerToVisit(visit.id, r.customer.id);
-    setNcBusy(false);
     if (!a.ok) {
+      setNcBusy(false);
       setErr({ title: `${r.customer.name} was created but couldn't be attached.`, body: "Search for them by mobile and attach to continue." });
       return;
     }
-    pushToast(`${r.customer.name} created & attached`, "Now assign an FC.");
+    let assignedName: string | null = null;
+    if (ncFcId) {
+      const sp = salespeople.find((s) => s.id === ncFcId);
+      const asg = await assignSalesperson(visit.id, ncFcId);
+      if (!asg.ok) {
+        setNcBusy(false);
+        setErr({ title: `${r.customer.name} was created & attached, but FC assignment failed.`, body: "Pick the FC in Step 2 to continue." });
+        setShowCreate(false);
+        setQuery(normalizeMobile(ncMobile));
+        return;
+      }
+      assignedName = sp?.name ?? null;
+    }
+    setNcBusy(false);
+    pushToast(
+      assignedName ? `${r.customer.name} created, attached & assigned` : `${r.customer.name} created & attached`,
+      assignedName ? `Serving with ${assignedName}.` : "Now assign an FC.",
+    );
     setShowCreate(false);
+    setNcFcId("");
     setQuery(normalizeMobile(ncMobile));
   };
 
@@ -252,21 +274,33 @@ function WalkInInner() {
               <div className="ui-rise mt-4 rounded-2xl border border-[#b4234d]/30 bg-[#fdf0f4]/50 p-4 sm:p-5">
                 <h3 className="staff-h2">New customer</h3>
                 <p className="mt-0.5 text-[13px] text-[#78716c]">10 seconds — they attach to this visit automatically.</p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <Field label="Name" required htmlFor="nc-name">
                     <TextInput id="nc-name" value={ncName} onChange={(e) => setNcName(e.target.value)} placeholder="Customer name" autoComplete="off" />
                   </Field>
                   <Field label="Mobile" required htmlFor="nc-mobile" hint="10-digit Indian mobile.">
                     <TextInput id="nc-mobile" value={ncMobile} onChange={(e) => setNcMobile(e.target.value)} placeholder="98765 43210" inputMode="tel" className="tnum" />
                   </Field>
-                </div>
-                <div className="mt-3">
-                  <Field label="How did you hear about us?" htmlFor="nc-source">
+                  <Field label="How did they hear about us?" htmlFor="nc-source">
                     <select id="nc-source" value={ncSource} onChange={(e) => setNcSource(e.target.value)} className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15">
                       {["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Other"].map((s) => <option key={s}>{s}</option>)}
                     </select>
                   </Field>
                 </div>
+                {salespeople.length > 0 && (
+                  <div className="mt-3">
+                    <Field label="Assign FC (optional)" htmlFor="nc-fc" hint="Skip to assign in Step 2.">
+                      <select id="nc-fc" value={ncFcId} onChange={(e) => setNcFcId(e.target.value)} className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15">
+                        <option value="">Choose in next step…</option>
+                        {salespeople.map((sp) => (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name}{user?.id === sp.id ? " (you)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                )}
                 {ncErr && <p role="alert" className="mt-2 text-[13.5px] font-medium text-[#b4232a]">{ncErr}</p>}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <PrimaryButton onClick={() => void submitNewCustomer()} disabled={ncBusy} className="flex-1">
