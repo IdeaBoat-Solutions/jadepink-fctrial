@@ -1,69 +1,82 @@
-import Link from "next/link";
-import Image from "next/image";
+/* Boutique hero — cloned from jadepink-flow, rebranded to JadePink.
+   Two-column: editorial serif intro + glass-framed jewellery plate
+   with floating product chip. Server component. */
 
-/* Hero: boutique banner. Full-bleed elegant image, serif headline,
-   the way the real JadePink banner reads: "Designing your Fashion". */
+import { BoutiqueImage } from "@/components/site/boutique-image";
+import { Button } from "@/components/ui/button";
 
-const STATS = [
-  { value: "40+", label: "designer labels" },
-  { value: "3", label: "clothing · footwear · jewellery" },
-  { value: "10:30–8", label: "open every day" },
-] as const;
+const TRUST = ["Heritage & luxury labels", "Young, experimental designers", "Open daily · 10:30 AM – 8 PM"];
 
 export function Hero() {
   return (
-    <section id="top" aria-label="JadePink introduction" className="relative">
-      {/* Full-bleed boutique banner */}
-      <div className="relative mx-auto aspect-[4/5] w-full max-w-[1280px] sm:aspect-[16/10]">
-        <Image
-          src="https://picsum.photos/seed/jadepink-boutique-banner/1600/1200"
-          alt="Inside the JadePink multi-designer boutique, rails of heritage and luxury labels"
-          fill
-          priority
-          sizes="(max-width: 640px) 100vw, 1280px"
-          className="object-cover"
-        />
-        {/* Elegant gradient overlay */}
-        <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-[var(--color-royal)]/70 via-[var(--color-royal)]/30 to-[var(--color-royal)]/5" />
-        <div className="absolute inset-x-0 bottom-0 p-8 pb-12 text-center sm:p-16 sm:pb-20">
-          {/* Elegant kicker */}
-          <p className="mb-4 text-[11px] font-semibold tracking-[0.25em] uppercase text-[var(--color-gold)]">
-            Multi-designer boutique · Ahmedabad
+    <section id="top" className="mx-auto max-w-6xl px-4 pt-12 pb-10 sm:px-8 sm:pt-20 lg:pt-24">
+      <div className="grid items-center gap-10 md:grid-cols-2 md:gap-12 lg:gap-16">
+        <div className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>
+          <p className="text-xs font-medium tracking-[0.22em] uppercase text-brand">
+            Multi-designer boutique · Thaltej, Ahmedabad
           </p>
-          {/* Serif headline */}
-          <h1 className="font-display mx-auto max-w-[14ch] text-center text-[48px] leading-[1.1] text-white sm:text-[78px] sm:leading-[1.05]">
-            Designing
-            <br />
-            <em className="italic text-[var(--color-gold-light)]">your</em> Fashion
+          <h1 className="mt-4 max-w-[16ch] font-display text-[2.75rem] leading-[1.02] font-light tracking-[-0.02em] text-balance text-ink sm:text-6xl lg:text-7xl">
+            Her boutique of pretty things.
           </h1>
-          {/* Delicate supporting text */}
-          <p className="mx-auto mt-5 max-w-[38ch] text-center text-[15px] leading-[1.7] text-white/75 sm:mt-6 sm:text-[17px]">
-            Unique, handpicked heritage and luxury labels — plus young,
-            experimental designers. Walk in any day.
+          <p className="mt-6 max-w-[46ch] text-base leading-relaxed text-pretty text-ink/70 sm:text-lg">
+            Flowy dresses, soft co-ord sets, delicate gold, silk hair ribbons and
+            little gifts — heritage and luxury labels plus young, experimental
+            designers, all under one roof.
           </p>
-          {/* Gold accent line */}
-          <div className="mx-auto mt-6 h-[1px] w-16 bg-gradient-to-r from-transparent via-[var(--color-gold)] to-transparent" />
-          {/* Elegant CTA buttons */}
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 min-[420px]:flex-row sm:mt-10">
-            <Link href="#designers" className="sl-btn sl-btn-gold w-full min-[420px]:w-auto">
-              Explore the designers
-            </Link>
-            <Link href="#visit" className="sl-btn sl-btn-ghost w-full border border-white/20 text-white min-[420px]:w-auto">
-              Plan your visit
-            </Link>
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Button asChild variant="boutique" size="boutique" className="nudge">
+              <a href="#collections">
+                Explore the boutique
+                <span className="nudge-target text-base leading-none" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </Button>
+            <Button asChild variant="glass" size="boutique">
+              <a href="#contact">Plan your visit</a>
+            </Button>
+          </div>
+          <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-ink/65">
+            {TRUST.map((label) => (
+              <li key={label} className="flex items-center gap-2">
+                <span className="size-1.5 shrink-0 rounded-full bg-gold" aria-hidden="true" />
+                {label}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="reveal relative" style={{ "--d": "140ms" } as React.CSSProperties}>
+          <div className="pointer-events-none absolute -top-6 -right-6 -z-10 size-40 rounded-full bg-gold/25 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-6 -left-6 -z-10 size-40 rounded-full bg-blush/40 blur-2xl" />
+          <div className="glass-panel zoom-frame rounded-[1.5rem] p-3 ring-1 ring-shadow backdrop-blur-2xl">
+            <BoutiqueImage
+              src="/boutique/boutique-hero-jewellery.jpg"
+              alt="Gold pendant and stackable rings on a pale marble tray at JadePink"
+              width={912}
+              height={1104}
+              className="aspect-[4/5] w-full rounded-[1rem] object-cover outline-1 -outline-offset-1 outline-shadow"
+              priority
+            />
+          </div>
+          <div className="glass-panel-strong absolute -bottom-6 left-4 flex items-center gap-3 rounded-2xl px-4 py-3 ring-1 ring-shadow backdrop-blur-xl">
+            <BoutiqueImage
+              src="/boutique/boutique-aurora-chain.jpg"
+              alt="Close crop of a delicate gold chain bracelet"
+              width={96}
+              height={96}
+              loading="lazy"
+              className="size-11 rounded-full object-cover outline-1 -outline-offset-1 outline-shadow"
+            />
+            <div>
+              <p className="font-display text-base leading-tight font-medium text-ink">
+                The bridal edit
+              </p>
+              <p className="tabular mt-0.5 text-xs text-ink/65">Handpicked · tried on with a stylist</p>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Elegant stats strip */}
-      <dl className="mx-auto grid grid-cols-3 border-b border-[var(--color-gold-border)] px-6 py-10 text-center sm:px-8 sm:py-12 lg:px-12">
-        {STATS.map((s) => (
-          <div key={s.label} data-sl-reveal className="sl-reveal">
-            <dd className="font-display text-[32px] text-[var(--color-gold)] sm:text-[44px]">{s.value}</dd>
-            <dt className="mt-1 text-[11px] font-medium tracking-[0.15em] uppercase text-[var(--color-ink)]/50 sm:text-[12.5px]">{s.label}</dt>
-          </div>
-        ))}
-      </dl>
     </section>
   );
 }

@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/site/navbar";
 import { Hero } from "@/components/site/hero";
-import { About, Categories, Designers, Events, Footer, Gallery, Marquee, Reviews, Visit } from "@/components/site/sections";
+import {
+  Categories,
+  Designers,
+  Favourites,
+  Footer,
+  Lifestyle,
+  Promises,
+  Reviews,
+} from "@/components/site/sections";
+
 import { SiteMotion } from "@/components/site/motion";
 
 export const metadata: Metadata = {
@@ -43,10 +52,10 @@ const STORE_JSONLD = {
 
 export default function PublicLanding() {
   return (
-    <div className="site-light min-h-dvh">
+    <div className="boutique boutique-page-bg min-h-dvh">
       <a
-        href="#collections"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[101] focus:rounded-xl focus:bg-white focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-[#1d1d1f]"
+        href="#top"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-full focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:text-cream"
       >
         Skip to content
       </a>
@@ -55,22 +64,12 @@ export default function PublicLanding() {
       <Navbar />
       <main>
         <Hero />
-        <Marquee
-          items={[
-            "Multi-designer boutique, Ahmedabad",
-            "Heritage & luxury designer labels",
-            "Young, experimental designers",
-            "Bridal range · Everyday chic",
-            "Open every day, 10:30 AM – 8 PM",
-          ]}
-        />
+        <Promises />
         <Categories />
-        <About />
+        <Favourites />
         <Designers />
-        <Gallery />
-        <Events />
         <Reviews />
-        <Visit />
+        <Lifestyle />
       </main>
       <Footer />
     </div>

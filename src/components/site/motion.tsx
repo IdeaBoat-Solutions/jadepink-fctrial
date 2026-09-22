@@ -1,40 +1,46 @@
 "use client";
 
-/* One tiny client island for the whole public page:
-   - observes [data-sl-reveal] elements and adds .is-in on first intersection
-   - tracks scroll state for the frosted nav border
-   Zero framer-motion dependency on the public route. GPU-only reveals. */
+/* Client island for the boutique landing:
+   - adds .js to <html> so .reveal elements hide until revealed (no-JS safe)
+   - adds .is-in to .reveal elements on first intersection (stagger via --d)
+   - smooth anchor scrolling, page-scoped so ops/admin are untouched
+   - legacy [data-sl-reveal] observer kept harmless for old markup */
 
 import { useEffect } from "react";
 
 export function SiteMotion() {
   useEffect(() => {
-    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-sl-reveal]"));
+    const root = document.documentElement;
+    root.classList.add("js");
+
+    const prev = root.style.scrollBehavior;
+    root.style.scrollBehavior = "smooth";
+
+    const els = Array.from(
+      document.querySelectorAll<HTMLElement>(".reveal, [data-sl-reveal]"),
+    );
+    let io: IntersectionObserver | null = null;
     if (!("IntersectionObserver" in window)) {
       els.forEach((el) => el.classList.add("is-in"));
-      return;
+    } else if (els.length > 0) {
+      io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("is-in");
+              io?.unobserve(e.target);
+            }
+          });
+        },
+        { rootMargin: "0px 0px -10% 0px" },
+      );
+      els.forEach((el) => io?.observe(el));
     }
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("is-in");
-            io.unobserve(e.target);
-          }
-        });
-      },
-      { rootMargin: "0px 0px -10% 0px" }
-    );
-    els.forEach((el) => io.observe(el));
 
-    const onScroll = () => {
-      document.documentElement.dataset.slScrolled = window.scrollY > 8 ? "1" : "0";
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      io.disconnect();
-      window.removeEventListener("scroll", onScroll);
+      io?.disconnect();
+      root.style.scrollBehavior = prev;
+      root.classList.remove("js");
     };
   }, []);
 

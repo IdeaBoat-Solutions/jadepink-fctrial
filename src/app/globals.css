@@ -51,6 +51,15 @@
   --color-danger-bg: #FCEAEA;
   --color-info: #2A3A5C;
   --color-info-bg: #EEF3F8;
+
+  /* Boutique landing keys (jadepink-flow port). --color-gold/blush/brand/ink
+     exist above (royal values) and are re-pointed per-scope inside .boutique.
+     The keys below have no royal equivalent and must exist so Tailwind
+     generates ring-shadow / bg-glass / bg-glass-strong / font-body. */
+  --color-glass: rgba(255, 255, 255, 0.42);
+  --color-glass-strong: rgba(255, 255, 255, 0.64);
+  --color-shadow: rgba(0, 0, 0, 0.06);
+  --font-body: "Jost", var(--font-jost), system-ui, sans-serif;
 }
 
 html {
@@ -392,18 +401,6 @@ body {
   --font-display: var(--font-lux), "Didot", "Bodoni MT", Georgia, serif;
 }
 
-/* Scroll reveal — 200ms, once, reduced-motion safe */
-.reveal {
-  opacity: 0;
-  translate: 0 10px;
-  transition: opacity 0.2s ease-out, translate 0.25s ease-out;
-  transition-delay: var(--reveal-delay, 0ms);
-}
-.reveal.is-in {
-  opacity: 1;
-  translate: 0 0;
-}
-
 /* Ticker — CSS only, pauses off-screen via content-visibility friendly markup */
 @keyframes ticker-x {
   from { transform: translateX(0); }
@@ -414,11 +411,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal {
-    opacity: 1;
-    translate: none;
-    transition: none;
-  }
   .ticker-track {
     animation: none;
   }
@@ -982,5 +974,224 @@ html[data-sl-scrolled="1"] .sl-nav {
     background: rgba(255, 255, 255, 0.97);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+/* ============================================================
+   BOUTIQUE — cloned landing design system (jadepink-flow).
+   Light cream glass boutique: Cormorant display + Jost body,
+   glass panels, lift/zoom/nudge micro-interactions, reveal-in.
+   Scoped under .boutique so ops/admin + royal site stay untouched.
+   Tokens override the @theme inline vars locally (bg-brand,
+   text-ink, bg-glass, ring-shadow, font-display, font-body…).
+   ============================================================ */
+
+.boutique {
+  --radius: 0.625rem;
+  --background: oklch(0.95 0.019 74.33);
+  --foreground: oklch(0.25 0.022 354.84);
+  --card: oklch(0.99 0.007 73.68 / 52%);
+  --card-foreground: oklch(0.25 0.022 354.84);
+  --popover: oklch(0.99 0.007 73.68 / 76%);
+  --popover-foreground: oklch(0.25 0.022 354.84);
+  --primary: oklch(0.39 0.105 12.54);
+  --primary-foreground: oklch(0.95 0.019 74.33);
+  --secondary: oklch(0.91 0.03 67.71);
+  --secondary-foreground: oklch(0.25 0.022 354.84);
+  --muted: oklch(0.9 0.026 53.77);
+  --muted-foreground: oklch(0.5 0.025 6.21);
+  --accent: oklch(0.74 0.088 68.72);
+  --accent-foreground: oklch(0.25 0.022 354.84);
+  --destructive: oklch(0.56 0.179 25.12);
+  --destructive-foreground: oklch(0.99 0.007 73.68);
+  --border: oklch(0.25 0.022 354.84 / 8%);
+  --input: oklch(0.99 0.007 73.68 / 64%);
+  --ring: oklch(0.39 0.105 12.54 / 52%);
+  --brand: oklch(0.39 0.105 12.54);
+  --brand-foreground: oklch(0.95 0.019 74.33);
+  --cream: oklch(0.95 0.019 74.33);
+  --ink: oklch(0.25 0.022 354.84);
+  --blush: oklch(0.86 0.05 8.39);
+  --gold: oklch(0.74 0.088 68.72);
+  --glass: oklch(0.99 0.007 73.68 / 42%);
+  --glass-strong: oklch(0.99 0.007 73.68 / 64%);
+  --shadow: oklch(0 0 0 / 6%);
+  /* Royal static-theme utilities compile to var(--color-*) — re-point them
+     at the boutique values inside this scope (bg-brand, text-ink, text-gold,
+     text-cream, bg-blush, bg-glass, ring-shadow…). The unprefixed vars above
+     feed the plain CSS. Every utility used on the landing is covered so no
+     surface can fall through to the global royal tokens. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: oklch(0.39 0.105 12.54);
+  --color-brand-foreground: oklch(0.95 0.019 74.33);
+  --color-cream: oklch(0.95 0.019 74.33);
+  --color-ink: oklch(0.25 0.022 354.84);
+  --color-blush: oklch(0.86 0.05 8.39);
+  --color-gold: oklch(0.74 0.088 68.72);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-shadow: var(--shadow);
+  --color-destructive: var(--destructive);
+  --font-display: "Cormorant Garamond", var(--font-lux), Georgia, serif;
+  --font-body: "Jost", var(--font-jost), system-ui, sans-serif;
+  --font-sans: var(--font-body);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.boutique h1,
+.boutique h2,
+.boutique h3 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+/* Win over the legacy global .font-display (Playfair) rule: inside the
+   boutique scope headlines use Cormorant Light per the cloned design.
+   Auth/admin surfaces keep Playfair — they are outside .boutique. */
+.boutique .font-display {
+  font-family: var(--font-display);
+}
+
+.boutique .tabular,
+.boutique time {
+  font-variant-numeric: tabular-nums;
+}
+
+.boutique :focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.boutique ::selection {
+  background-color: color-mix(in oklab, var(--brand) 22%, transparent);
+  color: var(--ink);
+}
+
+/* Warm blush + gold wash over cream */
+.boutique-page-bg {
+  background:
+    radial-gradient(55% 45% at 15% 5%, color-mix(in oklab, var(--blush) 54%, transparent), transparent 70%),
+    radial-gradient(50% 40% at 92% 85%, color-mix(in oklab, var(--gold) 35%, transparent), transparent 72%),
+    linear-gradient(180deg, oklch(0.97 0.017 74.33) 0%, oklch(0.92 0.025 65.44) 100%);
+}
+
+.glass-panel {
+  background-color: var(--glass);
+  box-shadow: 0 24px 80px -56px color-mix(in oklab, var(--brand) 24%, transparent);
+}
+
+.glass-panel-strong {
+  background-color: var(--glass-strong);
+  box-shadow: 0 24px 80px -56px color-mix(in oklab, var(--brand) 28%, transparent);
+}
+
+/* Cards: lift + soften shadow on hover, settle on press */
+.lift {
+  transition:
+    transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
+}
+.lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 32px 90px -50px color-mix(in oklab, var(--brand) 34%, transparent);
+}
+.lift:active {
+  transform: translateY(-1px);
+  transition-duration: 90ms;
+}
+
+/* Slow image zoom inside an overflow-hidden frame */
+.zoom-frame {
+  overflow: hidden;
+}
+.zoom-frame img {
+  transition: transform 420ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.zoom-frame:hover img,
+.zoom-frame:focus-visible img {
+  transform: scale(1.04);
+}
+
+/* Arrow nudge on hover */
+.nudge .nudge-target {
+  transition: transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.nudge:hover .nudge-target,
+.nudge:focus-visible .nudge-target {
+  transform: translateX(3px);
+}
+
+/* Animated underline for text links */
+.link-line {
+  position: relative;
+}
+.link-line::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.link-line:hover::after,
+.link-line:focus-visible::after {
+  transform: scaleX(1);
+}
+
+/* Entrance: content settles in once, staggered via --d.
+   JS-gated: SiteMotion adds .js to <html> and .is-in on intersection,
+   so without JS (or with IO unsupported) everything stays visible. */
+.js .reveal {
+  opacity: 0;
+}
+.js .reveal.is-in {
+  animation: reveal-in 600ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal,
+  .js .reveal.is-in {
+    opacity: 1;
+    animation: none;
+  }
+  .zoom-frame img,
+  .lift,
+  .nudge .nudge-target,
+  .link-line::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Coarse pointers: keep layout calm, kill hover zoom/lift */
+@media (pointer: coarse) {
+  .boutique .lift:hover {
+    transform: none;
+  }
+  .boutique .zoom-frame:hover img {
+    transform: none;
   }
 }
