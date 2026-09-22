@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, type AuthContext } from "@/lib/authz";
 import { isManagerRole } from "@/lib/policy";
+import { formatPhoneIN, isValidPhoneIN, normalizePhone } from "@/lib/phone";
 import { canTransition, getTimeline, toDTO, type VisitRow } from "./repository";
 
 /* Start of the current day in IST (store timezone) — "today" for the
@@ -88,6 +89,62 @@ export async function attachCustomerToVisit(auth: AuthContext, visitId: string, 
 
   const [dto] = await enrichVisits(supabase, [updated as VisitRow]);
   return dto;
+}
+
+/* createCustomerAndAttach: the "no record" path as ONE atomic write.
+    Replaces the old three-call client orchestration (create customer →
+    attach → bump count) that could mint an orphaned customer row when the
+    attach failed. The SQL function locks the visit FOR UPDATE, inserts the
+    customer, links it, writes CUSTOMER_ATTACHED and bumps the first-visit
+    counter — all in one transaction. Returns the new customer plus the
+    enriched visit so the UI updates both caches from a single response. */
+export async function createCustomerAndAttach(
+  auth: AuthContext,
+  visitId: string,
+  input: { name: string; phone: string; source?: string; area?: string; budget?: string },
+) {
+  const cleanName = input.name.trim();
+  if (cleanName.length < 2) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Name required", 422);
+  }
+  // A name that is only digits is the searched mobile leaking in — reject it
+  // rather than registering a customer named after their phone number.
+  if (/^\d+$/.test(cleanName)) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Name must contain letters", 422);
+  }
+  const norm = normalizePhone(input.phone);
+  if (!isValidPhoneIN(input.phone)) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_PHONE, "Enter a valid 10-digit mobile number", 422);
+  }
+
+  const supabase = await createClient();
+  const { data: customer, error } = await supabase.rpc("create_customer_and_attach", {
+    p_visit_id: visitId,
+    p_name: cleanName,
+    p_phone: norm,
+    p_source: input.source?.trim() || "Walk-in",
+    p_area: input.area?.trim() || null,
+    p_budget: input.budget?.trim() || null,
+    p_actor: auth.userId,
+  });
+  if (error || !customer) {
+    const msg = String(error?.message ?? "");
+    if (error?.code === "23505" || msg.includes("duplicate key")) {
+      throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_ALREADY_EXISTS, "Phone already registered", 409);
+    }
+    if (msg.includes("VISIT_NOT_FOUND")) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+    if (msg.includes("VISIT_ALREADY_COMPLETED")) throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit already closed", 422);
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not create the customer", 422);
+  }
+
+  // Re-read the visit so the caller gets the enriched DTO (customerName, fcName).
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  const [dto] = await enrichVisits(supabase, [visit as VisitRow]);
+  const c = customer as { id: string; name: string; mobile: string };
+  return {
+    customer: { id: c.id, name: c.name, phone: formatPhoneIN(c.mobile) },
+    visit: dto,
+  };
 }
 
 export async function getVisit(auth: AuthContext, visitId: string) {

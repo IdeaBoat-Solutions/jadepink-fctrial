@@ -9,7 +9,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { formatMobileIN, normalizeMobile } from "@/lib/domain";
 import {
   type CustomerSnapshotLive, type SalespersonLive, type StaffProfile, type VisitLive,
-  assignFC, attachCustomer, cancelVisit, completeVisit, createCustomer, createWalkIn,
+  assignFC, attachCustomer, cancelVisit, completeVisit, createCustomer, createCustomerAndAttach, createWalkIn,
   getCustomerById, getMe, listActiveVisits, listSalespersons, searchCustomerByPhone, searchCustomersByName, startVisit,
   updateCustomerRecord, deleteCustomerRecord, deleteVisitRecord,
 } from "@/lib/api";
@@ -48,6 +48,8 @@ interface StoreCtx {
   updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string; tier: string | null } } | { ok: false; code: string; message?: string }>;
   deleteCustomer: (id: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
   attachCustomerToVisit: (visitId: string, customerId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
+  /** Atomic create-customer + attach-to-visit. One round trip, no orphaned record. */
+  createCustomerAndAttach: (visitId: string, input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive; visit: VisitLive } | { ok: false; code: string; message?: string }>;
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   completeVisit: (visitId: string) => Promise<boolean>;
@@ -288,6 +290,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const };
   }, []);
 
+  /* Atomic create + attach. One API call mints the customer AND links it to the
+     visit, so there is no window where an orphaned customer exists. Updates both
+     caches (customers + visits) from the single response. */
+  const createCustomerAndAttachOp = useCallback(async (visitId: string, input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => {
+    const r = await createCustomerAndAttach(visitId, { name: input.name, phone: input.mobile, source: input.source, area: input.area, budget: input.budget });
+    if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
+    const { customer: c, visit } = r.data;
+    setCustomers((prev) => [
+      {
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        visitCount: 1,
+        lastVisitAt: visit.arrivedAt,
+        purchaseCount: 0,
+        displayMobile: formatMobileIN(c.phone),
+        visitsCount: 1,
+        purchasesCount: 0,
+        tier: null,
+      },
+      ...prev.filter((x) => x.id !== c.id),
+    ]);
+    setVisits((prev) => prev.map((v) => (v.id === visitId ? visit : v)));
+    return {
+      ok: true as const,
+      customer: { id: c.id, name: c.name, phone: c.phone, visitCount: 1, lastVisitAt: visit.arrivedAt, purchaseCount: 0, tier: null },
+      visit,
+    };
+  }, []);
+
   const assignOp = useCallback(async (visitId: string, spId: string) => {
     const prev = visits.find((v) => v.id === visitId);
     // Optimistic: show the assignment immediately (§7). Promote ARRIVED too —
@@ -378,6 +410,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     updateCustomer: updateCustomerOp,
     deleteCustomer: deleteCustomerOp,
     attachCustomerToVisit: attachCustomerOp,
+    createCustomerAndAttach: createCustomerAndAttachOp,
     assignSalesperson: assignOp,
     startVisit: startVisitOp,
     completeVisit: completeVisitOp,

@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { HistoryLayers } from "@/components/ops";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
-import { formatMobileIN, isValidMobileIN, normalizeMobile, normalizeName } from "@/lib/domain";
-import { getVisitTimeline, type CustomerSnapshotLive, type VisitLive, type VisitTimelineEventLive } from "@/lib/api";
+import { useCustomerSearch } from "@/features/customers/use-customer-search";
+import { createCustomerSchema } from "@/features/customers/schemas";
+import { formatMobileIN, normalizeMobile } from "@/lib/domain";
+import { getVisitTimeline, type VisitLive, type VisitTimelineEventLive } from "@/lib/api";
 import { canAssignOthers, canReassignVisit } from "@/lib/policy";
 import { roundRobinNext } from "@/lib/round-robin";
 import { clockTime, formatDateIN } from "@/lib/utils";
@@ -408,15 +409,15 @@ function ArrivalFlow({
   onAssign: () => void;
 }) {
   const store = useStore();
-  const [query, setQuery] = useState("");
-  const [phone, setPhone] = useState("");
-  const [results, setResults] = useState<CustomerSnapshotLive[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [err, setErr] = useState<{ title: string; body: string } | null>(null);
-  const [, setCreating] = useState(false);
+  const {
+    query, setQuery, results, searching, searched, submitted, error,
+    search, reset, prefillMobile, prefillName,
+  } = useCustomerSearch();
+  const showCreateForm = submitted && searched && results.length === 0;
+
+  // Create-form fields (the search box + its async state live in the hook).
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [area, setArea] = useState("");
   /* No fabricated default: budget stays unset ("Not asked") unless the FC
      actually asks. The old ₹5–15k default stamped a guess onto records. */
@@ -428,6 +429,22 @@ function ArrivalFlow({
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  // Local errors for create/attach/start; search errors come from the hook.
+  const [err, setErr] = useState<{ title: string; body: string } | null>(null);
+
+  /* Seed the create form from the searched query the moment it appears, so the
+     FC never re-types the number they just searched. Re-seeds on each fresh
+     "no record" result. */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (showCreateForm && !seeded.current) {
+      seeded.current = true;
+      setName(prefillName);
+      setPhone(prefillMobile);
+      setArea("");
+    }
+    if (!showCreateForm) seeded.current = false;
+  }, [showCreateForm, prefillName, prefillMobile]);
 
   /* Registered FCs with live load — the whole roster shows for every role,
      the create-form dropdown included. Moving another FC's active visit
@@ -443,90 +460,6 @@ function ArrivalFlow({
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const ready = !!visit.customerId && !!visit.assignedSalespersonId;
 
-  /* One lookup — name or mobile in a single field. Digits hit the mobile
-     index, letters hit name search, and every match shows its mobile inline
-     so same names are told apart on the spot. Quiet mode powers the
-     type-as-you-go suggestions: no error flashes, no create form — the
-     explicit Search tap owns those.
-
-     Race guard: a quiet (type-ahead) lookup that fires just after the
-     Search tap must never supersede it. The debounce timer runs 260ms
-     behind the keystroke, so it can start AFTER the explicit call and win
-     searchReq — the explicit call then aborts as "stale" and the create
-     form renders with no name/mobile prefilled. An explicit search owns
-     the screen until it resolves; quiet calls made while one is in flight
-     are dropped. */
-  const searchReq = useRef(0);
-  const explicitInFlight = useRef(false);
-  const runLookup = async (raw: string, opts?: { quiet?: boolean }) => {
-    const q = raw.trim();
-    const d = normalizeMobile(q);
-    const hasLetters = /[a-zA-Z\u0900-\u097F]/.test(q);
-    if (q.length < 2 && d.length < 3) {
-      setResults([]);
-      setSearched(false);
-      return;
-    }
-    if (opts?.quiet && explicitInFlight.current) return; // an explicit Search owns the screen
-    const my = ++searchReq.current;
-    if (!opts?.quiet) explicitInFlight.current = true;
-    setSearching(true);
-    if (!opts?.quiet) setErr(null);
-    try {
-      const [mobileHit, nameList] = await Promise.all([
-        d.length >= 3 ? store.searchCustomer(q) : Promise.resolve(null),
-        hasLetters || d.length < 6 ? store.searchCustomersByName(q) : Promise.resolve([]),
-      ]);
-      if (my !== searchReq.current) return; // a newer keystroke won
-      const combined = [...(mobileHit ? [mobileHit] : []), ...nameList.filter((c) => c.id !== mobileHit?.id)];
-      setResults(combined);
-      setSearched(true);
-      if (!opts?.quiet) {
-        if (combined.length === 0) {
-          setCreating(true);
-          setName(hasLetters ? q : "");
-          setPhone(d || "");
-          setArea("");
-        } else {
-          setCreating(false);
-        }
-      }
-    } catch {
-      if (my !== searchReq.current) return;
-      if (!opts?.quiet) {
-        setErr({ title: "Search didn't go through.", body: "Check your connection and try again." });
-      }
-    } finally {
-      if (my === searchReq.current) {
-        setSearching(false);
-        if (!opts?.quiet) explicitInFlight.current = false;
-      }
-    }
-  };
-
-  /* Suggest while they type (debounced) — the list narrows with every
-     letter instead of waiting for Search. State only changes inside the
-     timer callback, never the effect body. */
-  useEffect(() => {
-    const q = query;
-    const t = window.setTimeout(() => {
-      void runLookup(q, { quiet: true });
-    }, 260);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runLookup is per-render; the timer serializes calls
-  }, [query]);
-
-  const search = async () => {
-    const q = query.trim();
-    const d = normalizeMobile(q);
-    if (q.length < 2 && d.length < 3) {
-      setErr({ title: "Type a name or mobile number.", body: "2+ letters for a name, or the 10-digit mobile number." });
-      return;
-    }
-    setSubmitted(true);
-    await runLookup(q);
-  };
-
   const attach = async (id: string, label: string): Promise<boolean> => {
     setAttaching(true);
     const r = await store.attachCustomerToVisit(visit.id, id);
@@ -536,35 +469,42 @@ function ArrivalFlow({
       return false;
     }
     store.pushToast("Customer attached", label);
-    setCreating(false);
+    reset();
     return true;
   };
 
   const create = async () => {
-    /* The searched text may be a mobile number — it must never become the
-       customer's name. Only a lettered query can stand in for an empty
-       name field (the operator searched by name and the field lost it). */
-    const cleanName = normalizeName(name || (/[a-zA-Z\u0900-\u097F]/.test(query) ? query : ""));
-    if (!cleanName) { setErr({ title: "Name is required.", body: "Enter the customer's name — the mobile tells same names apart." }); return; }
-    if (cleanName.length < 2) { setErr({ title: "Name is required.", body: "Enter the customer's name — one name is enough; the mobile tells same names apart." }); return; }
-    const mobile = normalizeMobile(phone);
-    if (!isValidMobileIN(mobile)) { setErr({ title: "Enter a valid 10-digit mobile number.", body: "The number is the lookup key — it must be exact." }); return; }
-    setSaving(true);
-    setErr(null);
-    const r = await store.createCustomer({
-      name: cleanName,
-      mobile,
+    // Single source of truth: the zod schema validates exactly what the
+    // server enforces (name needs letters, phone must be a valid IN mobile).
+    const parsed = createCustomerSchema.safeParse({
+      name,
+      phone,
       source,
       area: area.trim() || undefined,
       budget: budget || undefined,
     });
+    if (!parsed.success) {
+      const msg = parsed.error.issues[0]?.message ?? "Check the name and number and try again.";
+      setErr({ title: /mobile|phone/i.test(msg) ? "Enter a valid 10-digit mobile number." : "Name is required.", body: msg });
+      return;
+    }
+    const mobile = parsed.data.phone;
+    setSaving(true);
+    setErr(null);
+    /* One atomic call: the customer is created AND attached to this visit in a
+       single transaction. There is no orphaned-record path — either both land
+       or neither does. On a duplicate (registered after our search showed "no
+       record", or a double tap) resolve the existing record and attach it —
+       never strand the FC on a dead-end error mid-visit. */
+    const r = await store.createCustomerAndAttach(visit.id, {
+      name: parsed.data.name,
+      mobile,
+      source: parsed.data.source ?? source,
+      area: parsed.data.area ?? undefined,
+      budget: parsed.data.budget ?? undefined,
+    });
     setSaving(false);
-    /* Duplicate (registered after our search showed "no record", or a double
-       tap): resolve the existing record and continue with it — the same
-       recovery the directory's create card offers. Never strand the FC on a
-       dead-end error mid-visit. */
-    const isNew = r.ok;
-    let target: { id: string; name: string } | null = r.ok ? r.customer : null;
+    const target: { id: string; name: string } | null = r.ok ? r.customer : null;
     if (!r.ok) {
       if (r.code !== "CUSTOMER_ALREADY_EXISTS") {
         setErr({ title: "We couldn't create the customer.", body: r.message || "Check the number and try again." });
@@ -575,26 +515,20 @@ function ArrivalFlow({
         setErr({ title: "That mobile number is already registered.", body: "Search it above and continue with the existing customer." });
         return;
       }
-      target = found;
+      const attached = await attach(found.id, found.name);
+      if (!attached) return;
     }
-    if (!target) {
-      setErr({ title: "That mobile number is already registered.", body: "Search it above and continue with the existing customer." });
-      return;
-    }
-    /* Attach first: without it the visit means nothing. Never assign an FC
-       or toast success when the attach failed. */
-    const attached = await attach(target.id, target.name);
-    if (!attached) return;
+    if (!target) return;
     if (fcId) {
       const a = await store.assignSalesperson(visit.id, fcId);
       const fcName = store.salespeople.find((s) => s.id === fcId)?.name;
       store.pushToast(
-        a.ok ? (isNew ? "Customer created" : "Existing customer attached") : "Customer created — FC not assigned",
+        a.ok ? (r.ok ? "Customer created" : "Existing customer attached") : "Customer created — FC not assigned",
         a.ok ? `${target.name} is with ${fcName ?? "the FC"}.` : (a.message || "Pick the FC on the next step."),
       );
       return;
     }
-    store.pushToast(isNew ? "Customer created" : "Existing customer attached", `${target.name} is on this visit.`);
+    store.pushToast(r.ok ? "Customer created" : "Existing customer attached", `${target.name} is on this visit.`);
   };
 
   const start = async () => {
@@ -622,7 +556,7 @@ function ArrivalFlow({
                 <input
                   id="lookup-q"
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setSubmitted(false); setErr(null); }}
+                  onChange={(e) => { setQuery(e.target.value); setErr(null); }}
                   onPaste={(e) => {
                     const text = e.clipboardData.getData("text");
                     if (text && /[0-9]/.test(text)) { e.preventDefault(); setQuery(normalizeMobile(text)); }
@@ -638,7 +572,7 @@ function ArrivalFlow({
               </Btn>
             </form>
             <p className="mt-1.5 text-[12.5px] text-[var(--fp-muted)]">Same names are common — every match shows its mobile.</p>
-            {err && <div className="mt-4"><ErrorNote title={err.title} body={err.body} /></div>}
+            {(error ?? err) && <div className="mt-4"><ErrorNote title={(error ?? err)!.title} body={(error ?? err)!.body} /></div>}
 
             {searched && results.length > 0 && (() => {
               /* Same-name rows bifurcate on mobile — count them so ambiguous
@@ -675,7 +609,7 @@ function ArrivalFlow({
               );
             })()}
 
-            {submitted && searched && results.length === 0 && (
+            {showCreateForm && (
               <form className="fp-rise mt-5 max-w-md" onSubmit={(e) => { e.preventDefault(); void create(); }}>
                 <h3 className="text-[16px] font-semibold">New customer captured</h3>
                 <p className="mt-1 text-[13.5px] text-[var(--fp-muted)]">
@@ -714,28 +648,22 @@ function ArrivalFlow({
                       </select>
                     </Field>
                   </div>
-                  <Field label="Serving FC" hint="Registered salesperson — optional, skips the assign step.">
-                    <Select value={fcId || undefined} onValueChange={(v) => setFcId(v)}>
-                      <SelectTrigger id="nc-fc" aria-label="Serving FC" className="w-full">
-                        <SelectValue placeholder="Select FC…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fcRoster.length === 0 && (
-                          <SelectItem value="none" disabled>
-                            No FCs available
-                          </SelectItem>
-                        )}
-                        {fcRoster.map((sp) => {
-                          const n = fcLoad.get(sp.id) ?? 0;
-                          return (
-                            <SelectItem key={sp.id} value={sp.id} className="min-h-[40px] text-[14px]">
-                              {sp.name}{sp.id === store.user?.id ? " (you)" : ""}
-                              <span className="text-[12px] text-muted-foreground">· {n === 0 ? "free now" : `${n} active`}</span>
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
+                  <Field label="Serving FC" htmlFor="nc-fc" hint="Registered salesperson — optional, skips the assign step.">
+                    {/* Native select: Radix portals its list to document.body and
+                        aria-hides the page while open, which trips Chrome's
+                        "Blocked aria-hidden ... descendant retained focus" warning. */}
+                    <select id="nc-fc" aria-label="Serving FC" value={fcId} onChange={(e) => setFcId(e.target.value)} className={inputClass}>
+                      <option value="">Select FC…</option>
+                      {fcRoster.length === 0 && <option value="none" disabled>No FCs available</option>}
+                      {fcRoster.map((sp) => {
+                        const n = fcLoad.get(sp.id) ?? 0;
+                        return (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name}{sp.id === store.user?.id ? " (you)" : ""} · {n === 0 ? "free now" : `${n} active`}
+                          </option>
+                        );
+                      })}
+                    </select>
                   </Field>
                   <Btn type="submit" tone="brand" disabled={saving}>{saving ? "Creating…" : "Create customer"}</Btn>
                 </div>

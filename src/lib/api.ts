@@ -204,6 +204,22 @@ export const createCustomer = (input: { name: string; phone: string; source?: st
     body: JSON.stringify(input),
   });
 
+/* Atomic create-customer-and-attach-to-visit. One round trip, one transaction:
+   no orphaned customer record when the attach would have failed. */
+export interface CreatedCustomerAndVisit {
+  customer: { id: string; name: string; phone: string };
+  visit: VisitLive;
+}
+
+export const createCustomerAndAttach = (
+  visitId: string,
+  input: { name: string; phone: string; source?: string; area?: string; budget?: string },
+) =>
+  call<CreatedCustomerAndVisit>(`/api/visits/${encodeURIComponent(visitId)}/customer`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
 export interface UpdatedCustomer {
   id: string;
   name: string;

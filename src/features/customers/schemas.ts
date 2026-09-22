@@ -1,14 +1,38 @@
 import { z } from "zod";
 import { normalizeName } from "@/lib/domain";
+import { isValidPhoneIN, normalizePhone } from "@/lib/phone";
+
+/* Single source of truth for customer validation — client AND server.
+   Both create surfaces (the visit identify form and the directory card)
+   safeParse with this schema before calling the store, so the rules can
+   never drift apart again. */
+
+// A name that is only digits is a searched mobile leaking into the name
+// field — reject it rather than registering a customer named after their
+// phone number.
+const customerName = z
+  .string()
+  .trim()
+  .min(2, "Name needs at least 2 characters")
+  .max(120)
+  .transform((v) => normalizeName(v))
+  .refine((v) => /[a-zA-Z\u0900-\u097F]/.test(v), {
+    message: "Name must contain letters — a mobile number is not a name",
+  });
+
+const customerPhone = z
+  .string()
+  .trim()
+  .min(7, "Phone required")
+  .max(20)
+  .transform((v) => normalizePhone(v))
+  .refine((v) => isValidPhoneIN(v), {
+    message: "Enter a valid 10-digit mobile number",
+  });
 
 export const createCustomerSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "Name needs at least 2 characters")
-    .max(120)
-    .transform((v) => normalizeName(v)),
-  phone: z.string().min(7, "Phone required").max(20),
+  name: customerName,
+  phone: customerPhone,
   email: z.string().trim().email().optional().or(z.literal("").transform(() => undefined)),
   city: z.string().trim().max(80).optional(),
   area: z.string().trim().max(80).optional(),

@@ -6,7 +6,6 @@ import type { CustomerSnapshotLive, PastVisitHistoryLive } from "@/lib/api";
 import { getCustomerHistory } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
 
 /* Shared Stage 2 components over the LIVE visit model (VisitLive /
@@ -165,10 +164,9 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
   }
   const assigned = salespeople.find((s) => s.id === currentSpId);
 
-  // Radix fires onValueChange only on a deliberate pick (never on browse), so
-  // selecting a name assigns straight away — no separate confirm tap.
+  // Selecting a name assigns straight away — no separate confirm tap.
   const pick = async (spId: string) => {
-    if (saving || spId === currentSpId) return;
+    if (!spId || saving || spId === currentSpId) return;
     setSaving(true);
     if (onAssign) {
       await onAssign(visitId, spId);
@@ -181,38 +179,32 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
     setSaving(false);
   };
 
-  const dot = (n: number) => cn("size-1.5 shrink-0 rounded-full", n === 0 ? "bg-[#177245]" : "bg-[#8a6424]");
-
+  /* Native <select>: the previous Radix dropdown portals its list to
+     document.body and applies aria-hidden to the whole page while open. The
+     trigger keeps DOM focus inside that hidden ancestor for a frame, which
+     Chrome reports as "Blocked aria-hidden ... descendant retained focus".
+     A native picker never hides its ancestors, keeps focus valid, and is a
+     better touch/screen-reader control for a short FC roster. */
   return (
-    <Select value={currentSpId ?? undefined} onValueChange={(v) => void pick(v)} disabled={saving}>
-      <SelectTrigger
-        aria-label="Assign FC"
-        className="min-h-[44px] w-full rounded-lg border-[#d6c9bb] bg-white px-3 text-[14px] font-medium text-[#1c1917] data-[size=default]:h-auto"
-      >
-        {saving ? (
-          <span className="text-[#78716c]">Assigning…</span>
-        ) : assigned ? (
-          <span className="flex items-center gap-2">
-            <span aria-hidden className={dot(load.get(assigned.id) ?? 0)} />
-            {assigned.name}{user.id === assigned.id ? " (you)" : ""}
-          </span>
-        ) : (
-          <span className="text-[#78716c]">Pick FC…</span>
-        )}
-      </SelectTrigger>
-      <SelectContent>
-        {salespeople.map((sp) => {
-          const n = load.get(sp.id) ?? 0;
-          return (
-            <SelectItem key={sp.id} value={sp.id} className="min-h-[40px] text-[14px]">
-              <span aria-hidden className={dot(n)} />
-              {sp.name}{user.id === sp.id ? " (you)" : ""}
-              <span className="text-[12px] text-muted-foreground">· {n === 0 ? "Available" : `${n} active`}</span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
+    <select
+      value={currentSpId ?? ""}
+      onChange={(e) => void pick(e.target.value)}
+      disabled={saving}
+      aria-label="Assign FC"
+      className="min-h-[44px] w-full rounded-lg border border-[#d6c9bb] bg-white px-3 text-[14px] font-medium text-[#1c1917] disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <option value="" disabled={!!currentSpId}>
+        {saving ? "Assigning…" : assigned ? `${assigned.name}${user.id === assigned.id ? " (you)" : ""}` : "Pick FC…"}
+      </option>
+      {salespeople.map((sp) => {
+        const n = load.get(sp.id) ?? 0;
+        return (
+          <option key={sp.id} value={sp.id}>
+            {sp.name}{user.id === sp.id ? " (you)" : ""} · {n === 0 ? "Available" : `${n} active`}
+          </option>
+        );
+      })}
+    </select>
   );
 }
 

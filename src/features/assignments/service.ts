@@ -76,13 +76,6 @@ export async function assignSalesperson(auth: AuthContext, visitId: string, sale
   return toDTO(updated as VisitRow);
 }
 
-export async function reassignSalesperson(auth: AuthContext, visitId: string, salespersonId: string) {
-  if (!canReassignVisit(auth.role)) {
-    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only managers reassign active visits", 403);
-  }
-  return assignSalesperson(auth, visitId, salespersonId);
-}
-
 /* Available FCs: active, same store. Load balancing stays in UI (fewest active visits).
    Reads the owner-privileged v_salespeople view, NOT staff_profiles directly:
    staff_profiles RLS lets an FC read only their own row, so querying the base

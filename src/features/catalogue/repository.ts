@@ -170,20 +170,6 @@ export async function getProduct(id: string): Promise<Product | undefined> {
   return data ? mapProduct(data as unknown as Joined<ProductRow>) : undefined;
 }
 
-/** Search for the order-creation picker. Bounded: never returns the whole catalogue. */
-export async function searchProducts(term: string, limit = 25): Promise<Product[]> {
-  const q = term.trim();
-  if (q.length < 2) return [];
-  const supabase = await createClient();
-  const safe = q.replace(/[,%()]/g, "");
-  const { data } = await supabase
-    .from("products")
-    .select(`${PRODUCT_SELECT}, categories(id, name), suppliers(id, name)`)
-    .or(`name.ilike.%${safe}%,sku.ilike.%${safe}%,barcode.eq.${safe}`)
-    .limit(limit);
-  return (data ?? []).map((r) => mapProduct(r as unknown as Joined<ProductRow>));
-}
-
 /* ---------- Categories + suppliers (counts derived, never stored) ---------- */
 
 export async function listCategories(): Promise<Category[]> {
@@ -203,15 +189,6 @@ export async function listCategories(): Promise<Category[]> {
     slug: (c.slug as string) ?? "",
     productCount: byId.get(c.id as string) ?? 0,
   }));
-}
-
-/** Suppliers are numerous (one per party in the client's export); the dashboard
-   only needs the count, so this asks for a head count instead of the rows. */
-export async function countSuppliers(): Promise<number> {
-  const supabase = await createClient();
-  const { count, error } = await supabase.from("suppliers").select("id", { count: "exact", head: true });
-  if (error) throw new Error(error.message);
-  return count ?? 0;
 }
 
 export async function listSuppliers(): Promise<Supplier[]> {

@@ -897,12 +897,19 @@ export function FloorBoard({
                   card={card}
                   busy={busy}
                   onOpen={() => setDetail(card)}
-                  onStart={() => void run(`start-${card.id}`, () => callApi(visitId, "start-trial", { visitProductId: card.id }), { title: "Trial started", body: card.product.name })}
-                  onComplete={() => void run(`complete-${card.id}`, () => callApi(visitId, "complete-trial", { visitProductId: card.id }), { title: "Trial completed", body: "Like it, or record why it was dropped." })}
+                  onTrial={() => {
+                    // One Trial button: tap to start, tap again to complete,
+                    // tap on a completed trial reopens it (customer tries again).
+                    if (card.status === "SELECTED") {
+                      void run(`start-${card.id}`, () => callApi(visitId, "start-trial", { visitProductId: card.id }), { title: "Trial started", body: card.product.name });
+                    } else if (card.status === "TRIAL_IN_PROGRESS") {
+                      void run(`complete-${card.id}`, () => callApi(visitId, "complete-trial", { visitProductId: card.id }), { title: "Trial completed", body: "Like it, or record why it was dropped." });
+                    } else if (card.status === "TRIAL_COMPLETED") {
+                      void run(`reopen-${card.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: card.id }), { title: "Trial reopened", body: card.product.name });
+                    }
+                  }}
                   onLike={() => void run(`like-${card.id}`, () => callApi(visitId, "like", { visitProductId: card.id }), { title: "Liked", body: card.product.name })}
                   onUnlike={() => void run(`unlike-${card.id}`, () => callApi(visitId, "unlike", { visitProductId: card.id }), { title: "Like removed", body: `${card.product.name} is back where it was.` })}
-                  onReopen={() => void run(`reopen-${card.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: card.id }), { title: "Trial reopened", body: card.product.name })}
-                  onCancelTrial={() => void run(`canceltrial-${card.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: card.id }), { title: "Trial cancelled", body: `${card.product.name} is back on selected.` })}
                   onDrop={() => { openDrop(card); }}
                   onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
@@ -1187,7 +1194,7 @@ export function FloorBoard({
           <div className="mt-5 flex flex-wrap gap-2">
             {detail.status === "SELECTED" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`start-${detail.id}`, () => callApi(visitId, "start-trial", { visitProductId: detail.id }), { title: "Trial started", body: detail.product.name })}>Start trial</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`start-${detail.id}`, () => callApi(visitId, "start-trial", { visitProductId: detail.id }), { title: "Trial started", body: detail.product.name })}>Trial</ConsoleBtn>
                 <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
                 <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
                 <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
@@ -1195,10 +1202,9 @@ export function FloorBoard({
             )}
             {detail.status === "TRIAL_IN_PROGRESS" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Complete trial</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Trial</ConsoleBtn>
                 <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
                 <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`canceltrial-${detail.id}`, () => callApi(visitId, "cancel-trial", { visitProductId: detail.id }), { title: "Trial cancelled", body: `${detail.product.name} is back on selected.` })}>Cancel trial</ConsoleBtn>
               </>
             )}
             {detail.status === "TRIAL_COMPLETED" && (
@@ -1206,7 +1212,7 @@ export function FloorBoard({
                 <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
                 <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
                 <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Reopen</ConsoleBtn>
+                <ConsoleBtn disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Trial</ConsoleBtn>
               </>
             )}
             {detail.status === "LIKED" && (
@@ -1581,18 +1587,15 @@ function ConsoleBtn({ children, onClick, disabled, type = "button" }: { children
 }
 
 function ProductRow({
-  card, busy, onOpen, onStart, onComplete, onLike, onUnlike, onReopen, onCancelTrial, onDrop, onUndrop, onBill,
+  card, busy, onOpen, onTrial, onLike, onUnlike, onDrop, onUndrop, onBill,
   selectable, checked, onToggle, readOnly,
 }: {
   card: ProductCardDTO;
   busy: string | null;
   onOpen: () => void;
-  onStart: () => void;
-  onComplete: () => void;
+  onTrial: () => void;
   onLike: () => void;
   onUnlike: () => void;
-  onReopen: () => void;
-  onCancelTrial: () => void;
   onDrop: () => void;
   onUndrop: () => void;
   onBill: () => void;
@@ -1671,7 +1674,7 @@ function ProductRow({
         )}
         {card.status === "SELECTED" && (
           <>
-            <ConsoleBtn disabled={busy === `start-${card.id}`} onClick={onStart}>
+            <ConsoleBtn disabled={busy === `start-${card.id}`} onClick={onTrial}>
               {busy === `start-${card.id}` ? "Starting…" : "Trial"}
             </ConsoleBtn>
             <ConsoleBtn disabled={busy === `like-${card.id}`} onClick={onLike}>
@@ -1684,14 +1687,11 @@ function ProductRow({
         {card.status === "TRIAL_IN_PROGRESS" && (
           <>
             <p className="mr-auto inline-flex items-center gap-1.5 text-[13px] text-[#57534e]">Client is currently trying this on</p>
-            <ConsoleBtn disabled={busy === `complete-${card.id}`} onClick={onComplete}>
-              {busy === `complete-${card.id}` ? "Saving…" : "Complete Trial"}
+            <ConsoleBtn disabled={busy === `complete-${card.id}`} onClick={onTrial}>
+              {busy === `complete-${card.id}` ? "Saving…" : "Trial"}
             </ConsoleBtn>
             <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
             <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
-            <ConsoleBtn disabled={busy === `canceltrial-${card.id}`} onClick={onCancelTrial}>
-              {busy === `canceltrial-${card.id}` ? "Saving…" : "Cancel trial"}
-            </ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_COMPLETED" && (
@@ -1701,8 +1701,8 @@ function ProductRow({
               {busy === `like-${card.id}` ? "Saving…" : "Like"}
             </ConsoleBtn>
             <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
-            <ConsoleBtn disabled={busy === `reopen-${card.id}`} onClick={onReopen}>
-              {busy === `reopen-${card.id}` ? "Saving…" : "Reopen"}
+            <ConsoleBtn disabled={busy === `reopen-${card.id}`} onClick={onTrial}>
+              {busy === `reopen-${card.id}` ? "Saving…" : "Trial"}
             </ConsoleBtn>
           </>
         )}
