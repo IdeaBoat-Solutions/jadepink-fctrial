@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Stage2Error, STAGE2_ERRORS } from "@/lib/errors";
 import { assertStoreAccess, type AuthContext } from "@/lib/authz";
+import { isManagerRole } from "@/lib/policy";
 import { canTransition, getTimeline, toDTO, type VisitRow } from "./repository";
 
 /* Start of the current day in IST (store timezone) — "today" for the
@@ -47,25 +48,15 @@ export async function createWalkIn(auth: AuthContext, storeId: string) {
   if (!store || !store.active) throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Store unavailable", 403);
   assertStoreAccess(auth, storeId);
 
-  const { data: created, error } = await supabase
-    .from("visits")
-    .insert({ store_id: storeId, status: "ARRIVED" })
-    .select("*")
-    .single();
+  // §23: visit (→IDENTIFYING) + WALK_IN_RECORDED event land in one
+  // transaction (create_walk_in RPC). No half-recorded arrival on failure.
+  const { data: created, error } = await supabase.rpc("create_walk_in", {
+    p_store_id: storeId,
+    p_actor: auth.userId,
+  });
   if (error || !created) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not record walk-in", 422);
 
-  await supabase.from("visit_events").insert({
-    visit_id: created.id, event_type: "WALK_IN_RECORDED", actor_id: auth.userId,
-    metadata: { store_id: storeId },
-  });
-  // ARRIVED → IDENTIFYING immediately: arrival recorded, identification begins.
-  const { data: moved } = await supabase
-    .from("visits")
-    .update({ status: "IDENTIFYING" })
-    .eq("id", created.id)
-    .select("*")
-    .single();
-  const [dto] = await enrichVisits(supabase, [(moved ?? created) as VisitRow]);
+  const [dto] = await enrichVisits(supabase, [created as VisitRow]);
   return dto;
 }
 
@@ -82,21 +73,17 @@ export async function attachCustomerToVisit(auth: AuthContext, visitId: string, 
   const { data: customer } = await supabase.from("customers").select("id").eq("id", customerId).single();
   if (!customer) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_NOT_FOUND, "Customer not found", 404);
 
-  const patch: Record<string, unknown> = { customer_id: customerId, identified_at: visit.identified_at ?? new Date().toISOString() };
-  if (visit.status === "ARRIVED") patch.status = "IDENTIFYING";
-  const { data: updated } = await supabase.from("visits").update(patch).eq("id", visitId).select("*").single();
-  await supabase.from("visit_events").insert({
-    visit_id: visitId, event_type: "CUSTOMER_ATTACHED", actor_id: auth.userId,
-    metadata: { customer_id: customerId, previous_customer_id: visit.customer_id ?? null },
+  // §23/§27: link customer + CUSTOMER_ATTACHED event + first-attach counter
+  // bump land atomically, with the visit row locked FOR UPDATE inside the
+  // function so two concurrent attaches can't both count as "first".
+  const { data: updated, error } = await supabase.rpc("attach_customer_to_visit", {
+    p_visit_id: visitId,
+    p_customer_id: customerId,
+    p_actor: auth.userId,
   });
+  if (error || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not attach customer", 422);
 
-  // First attach on this visit counts as a visit for the customer snapshot.
-  if (!visit.customer_id) {
-    const { data: cRow } = await supabase.from("customers").select("visits").eq("id", customerId).single();
-    await supabase.from("customers").update({ visits: (cRow?.visits ?? 0) + 1 }).eq("id", customerId);
-  }
-
-  const [dto] = await enrichVisits(supabase, [(updated ?? visit) as VisitRow]);
+  const [dto] = await enrichVisits(supabase, [updated as VisitRow]);
   return dto;
 }
 
@@ -215,6 +202,50 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
   });
   const [dto] = await enrichVisits(supabase, [(updated ?? visit) as VisitRow]);
   return dto;
+}
+
+/* deleteVisit: manager-only hard delete for mistaken visit records.
+   Completed visits stay on record, live (ACTIVE) visits must be ended
+   first, and any visit with products must be completed or ended — only an
+   empty arrival/assignment/cancelled shell deletes. visit_products and
+   visit_events cascade from the FK. */
+export async function deleteVisit(auth: AuthContext, visitId: string) {
+  if (!isManagerRole(auth.role)) {
+    throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "Only a manager can delete visits", 403);
+  }
+  const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  assertStoreAccess(auth, (visit as VisitRow).store_id);
+  const status = (visit as VisitRow).status;
+  if (status === "COMPLETED") {
+    throw new Stage2Error(
+      STAGE2_ERRORS.VISIT_NOT_DELETABLE,
+      "Completed visits stay on record — they back the sales history.",
+      409,
+    );
+  }
+  if (status === "ACTIVE") {
+    throw new Stage2Error(
+      STAGE2_ERRORS.VISIT_NOT_DELETABLE,
+      "This visit is live on the floor — complete it or end it first.",
+      409,
+    );
+  }
+  const { count: products } = await supabase
+    .from("visit_products")
+    .select("id", { count: "exact", head: true })
+    .eq("visit_id", visitId);
+  if ((products ?? 0) > 0) {
+    throw new Stage2Error(
+      STAGE2_ERRORS.VISIT_NOT_DELETABLE,
+      `This visit has ${products} product${products === 1 ? "" : "s"} on it — complete it or end it first.`,
+      409,
+    );
+  }
+  const { error } = await supabase.from("visits").delete().eq("id", visitId);
+  if (error) throw new Stage2Error(STAGE2_ERRORS.OPERATION_FAILED, "Could not delete the visit — check the connection and try again.");
+  return { id: visitId };
 }
 
 /* Fitting suites (mockup "Direct Assignment Target"). Stored on the visit;

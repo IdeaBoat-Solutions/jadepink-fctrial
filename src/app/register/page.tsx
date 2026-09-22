@@ -59,9 +59,9 @@ export default function RegisterPage() {
           </Link>
         </div>
         <div>
-          <h1 className="font-display mt-4 text-[52px] font-light leading-[1.04] tracking-tight">
+          <p className="font-display mt-4 text-[52px] font-light leading-[1.04] tracking-tight">
             Grow<br /><em className="font-light">the team.</em>
-          </h1>
+          </p>
           <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/70">
             Managers add new floor staff here. The new member signs in with
             their email and password — role decides what they can touch.
@@ -84,7 +84,7 @@ export default function RegisterPage() {
       <main className="flex flex-1 items-center justify-center bg-[#faf8f6] px-4 py-8 sm:px-6">
         <div className="w-full max-w-sm rounded-2xl border border-[#e8dfd6] bg-white p-5 sm:p-7">
           <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#78716c] lg:hidden">JadePink · Internal</p>
-          <h2 className="mt-1 text-[22px] font-semibold tracking-tight text-[#1c1917]">Register staff</h2>
+          <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-[#1c1917]">Register staff</h1>
           <p className="mt-1 text-[14px] text-[#78716c]">
             {me === null ? "Checking your session…" : me?.user ? `Signed in as ${me.profile?.name ?? me.user.email}` : "Managers only"}
           </p>
@@ -92,7 +92,7 @@ export default function RegisterPage() {
           {me !== null && !me.user && (
             <div className="mt-5 rounded-lg border border-dashed border-[#d6c9bb] bg-[#faf8f6] p-4 text-[13.5px] leading-relaxed text-[#57534e]">
               Sign in as a Store Manager first, then come back here.
-              <Link href="/login" className="mt-3 block text-center text-[14px] font-semibold text-[#b4234d] hover:underline">
+              <Link href="/login" className="mt-3 block text-center text-[14px] font-semibold text-[var(--staff-brand)] hover:underline">
                 Go to sign in →
               </Link>
             </div>
@@ -134,7 +134,7 @@ export default function RegisterPage() {
                       key={r} type="button" role="radio" aria-checked={role === r} onClick={() => setRole(r)}
                       className={cn(
                         "min-h-[52px] rounded-lg border px-3 text-left transition-colors",
-                        role === r ? "border-[#b4234d] bg-[#fdf0f4]" : "border-[#d6c9bb] bg-white hover:border-[#1c1917]"
+                        role === r ? "border-[var(--staff-brand)] bg-[#fdf0f4]" : "border-[#d6c9bb] bg-white hover:border-[#1c1917]"
                       )}
                     >
                       <span className="block text-[14px] font-semibold">{r === "FC" ? "Salesperson" : "Manager"}</span>

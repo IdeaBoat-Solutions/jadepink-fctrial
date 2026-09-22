@@ -41,8 +41,7 @@ function distinct(values: Array<string | null | undefined>): string[] {
 
 function ProductsInner() {
   const { user } = useStore();
-  /* Detail + Add live in the manager-only admin shell — FCs get the full
-     card details inline instead of a link that would bounce them to /today. */
+  /* Detail lives on /inventory/[id] for managers, /products/[id] for FCs. */
   const isManager = user?.role === "manager";
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -139,6 +138,10 @@ function ProductsInner() {
   const hasFilters =
     q !== "" || cat !== "all" || stock !== "all" || supplier !== "all" ||
     brand !== "all" || minPrice !== "" || maxPrice !== "";
+  const activeFilterCount =
+    (cat !== "all" ? 1 : 0) + (stock !== "all" ? 1 : 0) + (supplier !== "all" ? 1 : 0) +
+    (brand !== "all" ? 1 : 0) + (minPrice !== "" ? 1 : 0) + (maxPrice !== "" ? 1 : 0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const clearAll = () => {
     setQ(""); setCat("all"); setStock("all"); setSupplier("all");
     setBrand("all"); setMinPrice(""); setMaxPrice(""); setPage(1);
@@ -150,7 +153,7 @@ function ProductsInner() {
         kicker="Catalogue"
         title="Products"
         sub={`${filtered.length} styles · search, filter, open for full detail.`}
-        actions={isManager ? <Button className="group min-h-[44px] bg-[#b4234d] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[#93183d] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button> : undefined}
+        actions={isManager ? <Button className="group min-h-[44px] bg-[var(--fp-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--fp-brand-deep)] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button> : undefined}
       />
 
       <Card className="shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
@@ -161,14 +164,35 @@ function ProductsInner() {
               value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1); }}
               placeholder="Search name, SKU, barcode, brand, design…"
-              className="min-h-[48px] rounded-xl pl-10 transition-all focus:ring-4 focus:ring-[#b4234d]/10"
+              className="min-h-[48px] rounded-xl pl-10 transition-all focus:ring-4 focus:ring-[var(--staff-brand)]/10"
               aria-label="Search products"
             />
             {q && (
               <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[36px] w-9 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95">✕</button>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <div className="flex items-center gap-2 md:hidden">
+            <button
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              aria-controls="products-filters"
+              className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl border border-[#d6c9bb] bg-white px-4 text-[13.5px] font-semibold transition-colors hover:border-[#1c1917] active:scale-[0.98]"
+            >
+              {filtersOpen ? "Hide filters" : "Filters"}
+              {activeFilterCount > 0 && (
+                <span aria-label={`${activeFilterCount} filters active`} className="tnum grid min-h-[22px] min-w-[22px] place-items-center rounded-full bg-[#1c1917] px-1 text-[12px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+              <span aria-hidden className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`}>▾</span>
+            </button>
+            {activeFilterCount > 0 && (
+              <button onClick={clearAll} className="inline-flex min-h-[44px] items-center rounded-xl px-3 text-[13.5px] font-semibold text-[#78716c] hover:text-[#1c1917]">
+                Clear
+              </button>
+            )}
+          </div>
+          <div id="products-filters" className={`${filtersOpen ? "grid" : "hidden"} grid-cols-2 gap-2 md:grid md:grid-cols-3 xl:grid-cols-6`}>
             <Select value={cat} onValueChange={(v) => { setCat(v); setPage(1); }}>
               <SelectTrigger className="min-h-[48px] w-full rounded-xl" aria-label="Category"><SelectValue placeholder="Category" /></SelectTrigger>
               <SelectContent>
@@ -225,7 +249,7 @@ function ProductsInner() {
             </div>
           </div>
           {hasFilters && (
-            <button onClick={clearAll} className="inline-flex min-h-[44px] items-center self-start rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">
+            <button onClick={clearAll} className="hidden min-h-[44px] items-center self-start rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground md:inline-flex">
               Clear all filters
             </button>
           )}
@@ -297,9 +321,9 @@ function ProductsInner() {
                   {body}
                 </Link>
               ) : (
-                <article key={p.id} className={cls}>
+                <Link key={p.id} href={`/products/${p.id}`} className={cls} aria-label={`Open ${p.name} details`}>
                   {body}
-                </article>
+                </Link>
               );
             })}
           </div>

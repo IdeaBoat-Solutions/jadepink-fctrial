@@ -11,7 +11,7 @@ import {
   type CustomerSnapshotLive, type SalespersonLive, type StaffProfile, type VisitLive,
   assignFC, attachCustomer, cancelVisit, completeVisit, createCustomer, createWalkIn,
   getCustomerById, getMe, listActiveVisits, listSalespersons, searchCustomerByPhone, searchCustomersByName, startVisit,
-  updateCustomerRecord,
+  updateCustomerRecord, deleteCustomerRecord, deleteVisitRecord,
 } from "@/lib/api";
 
 export interface SessionUser { name: string; role: "fc" | "manager"; id: string; email?: string | null; }
@@ -46,11 +46,13 @@ interface StoreCtx {
   fetchCustomer: (id: string) => Promise<CustomerSnapshotLive | null>;
   createCustomer: (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
   updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string; tier: string | null } } | { ok: false; code: string; message?: string }>;
+  deleteCustomer: (id: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
   attachCustomerToVisit: (visitId: string, customerId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   completeVisit: (visitId: string) => Promise<boolean>;
   abandonVisit: (visitId: string) => Promise<void>;
+  deleteVisit: (visitId: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
   getVisit: (id: string) => VisitLive | undefined;
   getCustomer: (id: string) => LiveCustomer | undefined;
   activeVisits: VisitLive[];
@@ -139,7 +141,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const pushToast = useCallback((title: string, body?: string) => {
     const id = toastId.current++;
-    setToasts((t) => [...t, { id, title, body }]);
+    // Cap the stack: rapid scans must never bury the screen under toasts.
+    setToasts((t) => [...t.slice(-2), { id, title, body }]);
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4200);
   }, []);
 
@@ -263,6 +266,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const, customer: c };
   }, []);
 
+  const deleteCustomerOp = useCallback(async (id: string) => {
+    const r = await deleteCustomerRecord(id);
+    if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
+    setCustomers((prev) => prev.filter((x) => x.id !== id));
+    return { ok: true as const };
+  }, []);
+
   const attachCustomerOp = useCallback(async (visitId: string, customerId: string) => {
     const r = await attachCustomer(visitId, customerId);
     if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
@@ -315,6 +325,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setVisits(() => visits.filter((v) => v.id !== visitId));
   }, [visits, pushToast]);
 
+  const deleteVisitOp = useCallback(async (visitId: string) => {
+    const r = await deleteVisitRecord(visitId);
+    if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
+    setVisits((prev) => prev.filter((v) => v.id !== visitId));
+    return { ok: true as const };
+  }, []);
+
   /* ---------- Lookups ---------- */
 
   const getVisit = useCallback((id: string) => visits.find((v) => v.id === id), [visits]);
@@ -350,11 +367,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     fetchCustomer: fetchCustomerOp,
     createCustomer: createCustomerOp,
     updateCustomer: updateCustomerOp,
+    deleteCustomer: deleteCustomerOp,
     attachCustomerToVisit: attachCustomerOp,
     assignSalesperson: assignOp,
     startVisit: startVisitOp,
     completeVisit: completeVisitOp,
     abandonVisit: abandonVisitOp,
+    deleteVisit: deleteVisitOp,
     getVisit, getCustomer,
     activeVisits, awaitingAssignment, todayCounts,
   } as StoreCtx;

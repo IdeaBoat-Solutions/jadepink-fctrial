@@ -11,7 +11,7 @@ export default async function SuppliersPage() {
 
   return (
     <div className="staff-page">
-      <PageHeader kicker="Catalogue" title="Suppliers" sub={`${suppliers.length} sourcing partners · reorder + ratings.`} actions={<Button className="min-h-[44px] bg-[#b4234d] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[#93183d] active:translate-y-0">Add supplier</Button>} />
+      <PageHeader kicker="Catalogue" title="Suppliers" sub={`${suppliers.length} sourcing partners · reorder + ratings.`} actions={<Button className="min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0">Add supplier</Button>} />
 
       {!suppliers.length && (
         <Card>

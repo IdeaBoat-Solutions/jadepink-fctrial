@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { AccessNote, Btn, EmptyNote, StatusMark } from "@/components/floor/ui";
+import { AccessNote, Btn, EmptyNote } from "@/components/floor/ui";
+import { DeleteVisitButton, FCQuickAssign } from "@/components/ops";
 import { timeAgo } from "@/lib/utils";
 import type { FloorSummary } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
@@ -45,10 +46,17 @@ export default function FloorPage() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => void refresh(), 400);
     };
+    /* §31: narrow what wakes this board. `visits` carries store_id, so its
+       channel is filtered to this store — other stores' assigns/completes no
+       longer trigger a refetch here. `visit_products` has no store_id column
+       to filter on, so it stays broad; RLS still scopes the /floor refetch to
+       this store, so a cross-store product change only costs one wasted,
+       debounced refetch (never a data leak). Denormalizing store_id onto the
+       hot visit_products table to filter it too isn't worth the write cost. */
     const channel = supabase
       .channel(`floor-os:${storeId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "visit_products" }, fire)
-      .on("postgres_changes", { event: "*", schema: "public", table: "visits" }, fire)
+      .on("postgres_changes", { event: "*", schema: "public", table: "visits", filter: `store_id=eq.${storeId}` }, fire)
       .subscribe();
     return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(channel); };
   }, [storeId, refresh]);
@@ -86,13 +94,17 @@ export default function FloorPage() {
           <ul>
             {waiting.map((v) => (
               <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3.5">
-                <div>
+                <div className="min-w-0">
                   <p className="fp-name text-[24px] leading-none">{v.customerName || "Unidentified"}</p>
                   <p className="mt-1 text-[13px] text-[var(--fp-muted)]">Arrived {timeAgo(v.arrivedAt)} ago</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <StatusMark value="waiting" />
-                  <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-brand)] px-4 text-[14px] font-semibold text-white">Assign FC</Link>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {v.customerId ? (
+                    <div className="min-w-[220px]"><FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} /></div>
+                  ) : (
+                    <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-brand)] px-4 text-[14px] font-semibold text-white">Identify</Link>
+                  )}
+                  <DeleteVisitButton visitId={v.id} name={v.customerName || "Unidentified"} />
                 </div>
               </li>
             ))}

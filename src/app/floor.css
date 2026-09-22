@@ -6,7 +6,7 @@
   --fp-surface: #f7f5f1;
   --fp-ink: #1e1b17;
   --fp-muted: #6b645c;
-  --fp-faint: #978f86;
+  --fp-faint: #6e675f;
   --fp-line: #e3dbd2;
   --fp-line-strong: #cfc6bb;
   --fp-brand: #8e3a4e;
@@ -16,6 +16,8 @@
   --fp-ok-bg: #e7f3ec;
   --fp-wait: #8a6424;
   --fp-wait-bg: #f6eedc;
+  --fp-busy: #6f5a74;
+  --fp-busy-bg: #efe9f0;
   --fp-drop: #8c3e36;
   --fp-drop-bg: #f7ebe8;
   --fp-ink-soft: #f3f0eb;

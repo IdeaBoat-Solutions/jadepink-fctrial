@@ -9,7 +9,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 
 export function RevenueChart({ data }: { data: { day: string; revenue: number }[] }) {
   return (
-    <ChartContainer config={{ revenue: { label: "Revenue", color: "#b4234d" } }} className="h-[240px] w-full">
+    <ChartContainer config={{ revenue: { label: "Revenue", color: "var(--staff-brand)" } }} className="h-[240px] w-full">
       <BarChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -12 }}>
         <CartesianGrid vertical={false} />
         <XAxis dataKey="day" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={28} tick={{ fontSize: 11 }} />

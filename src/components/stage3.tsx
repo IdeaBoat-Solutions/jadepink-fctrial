@@ -4,7 +4,7 @@
    Product selection → trial → liked / dropped, on one active visit.
    Talks to the Stage 3 API (single source of truth: Supabase).
 
-   Design: the Stage 2 ops system — paper #faf8f6, ink #1c1917, brand #b4234d,
+   Design: the Stage 2 ops system — paper #faf8f6, ink #1c1917, brand #8e3a4e (var(--staff-brand)),
    44px+ touch targets, tnum numerals. Status is never colour-alone (label + dot). */
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -69,7 +69,7 @@ const STATUS_META: Record<ProductVisitStatus, { cls: string; dot: string }> = {
   TRIAL_COMPLETED: { cls: "bg-[#edf1f6] text-[#44566c] border-[#cbd5e1]", dot: "bg-[#44566c]" },
   LIKED: { cls: "bg-[#e6f4ec] text-[#177245] border-[#bfe3cd]", dot: "bg-[#177245]" },
   DROPPED: { cls: "bg-[#fdecec] text-[#7d1a1f] border-[#f0b6b9]", dot: "bg-[#b4232a]" },
-  PURCHASED: { cls: "bg-[#fbe9ef] text-[#8f1b3d] border-[#eec2cf]", dot: "bg-[#b4234d]" },
+  PURCHASED: { cls: "bg-[#fbe9ef] text-[#8f1b3d] border-[#eec2cf]", dot: "bg-[var(--staff-brand)]" },
 };
 
 function ProductStatusBadge({ status }: { status: ProductVisitStatus }) {
@@ -414,7 +414,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
                   {scanResult.product.product.category || "—"} · {scanResult.product.colour} · {scanResult.product.size} ·{" "}
                   <span className="tnum font-semibold text-[#1c1917]">{INR.format(scanResult.product.price)}</span>
                 </p>
-                <p className="mt-0.5 font-mono text-[12px] text-[#a8a29e]">{scanResult.product.sku}</p>
+                <p className="mt-0.5 font-mono text-[12px] text-[#76716b]">{scanResult.product.sku}</p>
               </div>
             </div>
             {scanResult.alreadyAdded ? (
@@ -442,7 +442,7 @@ export function Stage3TrialFlow({ visitId }: { visitId: string }) {
                       {c.product.category || "—"} · {c.colour} · {c.size} ·{" "}
                       <span className="tnum font-semibold text-[#1c1917]">{INR.format(c.price)}</span>
                     </p>
-                    <p className="mt-0.5 font-mono text-[12px] text-[#a8a29e]">{c.sku}</p>
+                    <p className="mt-0.5 font-mono text-[12px] text-[#76716b]">{c.sku}</p>
                   </div>
                 </div>
                 {c.alreadyAdded ? (
@@ -626,7 +626,7 @@ function ProductRow({ card, children, muted }: { card: ProductCardDTO; children?
           <p className="mt-1 text-[13px] leading-relaxed text-[#78716c]">
             {card.product.colour} · {card.product.size} · <span className="tnum font-semibold text-[#1c1917]">{INR.format(card.product.price)}</span>
           </p>
-          <p className="mt-0.5 font-mono text-[12px] text-[#a8a29e]">{card.product.sku}</p>
+          <p className="mt-0.5 font-mono text-[12px] text-[#76716b]">{card.product.sku}</p>
           {card.status === "DROPPED" && card.dropReason && (
             <p className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-lg bg-[#fdecec] px-2 py-1 text-[13px] font-medium text-[#7d1a1f]">
               Reason: {card.dropReason.label}
@@ -687,12 +687,12 @@ function DropReasonDialog({
             <label
               key={r.id}
               className={`flex min-h-[48px] cursor-pointer items-center gap-3 rounded-lg border px-3.5 text-[14.5px] font-medium transition-colors ${
-                reasonId === r.id ? "border-[#b4234d] bg-[#fbe9ef] text-[#1c1917]" : "border-[#e8dfd6] bg-white text-[#57534e] hover:border-[#a8a29e]"
+                reasonId === r.id ? "border-[var(--staff-brand)] bg-[#fbe9ef] text-[#1c1917]" : "border-[#e8dfd6] bg-white text-[#57534e] hover:border-[#a8a29e]"
               }`}
             >
               <input type="radio" name="drop-reason" value={r.id} checked={reasonId === r.id} onChange={() => onReason(r.id)} className="sr-only" />
-              <span aria-hidden className={`grid h-4 w-4 place-items-center rounded-full border ${reasonId === r.id ? "border-[#b4234d]" : "border-[#d6c9bb]"}`}>
-                {reasonId === r.id && <span className="h-2 w-2 rounded-full bg-[#b4234d]" />}
+              <span aria-hidden className={`grid h-4 w-4 place-items-center rounded-full border ${reasonId === r.id ? "border-[var(--staff-brand)]" : "border-[#d6c9bb]"}`}>
+                {reasonId === r.id && <span className="h-2 w-2 rounded-full bg-[var(--staff-brand)]" />}
               </span>
               {r.label}
             </label>
@@ -708,7 +708,7 @@ function DropReasonDialog({
                 rows={2}
                 maxLength={500}
                 placeholder="What didn’t work?"
-                className="mt-1 w-full rounded-lg border border-[#d6c9bb] bg-white px-3.5 py-2.5 text-[15px] text-[#1c1917] placeholder:text-[#a8a29e] focus:border-[#b4234d] focus:outline-none"
+                className="mt-1 w-full rounded-lg border border-[#d6c9bb] bg-white px-3.5 py-2.5 text-[15px] text-[#1c1917] placeholder:text-[#76716b] focus:border-[var(--staff-brand)] focus:outline-none"
               />
             </div>
           )}

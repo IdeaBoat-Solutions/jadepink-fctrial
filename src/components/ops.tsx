@@ -40,7 +40,7 @@ export function VisitHeader({ visit, customer, fcName }: { visit: VisitLive; cus
         : null;
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[#2a2724] bg-[#1c1917] px-5 py-4 text-white shadow-[0_16px_40px_-20px_rgba(28,25,23,0.7)] sm:px-6 sm:py-5">
-      <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 size-56 rounded-full bg-[#b4234d]/25 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 size-56 rounded-full bg-[var(--staff-brand)]/25 blur-3xl" />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
       <div className="relative flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
@@ -94,7 +94,7 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
           </p>
         </div>
         {!compact && (
-          <Link href={`/customers/${customer.id}`} className="shrink-0 text-[13.5px] font-semibold text-[#b4234d] underline-offset-2 hover:underline">
+          <Link href={`/customers/${customer.id}`} className="shrink-0 text-[13.5px] font-semibold text-[var(--staff-brand)] underline-offset-2 hover:underline">
             View history
           </Link>
         )}
@@ -393,6 +393,95 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
   );
 }
 
+/* ---------- Manager-only inline delete ----------
+   Two-step confirm, no drawer. The service refuses live, completed, or
+   product-bearing visits — that reason surfaces as a toast. On success the
+   store drops the visit and the row unmounts. */
+export function DeleteVisitButton({ visitId, name }: { visitId: string; name: string }) {
+  const { deleteVisit, pushToast } = useStore();
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const remove = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    const r = await deleteVisit(visitId);
+    setDeleting(false);
+    if (!r.ok) {
+      setConfirming(false);
+      pushToast("Could not delete visit", r.message || "This visit can't be deleted.");
+    }
+  };
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        aria-label={`Delete ${name}'s visit`}
+        className="inline-flex min-h-11 items-center rounded-lg border border-[#e4c4be] bg-[var(--fp-drop-bg)] px-3 text-[13px] font-semibold text-[var(--fp-drop)] hover:border-[var(--fp-drop)]"
+      >
+        Delete
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button onClick={() => void remove()} disabled={deleting} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-drop)] px-3 text-[13px] font-semibold text-white disabled:opacity-50">
+        {deleting ? "Deleting…" : "Confirm"}
+      </button>
+      <button onClick={() => setConfirming(false)} disabled={deleting} className="inline-flex min-h-11 items-center rounded-lg border border-[var(--fp-line-strong)] px-3 text-[13px] font-semibold text-[var(--fp-muted)]">
+        Keep
+      </button>
+    </span>
+  );
+}
+
+/* ---------- End visit (FC-side cancel) ----------
+   Two-step confirm. Any signed-in user on the visit's store may end it — the
+   service refuses only when liked/trialled pieces are still unbilled (bill or
+   drop them first). On success the store drops the visit and the row unmounts.
+   Unlike Delete this keeps the record (CANCELLED) so history stays intact. */
+export function EndVisitButton({ visitId, name, className }: { visitId: string; name: string; className?: string }) {
+  const { abandonVisit } = useStore();
+  const [confirming, setConfirming] = useState(false);
+  const [ending, setEnding] = useState(false);
+
+  const end = async () => {
+    if (ending) return;
+    setEnding(true);
+    await abandonVisit(visitId);
+    // Success → store removes the visit (unmount). Failure → toast fired inside
+    // the store; keep the confirm open so the reason stays visible.
+    setEnding(false);
+    setConfirming(false);
+  };
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        aria-label={`End ${name}'s visit`}
+        className={cn(
+          "inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--fp-line-strong)] bg-[var(--fp-surface)] px-4 text-[14px] font-semibold text-[var(--fp-muted)] hover:border-[var(--fp-ink)] hover:text-[var(--fp-ink)]",
+          className,
+        )}
+      >
+        End visit
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <button onClick={() => void end()} disabled={ending} className="inline-flex min-h-11 items-center rounded-xl bg-[var(--fp-drop)] px-3.5 text-[13.5px] font-semibold text-white disabled:opacity-50">
+        {ending ? "Ending…" : "End without sale"}
+      </button>
+      <button onClick={() => setConfirming(false)} disabled={ending} className="inline-flex min-h-11 items-center rounded-xl border border-[var(--fp-line-strong)] px-3.5 text-[13.5px] font-semibold text-[var(--fp-muted)]">
+        Keep
+      </button>
+    </span>
+  );
+}
+
 /* ---------- Visit timeline (human labels, never raw event names) ----------
    Stage 2 + Stage 3 in one journey: walk-in → identify → FC → products →
    trial → liked/dropped. Detail (SKU, drop reason) comes from event metadata. */
@@ -451,14 +540,14 @@ export function VisitTimeline({ events }: { events: VisitTimelineEvent[] }) {
       {events.map((e, i) => (
         <li key={e.id} className="relative flex gap-3 pb-4 last:pb-0">
           {i < events.length - 1 && <span aria-hidden className="absolute left-[5px] top-4 h-[calc(100%-12px)] w-px bg-[#e8dfd6]" />}
-          <span aria-hidden className="mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full border-2 border-[#b4234d] bg-white" />
+          <span aria-hidden className="mt-1.5 h-[11px] w-[11px] shrink-0 rounded-full border-2 border-[var(--staff-brand)] bg-white" />
           <div className="min-w-0">
             <p className="text-[13.5px] font-semibold text-[#1c1917]">
               {EVENT_LABEL[e.type] || e.type}
               {e.actorName && <span className="font-normal text-[#78716c]"> · {e.actorName}</span>}
             </p>
             {e.detail && <p className="mt-0.5 truncate text-[12.5px] text-[#78716c]">{e.detail}</p>}
-            <p className="tnum text-[12px] text-[#a8a29e]">{new Date(e.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</p>
+            <p className="tnum text-[12px] text-[var(--fp-muted)]">{new Date(e.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</p>
           </div>
         </li>
       ))}
@@ -626,7 +715,7 @@ export function CreateCustomerCard({
             aria-label="Create customer record"
           >
             <p className="flex min-w-0 items-center gap-2 text-[13.5px] lg:max-w-[240px] lg:shrink-0">
-              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#fdf0f4] text-[15px] font-bold text-[#b4234d] ring-1 ring-[#b4234d]/20">+</span>
+              <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#fdf0f4] text-[15px] font-bold text-[var(--staff-brand)] ring-1 ring-[var(--staff-brand)]/20">+</span>
               <span className="truncate font-semibold tracking-tight" title={title}>{title}</span>
             </p>
             <label htmlFor="cc-name" className="sr-only">Name</label>
@@ -660,7 +749,7 @@ export function CreateCustomerCard({
                 id="cc-source"
                 value={source}
                 onChange={(e) => setSource(e.target.value)}
-                className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] text-[#1c1917] transition-colors hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 lg:w-[190px] lg:shrink-0"
+                className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] text-[#1c1917] transition-colors hover:border-[#a8a29e] focus:border-[var(--staff-brand)] focus:outline-none focus:ring-4 focus:ring-[var(--staff-brand)]/15 lg:w-[190px] lg:shrink-0"
               >
                 {CUSTOMER_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -689,7 +778,7 @@ export function CreateCustomerCard({
                 {busy ? "Creating…" : "Create →"}
               </PrimaryButton>
               {onCancel && (
-                <SecondaryButton type="button" onClick={onCancel} disabled={busy} className="min-h-[44px] px-4">✕</SecondaryButton>
+                <SecondaryButton type="button" onClick={onCancel} disabled={busy} aria-label="Cancel new customer" className="min-h-[44px] px-4">✕</SecondaryButton>
               )}
             </span>
           </form>
@@ -705,7 +794,7 @@ export function CreateCustomerCard({
         </section>
       )}
       {!compact && (
-    <section className="ui-fade rounded-2xl border border-[#b4234d]/35 bg-[#fdf0f4]/50 px-3 py-2.5" aria-label={title}>
+    <section className="ui-fade rounded-2xl border border-[var(--staff-brand)]/35 bg-[#fdf0f4]/50 px-3 py-2.5" aria-label={title}>
       {existing ? (
         <div className="ui-fade rounded-xl border border-[#f0d48a] bg-[#fffdf5] p-3">
           <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-[#9a5b00]">
@@ -730,7 +819,7 @@ export function CreateCustomerCard({
           aria-label="Create customer record"
         >
           <p className="flex min-w-0 items-center gap-2 text-[13.5px] xl:max-w-[220px] xl:shrink-0">
-            <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#fdf0f4] text-[15px] font-bold text-[#b4234d] ring-1 ring-[#b4234d]/20">+</span>
+            <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#fdf0f4] text-[15px] font-bold text-[var(--staff-brand)] ring-1 ring-[var(--staff-brand)]/20">+</span>
             <span className="min-w-0">
               <span className="block truncate font-semibold tracking-tight" title={title}>{title}</span>
               {typeof body === "string" ? (
@@ -767,7 +856,7 @@ export function CreateCustomerCard({
             value={source}
             onChange={(e) => setSource(e.target.value)}
             title="How did you hear about us?"
-            className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 xl:max-w-[150px]"
+            className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[var(--staff-brand)] focus:outline-none focus:ring-4 focus:ring-[var(--staff-brand)]/15 xl:max-w-[150px]"
           >
             {CUSTOMER_SOURCES.map((s) => <option key={s}>{s}</option>)}
           </select>

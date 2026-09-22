@@ -29,7 +29,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         kicker="Sales"
         title="Orders"
         sub={`${total} orders · walk-in, instagram, website.`}
-        actions={<Button className="min-h-[44px] bg-[#b4234d] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[#93183d] active:translate-y-0" asChild><Link href="/today">New walk-in sale</Link></Button>}
+        actions={<Button className="min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild><Link href="/today">New walk-in sale</Link></Button>}
       />
       {/* Mobile: card list with expandable purchased-item detail. */}
       <Card className="overflow-hidden md:hidden">

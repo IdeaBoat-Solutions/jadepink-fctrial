@@ -15,7 +15,7 @@ const BUDGETS = ["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"];
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { user, getCustomer, fetchCustomer, visits, createWalkIn, attachCustomerToVisit, pushToast, updateCustomer } = useStore();
+  const { user, getCustomer, fetchCustomer, visits, createWalkIn, attachCustomerToVisit, pushToast, updateCustomer, deleteCustomer } = useStore();
   const cached = getCustomer(id);
   const [remote, setRemote] = useState<CustomerSnapshotLive | null>(null);
   const [missing, setMissing] = useState(false);
@@ -23,6 +23,7 @@ export default function CustomerDetailPage() {
   const [starting, setStarting] = useState(false);
   const [startErr, setStartErr] = useState("");
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const isManager = user?.role === "manager";
 
   useEffect(() => {
@@ -82,36 +83,41 @@ export default function CustomerDetailPage() {
         <Link href="/customers" className="text-[13.5px] font-semibold text-[var(--fp-muted)]">Customers</Link>
         {isManager && <Btn tone="quiet" onClick={() => setEditing(true)}>Edit record</Btn>}
       </div>
-      <h1 className="fp-name mt-3 text-[34px] leading-none">{customer.name}</h1>
-      <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">
-        {formatMobileIN(customer.phone)}
-        {customer.tier && <span className="ml-2 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
-      </p>
-      {(customer.area || customer.budget || customer.source) && (
-        <p className="mt-1.5 text-[13.5px] text-[var(--fp-muted)]">
-          {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
-        </p>
-      )}
-      <dl className="mt-4 flex gap-8 text-[14px]">
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num text-[20px] font-semibold">{customer.visitCount}</dd></div>
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num text-[20px] font-semibold">{customer.purchaseCount}</dd></div>
-        <div><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="font-semibold">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
-      </dl>
-
-      <div className="mt-6">
-        {liveVisit ? (
-          <Link href={`/visits/${liveVisit.id}`} className="inline-flex min-h-12 items-center rounded-lg bg-[var(--fp-brand)] px-5 text-[15px] font-semibold text-white">
-            Continue visit
-          </Link>
-        ) : (
-          <div>
-            {startErr && <p role="alert" className="mb-2 text-[13.5px] font-medium text-[var(--fp-drop)]">{startErr}</p>}
-            <Btn tone="brand" disabled={starting} onClick={() => void startVisitForCustomer()}>
-              {starting ? "Recording…" : "New walk-in"}
-            </Btn>
+      <section className="mt-3 rounded-xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-6 shadow-[var(--fp-shadow)]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="fp-name text-[34px] leading-none">{customer.name}</h1>
+            <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">
+              {formatMobileIN(customer.phone)}
+              {customer.tier && <span className="ml-2 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
+            </p>
+            {(customer.area || customer.budget || customer.source) && (
+              <p className="mt-1.5 text-[13.5px] text-[var(--fp-muted)]">
+                {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
+              </p>
+            )}
           </div>
-        )}
-      </div>
+          <div className="shrink-0">
+            {liveVisit ? (
+              <Link href={`/visits/${liveVisit.id}`} className="inline-flex min-h-12 items-center rounded-lg bg-[var(--fp-brand)] px-5 text-[15px] font-semibold text-white">
+                Continue visit
+              </Link>
+            ) : (
+              <Btn tone="brand" className="min-h-12 px-5 text-[15px]" disabled={starting} onClick={() => void startVisitForCustomer()}>
+                {starting ? "Recording…" : "New walk-in"}
+              </Btn>
+            )}
+          </div>
+        </div>
+
+        {startErr && <p role="alert" className="mt-3 text-[13.5px] font-medium text-[var(--fp-drop)]">{startErr}</p>}
+
+        <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-[var(--fp-line)] bg-[var(--fp-line)] text-[14px]">
+          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num mt-0.5 text-[22px] font-semibold leading-none">{customer.visitCount}</dd></div>
+          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[22px] font-semibold leading-none">{customer.purchaseCount}</dd></div>
+          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[15px] font-semibold leading-none">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
+        </dl>
+      </section>
 
       <section className="mt-8">
         <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">Recent activity</h2>
@@ -145,7 +151,84 @@ export default function CustomerDetailPage() {
           save={updateCustomer}
         />
       )}
+
+      {isManager && (
+        <section className="mt-8 border-t border-[var(--fp-line)] pt-5" aria-label="Danger zone">
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">Danger zone</h2>
+          <p className="mt-2 max-w-[52ch] text-[14px] leading-relaxed text-[var(--fp-muted)]">
+            Delete removes this record permanently. Customers with visits or bills can never be deleted — only mistaken duplicates with no history.
+          </p>
+          <Btn tone="drop" className="mt-3" onClick={() => setConfirming(true)}>Delete record</Btn>
+        </section>
+      )}
+
+      {confirming && (
+        <DeleteDrawer
+          customer={customer}
+          onClose={() => setConfirming(false)}
+          onDeleted={() => {
+            setConfirming(false);
+            pushToast("Record deleted", customer.name);
+            router.replace("/customers");
+          }}
+          remove={deleteCustomer}
+        />
+      )}
     </div>
+  );
+}
+
+function DeleteDrawer({
+  customer,
+  onClose,
+  onDeleted,
+  remove,
+}: {
+  customer: CustomerSnapshotLive;
+  onClose: () => void;
+  onDeleted: () => void;
+  remove: (id: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const confirm = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setErr("");
+    const r = await remove(customer.id);
+    setDeleting(false);
+    if (!r.ok) {
+      setErr(r.code === "CUSTOMER_HAS_HISTORY"
+        ? (r.message || "This customer has history and cannot be deleted.")
+        : r.code === "FORBIDDEN"
+          ? "Only a manager can delete customer records."
+          : r.message || "Could not delete the record. Try again.");
+      return;
+    }
+    onDeleted();
+  };
+
+  return (
+    <Drawer
+      kicker="Danger zone"
+      title={`Delete ${customer.name}?`}
+      onClose={onClose}
+      footer={
+        <div className="flex gap-2">
+          <Btn tone="line" className="flex-1" onClick={onClose}>Keep record</Btn>
+          <Btn tone="drop" className="flex-1" disabled={deleting} onClick={() => void confirm()}>
+            {deleting ? "Deleting…" : "Yes, delete"}
+          </Btn>
+        </div>
+      }
+    >
+      <p className="text-[14.5px] leading-relaxed text-[var(--fp-ink)]">
+        This removes the record permanently. It only works when the customer has no visits and no bills — anything with history is refused automatically.
+      </p>
+      <p className="fp-num mt-2 text-[13.5px] text-[var(--fp-muted)]">{formatMobileIN(customer.phone)}</p>
+      {err && <p role="alert" className="mt-3 text-[13.5px] font-medium text-[var(--fp-drop)]">{err}</p>}
+    </Drawer>
   );
 }
 

@@ -100,7 +100,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <div className="flex justify-between gap-3"><span className="text-muted-foreground">Margin / unit</span><strong className="tnum">{formatINR(p.price - p.cost)}</strong></div>
             <div className="flex justify-between gap-3"><span className="text-muted-foreground">Stock value</span><strong className="tnum">{formatINR(p.stock * p.cost)}</strong></div>
             <div className="flex justify-between gap-3 border-t border-dashed pt-2.5"><span className="text-muted-foreground">Supplier</span><strong className="text-right">{p.supplierName}</strong></div>
-            <Button asChild className="group mt-2 min-h-[48px] bg-[#b4234d] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[#93183d] active:translate-y-0"><Link href="/suppliers">Reorder <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span></Link></Button>
+            <Button asChild className="group mt-2 min-h-[48px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0"><Link href="/suppliers">Reorder <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span></Link></Button>
           </CardContent>
         </Card>
       </div>

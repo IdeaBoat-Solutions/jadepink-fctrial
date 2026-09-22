@@ -4,6 +4,7 @@
    Same visit, same API. No second application. */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { Btn, Drawer, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
 import { useStore } from "@/lib/store";
 import { searchTokens } from "@/lib/fuzzy";
@@ -173,11 +174,14 @@ export function FloorBoard({
   onHandoff,
   externalAction,
   onSuiteChange,
+  readOnly,
 }: {
   visitId: string;
   onHandoff?: () => void;
   externalAction?: BoardExternalAction | null;
   onSuiteChange?: (suite: string | null) => void;
+  /** Closed visit: full record visible, every action hidden. */
+  readOnly?: boolean;
 }) {
   const { pushToast, abandonVisit } = useStore();
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -671,16 +675,16 @@ export function FloorBoard({
           pct={products.length ? Math.round(((summary?.dropped ?? 0) / products.length) * 100) : 0}
         />
         <div className="rounded-xl border border-[#e9e2d8] bg-white p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Bag total</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6b645c]">Bag total</p>
           <p className="fp-num mt-1.5 text-[26px] font-bold leading-none tracking-tight text-[#211d18]">{formatINR(bagTotal)}</p>
-          <p className="fp-num mt-1.5 text-[12px] text-[#7a736a]">Avg SKU: {formatINR(bagAvg)}</p>
+          <p className="fp-num mt-1.5 text-[12px] text-[#6b645c]">Avg SKU: {formatINR(bagAvg)}</p>
         </div>
       </div>
 
       {err && <div className="mt-4"><ErrorNote title={err.title} body={err.body} action={<Btn tone="quiet" onClick={() => setErr(null)}>Dismiss</Btn>} /></div>}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Filter products" className="flex flex-wrap items-center gap-1.5">
+        <div role="group" aria-label="Filter products" className="flex flex-wrap items-center gap-1.5">
           {([
             ["ALL", "All", counts.all, false],
             ["SELECTED", "Selected", counts.selected, false],
@@ -693,29 +697,29 @@ export function FloorBoard({
             return (
               <button
                 key={key}
-                role="tab"
-                aria-selected={active}
+                type="button"
+                aria-pressed={active}
                 onClick={() => setFilter(key)}
-                className={`inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold uppercase tracking-wide transition-colors ${
+                className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold uppercase tracking-wide transition-colors ${
                   active
                     ? "bg-[#23403a] text-white"
                     : hot
-                      ? "bg-[#f6e9e4] text-[#b23a48] hover:bg-[#f3ddd7]"
+                      ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)] hover:bg-[#f3ddd7]"
                       : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]"
                 }`}
               >
-                {hot && !active && <span aria-hidden className="size-1.5 rounded-full bg-[#b23a48]" />}
+                {hot && !active && <span aria-hidden className="size-1.5 rounded-full bg-[var(--fp-brand)]" />}
                 {label} <span className="fp-num font-bold">{n}</span>
               </button>
             );
           })}
         </div>
-        <label className="ml-auto inline-flex min-h-[36px] items-center gap-2 text-[13px] font-medium text-[#7a736a]">
+        <label className="ml-auto inline-flex min-h-[40px] items-center gap-2 text-[13px] font-medium text-[#6b645c]">
           Sort:
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            className="min-h-[36px] rounded-lg border border-[#e0d7c9] bg-white px-2.5 text-[13.5px] font-semibold text-[#211d18]"
+            className="min-h-[40px] rounded-lg border border-[#e0d7c9] bg-white px-2.5 text-[13.5px] font-semibold text-[#211d18]"
           >
             <option value="priority">Trial Priority</option>
             <option value="price-desc">Price: High to Low</option>
@@ -725,7 +729,7 @@ export function FloorBoard({
         </label>
       </div>
 
-      {searchOpen && (
+      {!readOnly && searchOpen && (
         <div className="mt-3">
           <form
             id="add-product-search"
@@ -766,12 +770,12 @@ export function FloorBoard({
         </div>
       )}
 
-      {searchOpen && (searching || searchResults) && (
+      {!readOnly && searchOpen && (searching || searchResults) && (
         <div className="mt-3 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-4 py-3">
-          {searching && !searchResults && <p className="text-[13.5px] font-semibold text-[var(--fp-muted)]">Searching…</p>}
+          {searching && !searchResults && <p role="status" className="text-[13.5px] font-semibold text-[var(--fp-muted)]">Searching…</p>}
           {searchResults && searchResults.length === 0 && !searching && <EmptyNote title="No matches." body="Check the spelling, try fewer words, or scan the barcode." />}
           {searchResults && searchResults.length > 0 && (
-            <p className="text-[13px] font-medium text-[var(--fp-muted)]">
+            <p role="status" className="text-[13px] font-medium text-[var(--fp-muted)]">
               {searchResults.length} match{searchResults.length > 1 ? "es" : ""} for <strong className="font-semibold text-[var(--fp-ink)]">“{searchQuery.trim()}”</strong>
               <span className="hidden sm:inline"> · ↑↓ to move · Enter adds · typos forgiven</span>
             </p>
@@ -787,7 +791,7 @@ export function FloorBoard({
                 onClick={() => { if (!c.alreadyAdded) addVariant(c.id, c.product.name); }}
                 className={`flex cursor-pointer items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0 ${i === activeIdx ? "bg-[var(--fp-ink-soft)]" : ""}`}
               >
-                <ProductIdentity name={c.product.name} nameHi={<Hi text={c.product.name} query={searchQuery} />} sku={c.sku} size={c.size} colour={c.colour} price={c.price} imageUrl={c.imageUrl} compact />
+                <ProductIdentity name={c.product.name} nameHi={<Hi text={c.product.name} query={searchQuery} />} sku={c.sku} size={c.size} colour={c.colour} price={c.price} imageUrl={c.imageUrl} compact href={`/products/${c.product.id}`} />
                 {c.alreadyAdded ? (
                   <span className="shrink-0 text-[13px] font-semibold text-[var(--fp-wait)]">Added</span>
                 ) : (
@@ -819,16 +823,17 @@ export function FloorBoard({
                   onDrop={() => { setDropReasonId(""); setDropNote(""); setDropFor(card); }}
                   onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
-                  selectable={card.status === "LIKED"}
+                  selectable={!readOnly && card.status === "LIKED"}
                   checked={billIds.includes(card.id)}
                   onToggle={() => toggleBillSelect(card.id)}
+                  readOnly={readOnly}
                 />
               </li>
             ))}
           </ul>
 
       {/* Amazon-cart style: tick 2–3 liked pieces, bill them on one bill. */}
-      {billIds.length > 0 && (
+      {!readOnly && billIds.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-4 py-3">
           <p className="text-[14px] font-semibold">
             {billIds.length} selected
@@ -855,13 +860,14 @@ export function FloorBoard({
 
         </div>
 
+        {!readOnly && (
         <aside className="flex min-w-0 flex-col gap-4" aria-label="Scanner and floor tools">
           <SideSection
             label="Live tag scanner"
             onCollapse={closeScan}
             title={
               <p className="inline-flex items-center gap-2 text-[14px] font-bold text-[#211d18]">
-                <span aria-hidden className="size-2 rounded-full bg-[#b23a48]" /> Live Tag Scanner
+                <span aria-hidden className="size-2 rounded-full bg-[var(--fp-brand)]" /> Live Tag Scanner
               </p>
             }
             meta={<span className="text-[11px] font-semibold text-[#7a736a]">{scanOpen ? "Camera live" : "Manual entry"}</span>}
@@ -900,7 +906,7 @@ export function FloorBoard({
               )}
             </div>
             <p className="mt-2.5 text-center text-[12.5px] text-[#7a736a]">Align tag barcode within reticle</p>
-            {scanning && <p className="mt-2 text-center text-[13px] font-semibold text-[#57534e]">Looking up…</p>}
+            {scanning && <p role="status" className="mt-2 text-center text-[13px] font-semibold text-[#57534e]">Looking up…</p>}
           </SideSection>
 
           <SideSection
@@ -945,7 +951,7 @@ export function FloorBoard({
                   placeholder="JP-KUR-4091-M"
                   aria-label="Enter SKU manually"
                   autoComplete="off"
-                  className="w-full bg-transparent font-mono text-[14px] outline-none placeholder:text-[#b8b0a4]"
+                  className="w-full bg-transparent font-mono text-[14px] outline-none placeholder:text-[#736c64]"
                 />
               </div>
               <button
@@ -1000,7 +1006,7 @@ export function FloorBoard({
                 aria-label="Runner request note"
                 autoComplete="off"
                 maxLength={200}
-                className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-3 text-[14px] outline-none placeholder:text-[#b8b0a4]"
+                className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-3 text-[14px] outline-none placeholder:text-[#736c64]"
               />
               <button
                 type="submit"
@@ -1011,12 +1017,12 @@ export function FloorBoard({
               </button>
             </form>
           </SideSection>
-        </aside>
+        </aside>)}
       </div>
 
       {detail && (
         <Drawer kicker="Product" title={detail.product.name} onClose={() => setDetail(null)}>
-          <ProductIdentity name={detail.product.name} sku={detail.product.sku} size={detail.product.size} colour={detail.product.colour} price={detail.product.price} imageUrl={detail.product.imageUrl} />
+          <ProductIdentity name={detail.product.name} sku={detail.product.sku} size={detail.product.size} colour={detail.product.colour} price={detail.product.price} imageUrl={detail.product.imageUrl} href={`/products/${detail.product.id}`} />
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <StatusMark value={statusKey(detail.status)} label={statusLabel(detail.status)} />
             {detail.status === "PURCHASED" && (
@@ -1028,6 +1034,7 @@ export function FloorBoard({
           {detail.status === "DROPPED" && detail.dropReason && (
             <p className="mt-3 text-[14px]">Reason: <span className="font-semibold">{detail.dropReason.label}</span>{detail.note ? ` — ${detail.note}` : ""}</p>
           )}
+          {!readOnly && (
           <NoteEditor
             key={detail.id}
             initial={detail.staffNote ?? ""}
@@ -1038,7 +1045,7 @@ export function FloorBoard({
                 body: detail.product.name,
               });
             }}
-          />
+          />)}
           <ol className="mt-5 border-t border-[var(--fp-line)] pt-4">
             <TimeRow at={detail.timeline.addedAt} label="Added" />
             <TimeRow at={detail.timeline.trialStartedAt} label="Trial started" />
@@ -1047,6 +1054,7 @@ export function FloorBoard({
             <TimeRow at={detail.timeline.droppedAt} label="Dropped" />
             <TimeRow at={detail.timeline.purchasedAt} label="Billed" />
           </ol>
+          {!readOnly && (
           <div className="mt-5 flex flex-wrap gap-2">
             {detail.status === "SELECTED" && (
               <>
@@ -1082,7 +1090,7 @@ export function FloorBoard({
             {detail.status === "DROPPED" && (
               <Btn tone="quiet" disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</Btn>
             )}
-          </div>
+          </div>)}
         </Drawer>
       )}
 
@@ -1139,7 +1147,7 @@ export function FloorBoard({
       )}
 
       {summaryOpen && summary && (
-        <Drawer kicker="Handoff" title="Visit summary" onClose={() => { setSummaryOpen(false); setConfirmEnd(false); }} footer={
+        <Drawer kicker="Handoff" title="Visit summary" onClose={() => { setSummaryOpen(false); setConfirmEnd(false); }} footer={!readOnly && (
           <div className="flex flex-col gap-2">
             <Btn tone="brand" className="w-full" onClick={() => { setSummaryOpen(false); setConfirmEnd(false); onHandoff?.(); }}>
               {outstanding.length > 0 ? "Continue to billing" : "Close visit"}
@@ -1154,8 +1162,7 @@ export function FloorBoard({
                 <Btn tone="line" disabled={endingVisit} onClick={() => setConfirmEnd(false)}>Keep</Btn>
               </div>
             )}
-          </div>
-        }>
+          </div>)}>
           <dl className="grid grid-cols-2 gap-y-4">
             <Sum k="Selected" v={summary.selected} />
             <Sum k="Trialled" v={summary.trialInProgress + summary.trialCompleted} />
@@ -1305,14 +1312,17 @@ function SideSection({
 }
 
 function StatCard({ label, value, sub, pct, tone }: { label: string; value: number; sub: string; pct: number; tone?: "green" | "red" }) {
-  const bar = tone === "green" ? "bg-[#2e6b4f]" : tone === "red" ? "bg-[#b23a48]" : "bg-[#23403a]";
-  const card = tone === "green" ? "bg-[#eef6f1]" : tone === "red" ? "bg-[#fdeeee]" : "bg-white";
+  const bar = tone === "green" ? "bg-[#2e6b4f]" : tone === "red" ? "bg-[var(--fp-drop)]" : "bg-[#23403a]";
+  const card = tone === "green" ? "bg-[#eef6f1]" : tone === "red" ? "bg-[var(--fp-drop-bg)]" : "bg-white";
+  /* Tinted cards need a darker muted: #7a736a only reaches ~4.0–4.2:1 on the
+     green/red washes. #5c564d clears 4.5:1 on every card variant. */
+  const muted = tone ? "text-[#5c564d]" : "text-[#6b645c]";
   return (
     <div className={`rounded-xl border border-[#e9e2d8] ${card} p-4`}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">{label}</p>
+      <p className={`text-[11px] font-bold uppercase tracking-[0.1em] ${muted}`}>{label}</p>
       <p className="mt-1.5 flex items-baseline gap-2">
         <span className="fp-num text-[26px] font-bold leading-none tracking-tight text-[#211d18]">{value}</span>
-        <span className="text-[12px] font-medium text-[#7a736a]">{sub}</span>
+        <span className={`text-[12px] font-medium ${muted}`}>{sub}</span>
       </p>
       <div aria-hidden className="mt-3 h-1 overflow-hidden rounded-full bg-[#e7dfd3]">
         <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
@@ -1391,9 +1401,9 @@ function NoteEditor({ initial, saving, onSave }: { initial: string; saving: bool
 }
 
 function ProductIdentity({
-  name, nameHi, sku, size, colour, price, imageUrl, compact,
+  name, nameHi, sku, size, colour, price, imageUrl, compact, href,
 }: {
-  name: string; nameHi?: ReactNode; sku: string; size: string; colour: string; price: number; imageUrl?: string | null; compact?: boolean;
+  name: string; nameHi?: ReactNode; sku: string; size: string; colour: string; price: number; imageUrl?: string | null; compact?: boolean; href?: string;
 }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
@@ -1404,7 +1414,13 @@ function ProductIdentity({
         <span aria-hidden className="grid size-12 shrink-0 place-items-center bg-[var(--fp-ink-soft)] text-[15px] font-semibold text-[var(--fp-muted)]">{name.slice(0, 1)}</span>
       )}
       <div className="min-w-0">
-        <p className={`truncate font-semibold tracking-tight ${compact ? "text-[14px]" : "text-[16px]"}`}>{nameHi ?? name}</p>
+        {href ? (
+          <Link href={href} aria-label={`Open ${name} details`} className="truncate font-semibold tracking-tight underline decoration-[var(--fp-line-strong)] decoration-1 underline-offset-2 hover:decoration-[var(--fp-ink)]">
+            <span className={`block truncate ${compact ? "text-[14px]" : "text-[16px]"}`}>{nameHi ?? name}</span>
+          </Link>
+        ) : (
+          <p className={`truncate font-semibold tracking-tight ${compact ? "text-[14px]" : "text-[16px]"}`}>{nameHi ?? name}</p>
+        )}
         <p className="mt-0.5 font-mono text-[12px] text-[var(--fp-faint)]">{sku}</p>
         <p className="mt-0.5 text-[13px] text-[var(--fp-muted)]">
           {size} · {colour} · <span className="fp-num font-semibold text-[var(--fp-ink)]">{formatINR(price)}</span>
@@ -1416,7 +1432,7 @@ function ProductIdentity({
 
 const EDGE: Record<ProductVisitStatus, string> = {
   SELECTED: "border-l-[#cfc6bb]",
-  TRIAL_IN_PROGRESS: "border-l-[#b23a48]",
+  TRIAL_IN_PROGRESS: "border-l-[var(--fp-brand)]",
   TRIAL_COMPLETED: "border-l-[#2e6b4f]",
   LIKED: "border-l-[#2e6b4f]",
   DROPPED: "border-l-[#cfc6bb]",
@@ -1426,8 +1442,8 @@ const EDGE: Record<ProductVisitStatus, string> = {
 function StatePill({ status }: { status: ProductVisitStatus }) {
   if (status === "TRIAL_IN_PROGRESS") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f6e9e4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#b23a48]">
-        <span aria-hidden className="size-1.5 rounded-full bg-[#b23a48]" /> Trial in progress
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--fp-brand-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--fp-brand)]">
+        <span aria-hidden className="size-1.5 rounded-full bg-[var(--fp-brand)]" /> Trial in progress
       </span>
     );
   }
@@ -1454,7 +1470,7 @@ function StatePill({ status }: { status: ProductVisitStatus }) {
   }
   if (status === "DROPPED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#7a736a]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#57534e]">
         Dropped
       </span>
     );
@@ -1473,7 +1489,7 @@ function ConsoleBtn({ children, onClick, disabled, tone }: { children: ReactNode
       : tone === "green"
         ? "bg-[#1c6b46] text-white hover:bg-[#155739]"
         : tone === "rose"
-          ? "bg-[#f6e9e4] text-[#b23a48] hover:bg-[#f3ddd7]"
+          ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)] hover:bg-[#f3ddd7]"
           : "bg-[#f1ece4] text-[#211d18] hover:bg-[#e7dfd3]";
   return (
     <button
@@ -1489,7 +1505,7 @@ function ConsoleBtn({ children, onClick, disabled, tone }: { children: ReactNode
 
 function ProductRow({
   card, busy, onOpen, onStart, onComplete, onLike, onUnlike, onReopen, onCancelTrial, onDrop, onUndrop, onBill,
-  selectable, checked, onToggle,
+  selectable, checked, onToggle, readOnly,
 }: {
   card: ProductCardDTO;
   busy: string | null;
@@ -1506,6 +1522,7 @@ function ProductRow({
   selectable?: boolean;
   checked?: boolean;
   onToggle?: () => void;
+  readOnly?: boolean;
 }) {
   const p = card.product;
   const dropped = card.status === "DROPPED";
@@ -1526,9 +1543,9 @@ function ProductRow({
             <StatePill status={card.status} />
             <p className={`fp-num shrink-0 text-[17px] font-bold tracking-tight text-[#211d18] ${dropped ? "line-through opacity-60" : ""}`}>{formatINR(p.price)}</p>
           </div>
-          <button type="button" onClick={onOpen} className="mt-1.5 block w-full text-left">
-            <h3 className="line-clamp-2 text-[16.5px] font-bold leading-snug tracking-tight text-[#211d18]">{p.name}</h3>
-          </button>
+          <Link href={`/products/${p.id}`} className="mt-1.5 block w-full text-left" aria-label={`Open ${p.name} details`}>
+            <h3 className="line-clamp-2 text-[16.5px] font-bold leading-snug tracking-tight text-[#211d18] underline decoration-[#cfc6bb] decoration-1 underline-offset-2 hover:decoration-[#211d18]">{p.name}</h3>
+          </Link>
           <p className="mt-1 truncate text-[13px] text-[#57534e]">
             <span className="font-mono text-[12px]">{p.sku}</span> · <strong className="font-semibold">Size {p.size}</strong> · {p.colour}
           </p>
@@ -1553,6 +1570,7 @@ function ProductRow({
           )}
         </div>
       </div>
+      {!readOnly && (
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#f1ece4] pt-3">
         {selectable && (
           <button
@@ -1626,7 +1644,7 @@ function ProductRow({
             {busy === `undrop-${card.id}` ? "Saving…" : "Undo drop"}
           </ConsoleBtn>
         )}
-      </div>
+      </div>)}
     </article>
   );
 }

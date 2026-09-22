@@ -144,7 +144,7 @@ export default function LoginPage() {
       <aside className="hidden flex-col justify-between border-r border-[var(--fp-line)] px-10 py-8 lg:flex">
         <p className="text-[12px] font-semibold tracking-[0.16em]">JADEPINK · AHMEDABAD</p>
         <div>
-          <h1 className="fp-name text-[40px] leading-[1.05]">The floor is open.</h1>
+          <p className="fp-name text-[40px] leading-[1.05]">The floor is open.</p>
           <p className="mt-3 max-w-[28ch] text-[15px] leading-relaxed text-[var(--fp-muted)]">
             Sign in, find the customer, and stay on the same visit until billing.
           </p>
@@ -155,15 +155,15 @@ export default function LoginPage() {
       <main className="flex items-center justify-center px-6 py-10">
         <div className="w-full max-w-sm">
           <p className="text-[12px] font-semibold tracking-[0.16em] text-[var(--fp-muted)] lg:hidden">JADEPINK</p>
-          <h2 className="mt-1 text-[22px] font-semibold tracking-tight">Sign in</h2>
+          <h1 className="mt-1 text-[22px] font-semibold tracking-tight">Sign in</h1>
           <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Sales floor and store management</p>
 
           {SUPABASE_CONFIGURED ? (
             <>
-              <div role="tablist" aria-label="Sign-in method" className="mt-5 grid grid-cols-2 gap-1 rounded-lg bg-[#f3eeea] p-1">
+              <div role="group" aria-label="Sign-in method" className="mt-5 grid grid-cols-2 gap-1 rounded-lg bg-[#f3eeea] p-1">
                 {(["password", "otp"] as const).map((m) => (
                   <button
-                    key={m} type="button" role="tab" aria-selected={method === m}
+                    key={m} type="button" aria-pressed={method === m}
                     onClick={() => { setMethod(m); setError(""); }}
                     className={cn(
                       "min-h-[40px] rounded-md text-[13.5px] font-semibold transition-colors",
@@ -224,7 +224,7 @@ export default function LoginPage() {
                   </Field>
                   <PrimaryButton type="submit" disabled={busy}>{busy ? "Verifying…" : "Verify & sign in →"}</PrimaryButton>
                   <div className="flex items-center justify-between text-[13px]">
-                    <button type="button" onClick={() => { setStep("mobile"); setCode(""); setError(""); }} className="font-semibold text-[#b4234d] hover:underline">
+                    <button type="button" onClick={() => { setStep("mobile"); setCode(""); setError(""); }} className="font-semibold text-[var(--staff-brand)] hover:underline">
                       ← Use a different number
                     </button>
                     <button type="button" onClick={sendOtp} disabled={busy} className="font-semibold text-[#57534e] hover:underline disabled:opacity-50">
@@ -250,7 +250,7 @@ export default function LoginPage() {
                   {(["fc", "manager"] as const).map((r) => (
                     <button
                       key={r} type="button" role="radio" aria-checked={demoRole === r} onClick={() => setDemoRole(r)}
-                      className={demoRole === r ? "min-h-[52px] rounded-lg border border-[#b4234d] bg-[#fdf0f4] px-3 text-left" : "min-h-[52px] rounded-lg border border-[#d6c9bb] bg-white px-3 text-left hover:border-[#1c1917]"}
+                      className={demoRole === r ? "min-h-[52px] rounded-lg border border-[var(--staff-brand)] bg-[#fdf0f4] px-3 text-left" : "min-h-[52px] rounded-lg border border-[#d6c9bb] bg-white px-3 text-left hover:border-[#1c1917]"}
                     >
                       <span className="block text-[14px] font-semibold">{r === "fc" ? "Salesperson" : "Manager"}</span>
                       <span className="block text-[12px] text-[#78716c]">{r === "fc" ? "Floor workflow" : "Live floor + reassign"}</span>
@@ -259,7 +259,7 @@ export default function LoginPage() {
                 </div>
               </fieldset>
               <PrimaryButton type="submit">Sign in →</PrimaryButton>
-              <p className="text-center text-[12px] text-[#a8a29e]">Demo build · data stays on this device until Supabase is connected</p>
+              <p className="text-center text-[12px] text-[var(--fp-muted)]">Demo build · data stays on this device until Supabase is connected</p>
             </form>
           )}
         </div>

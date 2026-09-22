@@ -53,10 +53,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
+      <a href="#main-content" className="skip-link">Skip to work</a>
       <Sidebar variant="inset">
         <SidebarHeader>
           <Link href="/dashboard" className="group flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-muted">
-            <span className="grid size-8 place-items-center rounded-xl bg-[#b4234d] text-[15px] font-bold text-white shadow-[0_4px_12px_-4px_rgba(180,35,77,0.6)] transition-transform duration-150 group-hover:scale-105">J</span>
+            <span className="grid size-8 place-items-center rounded-xl bg-[var(--staff-brand)] text-[15px] font-bold text-white shadow-[0_4px_12px_-4px_rgba(180,35,77,0.6)] transition-transform duration-150 group-hover:scale-105">J</span>
             <span className="flex flex-col leading-none">
               <span className="text-[13px] font-bold tracking-[0.14em]">JADEPINK</span>
               <span className="mt-0.5 text-[11px] text-muted-foreground">Store OS</span>
@@ -64,28 +65,30 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </Link>
         </SidebarHeader>
         <SidebarContent>
-          {NAV.map((g) => (
-            <SidebarGroup key={g.title}>
-              <SidebarGroupLabel>{g.title}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {g.items.map((it) => {
-                    const active = pathname === it.href || (it.href !== "/dashboard" && pathname.startsWith(it.href));
-                    return (
-                      <SidebarMenuItem key={it.href}>
-                        <SidebarMenuButton asChild isActive={active} tooltip={it.label}>
-                          <Link href={it.href}>
-                            <it.icon />
-                            <span>{it.label}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))}
+          <nav aria-label="Store navigation" className="flex flex-col">
+            {NAV.map((g) => (
+              <SidebarGroup key={g.title}>
+                <SidebarGroupLabel>{g.title}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {g.items.map((it) => {
+                      const active = pathname === it.href || (it.href !== "/dashboard" && pathname.startsWith(it.href));
+                      return (
+                        <SidebarMenuItem key={it.href}>
+                          <SidebarMenuButton asChild isActive={active} tooltip={it.label}>
+                            <Link href={it.href} aria-current={active ? "page" : undefined}>
+                              <it.icon />
+                              <span>{it.label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+          </nav>
         </SidebarContent>
         <SidebarFooter>
           <div className="flex items-center justify-between gap-2 rounded-xl bg-muted/60 px-2.5 py-2 text-[12px] text-muted-foreground">
@@ -96,16 +99,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset id="main-content" tabIndex={-1} className="focus:outline-none">
         <header className="admin-bar sticky top-0 z-20 flex h-12 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur">
           <SidebarTrigger className="transition-transform duration-150 hover:scale-105 active:scale-95" />
           <span className="hidden truncate text-[13px] text-muted-foreground sm:inline">JadePink fullstack · dashboard / inventory / orders</span>
           <span className="ml-auto"><ModeToggle /></span>
         </header>
-        <main id="main-content" tabIndex={-1} className="staff-page flex-1 p-4 focus:outline-none md:p-6 lg:p-8">
+        <div className="staff-page flex-1 p-4 md:p-6 lg:p-8">
           <RouteFocus />
           {children}
-        </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

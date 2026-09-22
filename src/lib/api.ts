@@ -102,6 +102,9 @@ export const completeVisit = (visitId: string) =>
 export const cancelVisit = (visitId: string) =>
   call<VisitLive>(`/api/visits/${visitId}/cancel`, { method: "POST" });
 
+export const deleteVisitRecord = (visitId: string) =>
+  call<{ id: string }>(`/api/visits/${visitId}`, { method: "DELETE" });
+
 export const setVisitSuite = (visitId: string, suite: string | null) =>
   call<VisitLive>(`/api/visits/${visitId}/suite`, { method: "POST", body: JSON.stringify({ suite }) });
 
@@ -213,6 +216,9 @@ export const updateCustomerRecord = (id: string, input: { name?: string; phone?:
     method: "PATCH",
     body: JSON.stringify(input),
   });
+
+export const deleteCustomerRecord = (id: string) =>
+  call<{ id: string }>(`/api/customers/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 /* ---------- Sales ---------- */
 

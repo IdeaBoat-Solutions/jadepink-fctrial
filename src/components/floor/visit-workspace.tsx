@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
 import { useStore } from "@/lib/store";
@@ -111,11 +112,14 @@ export function VisitWorkspace({ visitId }: { visitId: string }) {
   if (!visit) {
     if (last) {
       return (
-        <div className="mt-6 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-5 py-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Outcome</p>
-          <h1 className="mt-1 text-[20px] font-semibold">This visit is closed.</h1>
-          <p className="mt-2 max-w-[46ch] text-[14.5px] text-[var(--fp-muted)]">The summary was handed to billing. Start a new walk-in if the customer returns.</p>
-          <Link href="/today" className="mt-4 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]">Back to dashboard</Link>
+        <div>
+          <div className="mt-6 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-5 py-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Outcome</p>
+            <h1 className="mt-1 text-[20px] font-semibold">This visit is closed.</h1>
+            <p className="mt-2 max-w-[46ch] text-[14.5px] text-[var(--fp-muted)]">The summary was handed to billing. Start a new walk-in if the customer returns.</p>
+            <Link href="/today" className="mt-4 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]">Back to dashboard</Link>
+          </div>
+          <FloorBoard visitId={last.id} readOnly />
         </div>
       );
     }
@@ -143,11 +147,13 @@ export function VisitWorkspace({ visitId }: { visitId: string }) {
 
 function VisitBody({ visit }: { visit: VisitLive }) {
   const store = useStore();
+  const router = useRouter();
   const customer = visit.customerId ? store.getCustomer(visit.customerId) : undefined;
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const step = stepOf(visit);
   const isManager = store.user?.role === "manager";
   const [assignOpen, setAssignOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [events, setEvents] = useState<VisitTimelineEventLive[] | null>(null);
@@ -215,7 +221,7 @@ function VisitBody({ visit }: { visit: VisitLive }) {
                 {customer?.name || visit.customerName || "Unidentified customer"}
               </h1>
               {tier && customer && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#f6e9e4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#b23a48]">
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--fp-brand-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--fp-brand)]">
                   <span aria-hidden>◉</span> {tier} · {customer.visitCount} visits
                 </span>
               )}
@@ -260,7 +266,7 @@ function VisitBody({ visit }: { visit: VisitLive }) {
             <button
               type="button"
               onClick={() => fireBoard("summary")}
-              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[#b23a48] px-4 text-[13.5px] font-bold text-white transition-transform hover:bg-[#9c3340] active:scale-[0.98]"
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[var(--fp-brand)] px-4 text-[13.5px] font-bold text-white transition-[transform,background-color] hover:bg-[var(--fp-brand-deep)] active:scale-[0.98]"
             >
               Finish & Continue to Billing →
             </button>
@@ -270,6 +276,9 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           <Btn tone="quiet" onClick={() => void loadTimeline()}>Visit timeline</Btn>
           {isManager && visit.status !== "COMPLETED" && (
             <Btn tone="line" onClick={() => setAssignOpen(true)}>{visit.assignedSalespersonId ? "Reassign FC" : "Assign FC"}</Btn>
+          )}
+          {isManager && visit.status !== "COMPLETED" && (
+            <Btn tone="drop" onClick={() => setDeleteOpen(true)}>Delete visit</Btn>
           )}
         </div>
       </div>
@@ -286,6 +295,7 @@ function VisitBody({ visit }: { visit: VisitLive }) {
       {blocked && (
         <div className="mt-5">
           <AccessNote
+            headingLevel={2}
             title="This customer is with another salesperson."
             body="You can see your own visits from the dashboard. A manager can reassign if the floor needs it."
             action={<Link href="/today" className="text-[14px] font-semibold text-[var(--fp-brand)]">Back to my work</Link>}
@@ -307,12 +317,15 @@ function VisitBody({ visit }: { visit: VisitLive }) {
       )}
 
       {(visit.status === "COMPLETED" || billing === "done") && (
-        <div className="mt-6 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-5 py-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Outcome</p>
-          <h2 className="mt-1 text-[20px] font-semibold">This visit is closed.</h2>
-          <p className="mt-2 max-w-[46ch] text-[14.5px] text-[var(--fp-muted)]">The summary was handed to billing. Start a new walk-in if the customer returns.</p>
-          <Link href="/today" className="mt-4 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]">Back to dashboard</Link>
-        </div>
+        <>
+          <div className="mt-6 border border-[var(--fp-line)] bg-[var(--fp-surface)] px-5 py-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Outcome</p>
+            <h2 className="mt-1 text-[20px] font-semibold">This visit is closed.</h2>
+            <p className="mt-2 max-w-[46ch] text-[14.5px] text-[var(--fp-muted)]">The summary was handed to billing. Start a new walk-in if the customer returns.</p>
+            <Link href="/today" className="mt-4 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]">Back to dashboard</Link>
+          </div>
+          <FloorBoard visitId={visit.id} readOnly />
+        </>
       )}
 
       {billing === "done" && visit.status !== "COMPLETED" && (
@@ -323,6 +336,19 @@ function VisitBody({ visit }: { visit: VisitLive }) {
         <AssignDrawer
           visit={visit}
           onClose={() => setAssignOpen(false)}
+        />
+      )}
+
+      {deleteOpen && (
+        <DeleteVisitDrawer
+          visit={visit}
+          customerName={customer?.name || visit.customerName}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            store.pushToast("Visit deleted", "The mistaken record is gone.");
+            router.push("/today");
+          }}
         />
       )}
 
@@ -379,6 +405,7 @@ function ArrivalFlow({
   const [results, setResults] = useState<CustomerSnapshotLive[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [err, setErr] = useState<{ title: string; body: string } | null>(null);
   const [, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -392,51 +419,88 @@ function ArrivalFlow({
   const [starting, setStarting] = useState(false);
   const [attaching, setAttaching] = useState(false);
 
-  /* Registered FCs with live load — the create-form dropdown shows who is
-     free, the same roster rule as the assign drawer (FCs see only self). */
+  /* Registered FCs with live load — the whole roster shows for every role,
+     the create-form dropdown included. Moving another FC's active visit
+     still needs a manager (guarded in pick). */
   const fcLoad = new Map<string, number>();
   store.visits.forEach((v) => {
     if (v.assignedSalespersonId && (v.status === "ACTIVE" || v.status === "ASSIGNED")) {
       fcLoad.set(v.assignedSalespersonId, (fcLoad.get(v.assignedSalespersonId) ?? 0) + 1);
     }
   });
-  const fcRoster = (canAssignOthers(store.user?.role)
-    ? store.salespeople
-    : store.salespeople.filter((s) => s.id === store.user?.id)
-  ).filter((s) => s.active);
+  const fcRoster = store.salespeople.filter((s) => s.active);
 
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const ready = !!visit.customerId && !!visit.assignedSalespersonId;
 
   /* One lookup — name or mobile in a single field. Digits hit the mobile
      index, letters hit name search, and every match shows its mobile inline
-     so same names are told apart on the spot. */
+     so same names are told apart on the spot. Quiet mode powers the
+     type-as-you-go suggestions: no error flashes, no create form — the
+     explicit Search tap owns those. */
+  const searchReq = useRef(0);
+  const runLookup = async (raw: string, opts?: { quiet?: boolean }) => {
+    const q = raw.trim();
+    const d = normalizeMobile(q);
+    const hasLetters = /[a-zA-Z\u0900-\u097F]/.test(q);
+    if (q.length < 2 && d.length < 3) {
+      setResults([]);
+      setSearched(false);
+      return;
+    }
+    const my = ++searchReq.current;
+    setSearching(true);
+    if (!opts?.quiet) setErr(null);
+    try {
+      const [mobileHit, nameList] = await Promise.all([
+        d.length >= 3 ? store.searchCustomer(q) : Promise.resolve(null),
+        hasLetters || d.length < 6 ? store.searchCustomersByName(q) : Promise.resolve([]),
+      ]);
+      if (my !== searchReq.current) return; // a newer keystroke won
+      const combined = [...(mobileHit ? [mobileHit] : []), ...nameList.filter((c) => c.id !== mobileHit?.id)];
+      setResults(combined);
+      setSearched(true);
+      if (!opts?.quiet) {
+        if (combined.length === 0) {
+          setCreating(true);
+          setName(hasLetters ? q : "");
+          setPhone(d || "");
+          setArea("");
+        } else {
+          setCreating(false);
+        }
+      }
+    } catch {
+      if (my !== searchReq.current) return;
+      if (!opts?.quiet) {
+        setErr({ title: "Search didn't go through.", body: "Check your connection and try again." });
+      }
+    } finally {
+      if (my === searchReq.current) setSearching(false);
+    }
+  };
+
+  /* Suggest while they type (debounced) — the list narrows with every
+     letter instead of waiting for Search. State only changes inside the
+     timer callback, never the effect body. */
+  useEffect(() => {
+    const q = query;
+    const t = window.setTimeout(() => {
+      void runLookup(q, { quiet: true });
+    }, 260);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runLookup is per-render; the timer serializes calls
+  }, [query]);
+
   const search = async () => {
     const q = query.trim();
     const d = normalizeMobile(q);
-    const hasLetters = /[a-zA-Z\u0900-\u097F]/.test(q);
     if (q.length < 2 && d.length < 3) {
       setErr({ title: "Type a name or mobile number.", body: "2+ letters for a name, or the 10-digit mobile number." });
       return;
     }
-    setSearching(true);
-    setErr(null);
-    const [mobileHit, nameList] = await Promise.all([
-      d.length >= 3 ? store.searchCustomer(q) : Promise.resolve(null),
-      hasLetters || d.length < 6 ? store.searchCustomersByName(q) : Promise.resolve([]),
-    ]);
-    const combined = [...(mobileHit ? [mobileHit] : []), ...nameList.filter((c) => c.id !== mobileHit?.id)];
-    setSearching(false);
-    setSearched(true);
-    setResults(combined);
-    if (combined.length === 0) {
-      setCreating(true);
-      setName(hasLetters ? q : "");
-      setPhone(d || "");
-      setArea("");
-    } else {
-      setCreating(false);
-    }
+    setSubmitted(true);
+    await runLookup(q);
   };
 
   const attach = async (id: string, label: string) => {
@@ -510,7 +574,7 @@ function ArrivalFlow({
                 <input
                   id="lookup-q"
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setSearched(false); setErr(null); }}
+                  onChange={(e) => { setQuery(e.target.value); setSubmitted(false); setErr(null); }}
                   onPaste={(e) => {
                     const text = e.clipboardData.getData("text");
                     if (text && /[0-9]/.test(text)) { e.preventDefault(); setQuery(normalizeMobile(text)); }
@@ -545,7 +609,7 @@ function ArrivalFlow({
               </div>
             )}
 
-            {searched && results.length === 0 && (
+            {submitted && searched && results.length === 0 && (
               <form className="fp-rise mt-5 max-w-md" onSubmit={(e) => { e.preventDefault(); void create(); }}>
                 <h3 className="text-[16px] font-semibold">New customer captured</h3>
                 <p className="mt-1 text-[13.5px] text-[var(--fp-muted)]">
@@ -721,7 +785,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
   return (
     <Drawer kicker="Assignment · round robin" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC — round robin"} onClose={onClose}>
       {!manager && (
-        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">You can take this customer yourself. A manager assigns anyone else.</p>
+        <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">Everyone on today&apos;s roster is listed — tap a name to assign. Moving someone else&apos;s active visit needs a manager.</p>
       )}
       {manager && (
         <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
@@ -734,9 +798,65 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
   );
 }
 
+/* Manager-only hard delete for a mistaken visit record. Completed visits,
+   live visits and visits with products are refused by the server with a
+   human reason — the drawer surfaces it without closing. */
+function DeleteVisitDrawer({
+  visit,
+  customerName,
+  onClose,
+  onDeleted,
+}: {
+  visit: VisitLive;
+  customerName?: string | null;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const { deleteVisit } = useStore();
+  const [deleting, setDeleting] = useState(false);
+  const [err, setErr] = useState("");
+
+  const confirm = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setErr("");
+    const r = await deleteVisit(visit.id);
+    setDeleting(false);
+    if (!r.ok) {
+      setErr(r.message || "Could not delete the visit. Try again.");
+      return;
+    }
+    onDeleted();
+  };
+
+  return (
+    <Drawer
+      kicker="Danger zone"
+      title="Delete this visit?"
+      onClose={onClose}
+      footer={
+        <div className="flex gap-2">
+          <Btn tone="line" className="flex-1" onClick={onClose}>Keep visit</Btn>
+          <Btn tone="drop" className="flex-1" disabled={deleting} onClick={() => void confirm()}>
+            {deleting ? "Deleting…" : "Yes, delete"}
+          </Btn>
+        </div>
+      }
+    >
+      <p className="text-[14.5px] leading-relaxed text-[var(--fp-ink)]">
+        {customerName ? <><strong className="font-semibold">{customerName}</strong> — </> : null}
+        this removes the arrival record permanently. It only works for empty, mistaken arrivals: completed visits, live visits and visits with products are refused automatically.
+      </p>
+      {err && <p role="alert" className="mt-3 text-[13.5px] font-medium text-[var(--fp-drop)]">{err}</p>}
+    </Drawer>
+  );
+}
+
 /* The assignment rail: same roster + round-robin logic the drawer uses, so the
    arrival terminal can show it inline (wide screens) instead of behind a tap.
-   Locked until a customer is attached — the server would reject the pick. */
+   Every FC on the roster is listed for every role; moving someone else's
+   active visit still needs a manager. Locked until a customer is attached —
+   the server would reject the pick. */
 function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?: () => void; locked?: boolean }) {
   const { salespeople, visits, assignSalesperson, pushToast, user } = useStore();
   const [saving, setSaving] = useState<string | null>(null);
@@ -748,7 +868,7 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
       load.set(v.assignedSalespersonId, (load.get(v.assignedSalespersonId) ?? 0) + 1);
     }
   });
-  const roster = manager ? salespeople : salespeople.filter((s) => s.id === user?.id);
+  const roster = salespeople;
 
   const pick = async (id: string, name: string) => {
     if (locked) return;

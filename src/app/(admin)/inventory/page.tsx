@@ -105,28 +105,28 @@ function InventoryInner() {
         kicker="Catalogue"
         title="Products"
         sub={`${total} SKUs · search, filter, open for stock moves + purchase history.`}
-        actions={<Button className="group min-h-[44px] bg-[#b4234d] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[#93183d] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button>}
+        actions={<Button className="group min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button>}
       />
 
       <Card className="shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
         <CardContent className="flex flex-col gap-2 pt-4 md:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search name, SKU, barcode, brand, design…" className="min-h-[48px] rounded-xl pl-10 transition-all focus:ring-4 focus:ring-[#b4234d]/10" aria-label="Search inventory" />
+            <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search name, SKU, barcode, brand, design…" className="min-h-[48px] rounded-xl pl-10 transition-all focus:ring-4 focus:ring-[var(--staff-brand)]/10" aria-label="Search inventory" />
             {q && (
               <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[36px] w-9 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95">✕</button>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
             <Select value={cat} onValueChange={(v) => { setCat(v); setPage(1); }}>
-              <SelectTrigger className="min-h-[48px] w-full rounded-xl md:w-[180px]"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectTrigger aria-label="Filter by category" className="min-h-[48px] w-full rounded-xl md:w-[180px]"><SelectValue placeholder="Category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
                 {cats.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} ({c.productCount})</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={stock} onValueChange={(v) => { setStock(v); setPage(1); }}>
-              <SelectTrigger className="min-h-[48px] w-full rounded-xl md:w-[160px]"><SelectValue placeholder="Stock" /></SelectTrigger>
+              <SelectTrigger aria-label="Filter by stock level" className="min-h-[48px] w-full rounded-xl md:w-[160px]"><SelectValue placeholder="Stock" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All stock</SelectItem>
                 <SelectItem value="in-stock">In stock</SelectItem>

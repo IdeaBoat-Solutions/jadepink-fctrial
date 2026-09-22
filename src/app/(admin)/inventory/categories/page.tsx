@@ -33,13 +33,13 @@ export default async function CategoriesPage() {
         {categories.map((c) => (
           <Card key={c.id} className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-16px_rgba(28,25,23,0.3)]">
             <CardHeader className="flex flex-row items-center gap-3">
-              <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fdf0f4] text-[16px] font-bold text-[#b4234d] transition-transform duration-150 group-hover:scale-105">{c.name.charAt(0)}</span>
+              <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fdf0f4] text-[16px] font-bold text-[var(--staff-brand)] transition-transform duration-150 group-hover:scale-105">{c.name.charAt(0)}</span>
               <CardTitle className="tracking-tight">{c.name}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center justify-between gap-2 border-t border-dashed pt-3">
               <p className="tnum text-[13px] text-muted-foreground">
                 {c.productCount} {c.productCount === 1 ? "product" : "products"}
-                {c.productCount === 0 && <span className="text-[#a8a29e]"> · nothing filed here yet</span>}
+                {c.productCount === 0 && <span className="text-[#76716b]"> · nothing filed here yet</span>}
               </p>
               <Button variant="outline" size="sm" className="min-h-[40px] transition-all duration-150 group-hover:border-foreground" asChild>
                 <Link href={`/inventory?cat=${encodeURIComponent(c.id)}`}>Open <span aria-hidden>→</span></Link>

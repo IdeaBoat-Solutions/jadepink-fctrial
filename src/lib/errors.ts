@@ -17,6 +17,10 @@ export const STAGE2_ERRORS = {
   SALESPERSON_WRONG_STORE: "SALESPERSON_WRONG_STORE",
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
+  CUSTOMER_HAS_HISTORY: "CUSTOMER_HAS_HISTORY",
+  VISIT_NOT_DELETABLE: "VISIT_NOT_DELETABLE",
+  /** The guards passed but the write itself failed (RLS, FK, outage). */
+  OPERATION_FAILED: "OPERATION_FAILED",
 
   /* ---------- Stage 3: products, trials, likes/drops ---------- */
   PRODUCT_NOT_FOUND: "PRODUCT_NOT_FOUND",
@@ -62,6 +66,9 @@ function statusFor(code: string): number {
   if (code === "FORBIDDEN" || code === "SALESPERSON_WRONG_STORE") return 403;
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (code === "CUSTOMER_ALREADY_EXISTS" || code === "PRODUCT_ALREADY_ADDED" || code === "PRODUCT_STATE_CHANGED") return 409;
+  if (code === "CUSTOMER_HAS_HISTORY") return 409;
+  if (code === "VISIT_NOT_DELETABLE") return 409;
+  if (code === "OPERATION_FAILED") return 500;
   if (UNPROCESSABLE_CODES.has(code)) return 422;
   return 400;
 }

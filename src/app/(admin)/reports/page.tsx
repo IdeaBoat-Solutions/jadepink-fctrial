@@ -53,7 +53,7 @@ export default async function ReportsPage() {
                   <span className="tnum text-[13px] text-muted-foreground">{list.length} orders · {formatINR(total)}</span>
                 </div>
                 <div aria-hidden className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-[#b4234d] transition-[width] duration-500" style={{ width: `${Math.max(6, Math.round((total / Math.max(1, maxChannel)) * 100))}%` }} />
+                  <div className="h-full rounded-full bg-[var(--staff-brand)] transition-[width] duration-500" style={{ width: `${Math.max(6, Math.round((total / Math.max(1, maxChannel)) * 100))}%` }} />
                 </div>
               </div>
             );

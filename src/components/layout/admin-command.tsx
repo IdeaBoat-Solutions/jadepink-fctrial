@@ -217,7 +217,7 @@ export function AdminCommand({
                           transition={{ delay: reduceMotion ? 0 : i * 0.03, duration: 0.2 }}
                           className="group flex flex-col items-center gap-2 rounded-xl px-2 py-3 text-center transition-colors hover:bg-white/8 focus-visible:bg-white/8 focus-visible:outline-none"
                         >
-                          <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-b from-white/14 to-white/6 ring-1 ring-white/12 transition-transform duration-150 group-hover:scale-105 group-hover:ring-[#b4234d]/50">
+                          <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-b from-white/14 to-white/6 ring-1 ring-white/12 transition-transform duration-150 group-hover:scale-105 group-hover:ring-[var(--staff-brand)]/50">
                             <Icon className="size-5 text-white/85" />
                           </span>
                           <span className="line-clamp-1 text-[12px] font-medium text-white/70 group-hover:text-white">
@@ -265,7 +265,7 @@ export function AdminCommand({
                             className={cn(
                               "flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors",
                               selected
-                                ? "bg-[#b4234d] text-white shadow-[0_8px_24px_-12px_rgba(180,35,77,0.9)]"
+                                ? "bg-[var(--staff-brand)] text-white shadow-[0_8px_24px_-12px_rgba(180,35,77,0.9)]"
                                 : "text-white/90 hover:bg-white/8"
                             )}
                           >
