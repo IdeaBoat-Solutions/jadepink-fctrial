@@ -31,7 +31,7 @@ export default function TodayPage() {
     <div className="staff-page">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <p className="staff-kicker">Today · Bandra Flagship</p>
+          <p className="staff-kicker">Today · JadePink Ahmedabad</p>
           <h1 className="staff-title mt-1">
             {greeting()}, {user?.name}
           </h1>

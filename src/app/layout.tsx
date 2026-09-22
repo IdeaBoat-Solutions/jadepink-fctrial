@@ -13,11 +13,13 @@ const jost = Jost({ variable: "--font-jost", subsets: ["latin"], display: "swap"
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "swap" });
 
 /* Playfair Display — high-contrast luxury serif for headlines.
-   Used for hero statements, section titles, and brand moments. */
+   Used for hero statements, section titles, and brand moments.
+   Three weights only: keeps font payload small so first paint + route
+   entries stay instant. */
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "900"],
+  weight: ["400", "500", "600"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -27,7 +29,7 @@ const playfair = Playfair_Display({
 const lux = Cormorant_Garamond({
   variable: "--font-lux",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["300", "400", "500"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -38,7 +40,7 @@ export const metadata: Metadata = {
     default: "JadePink — Royal Elegance",
     template: "%s · JadePink",
   },
-  description: "Considered clothing for real days — designed in Mumbai, trialled in store. Bandra Flagship, open daily 11–9.",
+  description: "Considered clothing for real days — heritage and luxury labels plus young designers, trialled in store. Thaltej, Ahmedabad, open daily 10:30 AM–8 PM.",
 };
 
 export const viewport: Viewport = {

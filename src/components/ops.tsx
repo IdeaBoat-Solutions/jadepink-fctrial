@@ -7,7 +7,7 @@ import type { VisitLive } from "@/lib/api";
 import { formatMobileIN } from "@/lib/domain";
 import type { CustomerSnapshotLive } from "@/lib/api";
 import { timeAgo, clockTime, cn } from "@/lib/utils";
-import { ErrorBlock, Field, PrimaryButton, SecondaryButton, StatusBadge, TextInput } from "@/components/ui";
+import { PrimaryButton, SecondaryButton, StatusBadge, TextInput } from "@/components/ui";
 import { useStore } from "@/lib/store";
 
 /* Shared Stage 2 components over the LIVE visit model (VisitLive /
@@ -43,7 +43,7 @@ export function VisitHeader({ visit, customer, fcName }: { visit: VisitLive; cus
       <div className="relative flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <p className="text-[11.5px] font-bold uppercase tracking-[0.12em] text-white/55">
-            Bandra Flagship · Arrived {clockTime(visit.arrivedAt)} · {timeAgo(visit.arrivedAt)} ago
+            JadePink Ahmedabad · Arrived {clockTime(visit.arrivedAt)} · {timeAgo(visit.arrivedAt)} ago
           </p>
           <h1 className="mt-1 truncate text-[22px] font-semibold tracking-tight text-balance sm:text-[24px]">
             {customer ? customer.name : "Identifying customer…"}
@@ -172,7 +172,7 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
 
 /* ---------- FC selector: availability obvious, touch targets large ---------- */
 
-export function FCSelector({ visitId, onDone, showAuto = true }: { visitId: string; onDone?: (spId: string) => void; showAuto?: boolean }) {
+export function FCSelector({ visitId, currentSpId, onDone, showAuto = true }: { visitId: string; currentSpId?: string | null; onDone?: (spId: string) => void; showAuto?: boolean }) {
   const { salespeople, visits, assignSalesperson, pushToast, user } = useStore();
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -194,18 +194,46 @@ export function FCSelector({ visitId, onDone, showAuto = true }: { visitId: stri
     }
   };
 
+  const me = user ? salespeople.find((sp) => sp.id === user.id) : undefined;
+  const meAssigned = me && currentSpId === me.id;
+
   return (
     <div className="flex flex-col gap-2">
+      {/* One-tap self-assignment: the logged-in FC serves this customer directly. */}
+      {me && !meAssigned && (
+        <button
+          onClick={() => void pick(me)}
+          disabled={saving !== null}
+          className="btn-sheen inline-flex min-h-[52px] items-center justify-center gap-1.5 rounded-xl bg-[#1c1917] px-4 text-[14.5px] font-bold text-white transition-all duration-150 hover:-translate-y-px active:translate-y-0 active:scale-[0.98] disabled:opacity-60"
+        >
+          {saving === me.id ? "Assigning you…" : `Take this customer — assign to me (${me.name}) →`}
+        </button>
+      )}
+      {meAssigned && (
+        <p className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-[#bfe3cd] bg-[#f2faf5] px-3.5 text-[14px] font-semibold text-[#177245]">
+          <span aria-hidden className="grid size-5 place-items-center rounded-full bg-[#177245] text-[12px] text-white">✓</span>
+          Assigned to you
+        </p>
+      )}
+      {salespeople.length === 0 && (
+        <p className="rounded-xl bg-[#faf8f6] px-4 py-3 text-[13.5px] leading-relaxed text-[#78716c]">
+          No active FCs found for this store. Ask a manager to activate staff profiles, then try again.
+        </p>
+      )}
       <div role="radiogroup" aria-label="Assign FC" className="flex flex-col gap-2">
         {salespeople.map((sp) => {
           const n = load.get(sp.id) || 0;
+          const selected = currentSpId === sp.id;
+          const isMe = user?.id === sp.id;
           return (
             <button
-              key={sp.id} role="radio" aria-checked={false} disabled={saving !== null}
+              key={sp.id} role="radio" aria-checked={selected} disabled={saving !== null}
               onClick={() => void pick(sp)}
               className={cn(
                 "flex min-h-[60px] items-center justify-between gap-3 rounded-lg border px-4 text-left transition-colors",
-                "border-[#d6c9bb] bg-white hover:border-[#1c1917]"
+                selected
+                  ? "border-[#177245] bg-[#f2faf5]"
+                  : "border-[#d6c9bb] bg-white hover:border-[#1c1917]"
               )}
             >
               <span className="flex items-center gap-3">
@@ -214,7 +242,8 @@ export function FCSelector({ visitId, onDone, showAuto = true }: { visitId: stri
                 </span>
                 <span>
                   <span className="block text-[15px] font-semibold text-[#1c1917]">
-                    {sp.name} {user?.id === sp.id && <span className="text-[12px] font-medium text-[#78716c]">(you)</span>}
+                    {sp.name} {isMe && <span className="text-[12px] font-medium text-[#78716c]">(you)</span>}
+                    {selected && <span className="ml-1.5 rounded-full bg-[#177245] px-2 py-0.5 text-[11px] font-bold text-white">Assigned</span>}
                   </span>
                   <span className="text-[12.5px] text-[#78716c]">
                     {n ? `${n} active visit${n > 1 ? "s" : ""}` : "Free now"}
@@ -223,8 +252,8 @@ export function FCSelector({ visitId, onDone, showAuto = true }: { visitId: stri
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 {saving === sp.id && <span className="text-[12.5px] font-medium text-[#78716c]">Assigning…</span>}
-                {!saving && n === 0 && <StatusBadge value="available" />}
-                {!saving && n > 0 && <StatusBadge value="busy" />}
+                {!saving && !selected && n === 0 && <StatusBadge value="available" />}
+                {!saving && !selected && n > 0 && <StatusBadge value="busy" />}
               </span>
             </button>
           );
@@ -295,7 +324,7 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
         <option value="">Pick FC…</option>
         {salespeople.map((sp) => (
           <option key={sp.id} value={sp.id}>
-            {sp.name}
+            {sp.name}{user?.id === sp.id ? " (you)" : ""}
           </option>
         ))}
       </select>
@@ -412,7 +441,7 @@ export function CreateCustomerCard({
   onCreated: (customer: CustomerSnapshotLive) => void;
   onCancel?: () => void;
   autoFocus?: boolean;
-  /** One-line miss row: [Name][Mobile][Create] — no source dropdown, no hints. */
+  /** One-line miss row: [Name][Mobile][Source ▾][Create] — source captured at creation. */
   compact?: boolean;
 }) {
   const { createCustomer, searchCustomer, pushToast } = useStore();
@@ -500,6 +529,17 @@ export function CreateCustomerCard({
               className="tnum lg:max-w-[170px]"
               aria-invalid={!!err && !isValidMobileIN(mobile)}
             />
+            <label htmlFor="cc-source" className="sr-only">How did they hear about us?</label>
+            <select
+              id="cc-source"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              aria-label="How did they hear about us?"
+              title="How did they hear about us?"
+              className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-2.5 text-[14px] text-[#1c1917] transition-colors hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 lg:w-auto lg:max-w-[170px] lg:shrink-0"
+            >
+              {CUSTOMER_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
             <span className="flex gap-2 lg:ml-auto lg:shrink-0">
               <PrimaryButton type="submit" disabled={busy} className="min-h-[44px] flex-1 px-5 lg:flex-none">
                 {busy ? "Creating…" : "Create →"}
@@ -521,87 +561,85 @@ export function CreateCustomerCard({
         </section>
       )}
       {!compact && (
-    <section className="ui-fade rounded-2xl border border-[#b4234d]/35 bg-[#fdf0f4]/50 p-5 sm:p-6">
-      <div className="flex items-start gap-3">
-        <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#fdf0f4] text-[17px] font-bold text-[#b4234d] ring-1 ring-[#b4234d]/20">+</span>
-        <div className="min-w-0">
-          <h2 className="staff-h2 text-balance">{title}</h2>
-          <div className="staff-sub">{body}</div>
-        </div>
-      </div>
+    <section className="ui-fade rounded-2xl border border-[#b4234d]/35 bg-[#fdf0f4]/50 px-3 py-2.5" aria-label={title}>
       {existing ? (
-        <div className="ui-fade mt-4 rounded-2xl border border-[#f0d48a] bg-[#fffdf5] p-4">
-          <p className="flex items-center gap-1.5 text-[14px] font-semibold text-[#9a5b00]">
+        <div className="ui-fade rounded-xl border border-[#f0d48a] bg-[#fffdf5] p-3">
+          <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-[#9a5b00]">
             <span aria-hidden className="grid size-5 place-items-center rounded-full bg-[#fdf1d7] text-[12px] ring-1 ring-[#f0d48a]">!</span>
             That number is already registered.
           </p>
-          <p className="mt-1 text-[13.5px] leading-relaxed text-[#78716c]">Use the existing record instead — history stays in one place.</p>
-          <div className="mt-3 rounded-xl border border-[#e8dfd6] bg-white p-3.5">
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#78716c]">Use the existing record instead — history stays in one place.</p>
+          <div className="mt-2 rounded-xl border border-[#e8dfd6] bg-white p-3">
             <CustomerSnapshot customer={existing} compact />
           </div>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <PrimaryButton onClick={() => onCreated(existing)} className="flex-1">Use existing record →</PrimaryButton>
-            <Link href={`/customers/${existing.id}`} className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-[#d6c9bb] px-4 text-[13.5px] font-semibold transition-all duration-150 hover:-translate-y-px hover:border-[#1c1917] hover:bg-white active:translate-y-0">
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <PrimaryButton onClick={() => onCreated(existing)} className="min-h-[44px] flex-1">Use existing record →</PrimaryButton>
+            <Link href={`/customers/${existing.id}`} className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-[#d6c9bb] px-4 text-[13.5px] font-semibold transition-all duration-150 hover:-translate-y-px hover:border-[#1c1917] hover:bg-white active:translate-y-0">
               Open profile
             </Link>
           </div>
         </div>
       ) : (
         <form
-          className="mt-4 flex flex-col gap-3"
+          className="flex flex-col gap-2 xl:flex-row xl:items-center"
           onSubmit={(e) => { e.preventDefault(); void submit(); }}
           aria-label="Create customer record"
         >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Name" required htmlFor="cc-name">
-              <TextInput
-                id="cc-name"
-                ref={nameRef}
-                value={name}
-                onChange={(e) => { touched.current.name = true; setName(e.target.value); setErr(""); }}
-                placeholder="Customer name"
-                autoComplete="off"
-                aria-invalid={!!err && name.trim().length < 2}
-              />
-            </Field>
-            <Field label="Mobile" required htmlFor="cc-mobile" hint="10-digit mobile — +91 and spaces are handled.">
-              <TextInput
-                id="cc-mobile"
-                ref={mobileRef}
-                value={mobile}
-                onChange={(e) => { touched.current.mobile = true; setMobile(e.target.value); setErr(""); }}
-                placeholder="98765 43210"
-                inputMode="tel"
-                autoComplete="off"
-                className="tnum"
-                aria-invalid={!!err && !isValidMobileIN(mobile)}
-              />
-            </Field>
-          </div>
-
-          <Field label="How did you hear about us?" htmlFor="cc-source">
-            <select
-              id="cc-source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="min-h-[48px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3.5 text-[15px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15"
-            >
-              {CUSTOMER_SOURCES.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </Field>
-
-          {err && <ErrorBlock title="Couldn't create the record." body={err} />}
-
-          <div className="flex flex-col gap-2 border-t border-[#b4234d]/20 pt-3 sm:flex-row">
-            <PrimaryButton type="submit" disabled={busy} className="flex-1">
-              {busy ? "Creating…" : `Create record${isValidMobileIN(mobile) ? ` · ${formatMobileIN(mobile)}` : ""} →`}
+          <p className="flex min-w-0 items-center gap-2 text-[13.5px] xl:max-w-[220px] xl:shrink-0">
+            <span aria-hidden className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#fdf0f4] text-[15px] font-bold text-[#b4234d] ring-1 ring-[#b4234d]/20">+</span>
+            <span className="min-w-0">
+              <span className="block truncate font-semibold tracking-tight" title={title}>{title}</span>
+              {typeof body === "string" ? (
+                <span className="block truncate text-[12px] font-normal text-[#78716c]" title={body}>{body}</span>
+              ) : null}
+            </span>
+          </p>
+          <label htmlFor="cc-name" className="sr-only">Name (required)</label>
+          <TextInput
+            id="cc-name"
+            ref={nameRef}
+            value={name}
+            onChange={(e) => { touched.current.name = true; setName(e.target.value); setErr(""); }}
+            placeholder="Name *"
+            autoComplete="off"
+            aria-invalid={!!err && name.trim().length < 2}
+            className="xl:max-w-[180px]"
+          />
+          <label htmlFor="cc-mobile" className="sr-only">Mobile (required)</label>
+          <TextInput
+            id="cc-mobile"
+            ref={mobileRef}
+            value={mobile}
+            onChange={(e) => { touched.current.mobile = true; setMobile(e.target.value); setErr(""); }}
+            placeholder="Mobile *"
+            inputMode="tel"
+            autoComplete="off"
+            className="tnum xl:max-w-[150px]"
+            aria-invalid={!!err && !isValidMobileIN(mobile)}
+          />
+          <label htmlFor="cc-source" className="sr-only">How did you hear about us?</label>
+          <select
+            id="cc-source"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            title="How did you hear about us?"
+            className="min-h-[44px] w-full rounded-xl border border-[#d6c9bb] bg-white px-3 text-[14px] shadow-[inset_0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:border-[#a8a29e] focus:border-[#b4234d] focus:outline-none focus:ring-4 focus:ring-[#b4234d]/15 xl:max-w-[150px]"
+          >
+            {CUSTOMER_SOURCES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <span className="flex gap-2 xl:ml-auto xl:shrink-0">
+            <PrimaryButton type="submit" disabled={busy} className="min-h-[44px] flex-1 px-5 xl:flex-none">
+              {busy ? "Creating…" : "Create →"}
             </PrimaryButton>
             {onCancel && (
-              <SecondaryButton type="button" onClick={onCancel} disabled={busy} className="sm:w-32">Cancel</SecondaryButton>
+              <SecondaryButton type="button" onClick={onCancel} disabled={busy} className="min-h-[44px] px-4">✕</SecondaryButton>
             )}
-          </div>
+          </span>
         </form>
       )}
+      {!existing && (err ? (
+        <p role="alert" className="mt-1.5 text-[13px] font-medium text-[#b4232a]">{err}</p>
+      ) : null)}
     </section>
       )}
     </>

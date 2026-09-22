@@ -15,7 +15,7 @@ create table if not exists public.stores (
   id text primary key,
   name text not null,
   code text unique,
-  city text not null default 'Mumbai',
+  city text not null default 'Ahmedabad',
   address text,
   location text,
   active boolean not null default true,

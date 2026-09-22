@@ -1,7 +1,7 @@
 /* Creates staff logins (FC / STORE_MANAGER) in Supabase Auth + staff_profiles.
    Run AFTER: migrations_010 + migrations_020 in SQL editor, then npm run seed:catalog
    Env needed: NEXT_PUBLIC_SUPABASE_URL (or SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY
-   Optional: TEMP_STAFF_PASSWORD (default JadePink123!), STORE_ID (default store-bandra)
+   Optional: TEMP_STAFF_PASSWORD (default JadePink123!), STORE_ID (default store-thaltej)
 
    Accounts live in scripts/staff.seed.json (add rows there - no code edits).
    Usage:
@@ -23,7 +23,7 @@ const STAFF_FILE = join(HERE, "staff.seed.json");
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const TEMP_PASSWORD = process.env.TEMP_STAFF_PASSWORD || "JadePink123!";
-const DEFAULT_STORE = process.env.STORE_ID || "store-bandra";
+const DEFAULT_STORE = process.env.STORE_ID || "store-thaltej";
 
 /* ---------- CLI flags ---------- */
 /* NOTE: do NOT use `--dry-run` through npm - npm owns that flag and eats it,

@@ -1,11 +1,11 @@
 {
-  "$comment": "Staff logins seeded into Supabase Auth + staff_profiles by `npm run seed:auth`. Add a row here to create another FC - no code change needed. Idempotent: an existing email is skipped in Auth and its staff_profiles row is upserted (name/role/store_id/active re-applied). Omit `phone` unless it is a real number: the upsert writes null for missing values, so never put placeholder digits here. Password comes from TEMP_STAFF_PASSWORD, not this file. store_id falls back to STORE_ID, then store-bandra.",
+  "$comment": "Staff logins seeded into Supabase Auth + staff_profiles by `npm run seed:auth`. Add a row here to create another FC - no code change needed. Idempotent: an existing email is skipped in Auth and its staff_profiles row is upserted (name/role/store_id/active re-applied). Omit `phone` unless it is a real number: the upsert writes null for missing values, so never put placeholder digits here. Password comes from TEMP_STAFF_PASSWORD, not this file. store_id falls back to STORE_ID, then store-thaltej.",
   "staff": [
-    { "email": "iamsmit05@gmail.com", "name": "Smit", "role": "STORE_MANAGER", "store_id": "store-bandra" },
-    { "email": "kkshah2005@gmail.com", "name": "Kunj Shah", "role": "FC", "store_id": "store-bandra" },
+    { "email": "iamsmit05@gmail.com", "name": "Smit", "role": "STORE_MANAGER", "store_id": "store-thaltej" },
+    { "email": "kkshah2005@gmail.com", "name": "Kunj Shah", "role": "FC", "store_id": "store-thaltej" },
 
-    { "email": "fc-aakash@jadepink.test", "name": "Aakash More", "role": "FC", "store_id": "store-bandra" },
-    { "email": "fc-zoya@jadepink.test", "name": "Zoya Sheikh", "role": "FC", "store_id": "store-bandra" },
-    { "email": "fc-rohan@jadepink.test", "name": "Rohan Desai", "role": "FC", "store_id": "store-bandra" }
+    { "email": "fc-aakash@jadepink.test", "name": "Aakash More", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "fc-zoya@jadepink.test", "name": "Zoya Sheikh", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "fc-rohan@jadepink.test", "name": "Rohan Desai", "role": "FC", "store_id": "store-thaltej" }
   ]
 }

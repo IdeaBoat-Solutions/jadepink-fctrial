@@ -100,7 +100,7 @@ VIEW` does not change reloptions, so those views are dropped and recreated.
 npm run seed:catalog   # store row ONLY
 ```
 
-Seeds **only** `store-bandra`, because `staff_profiles.store_id` FKs to it and
+Seeds **only** `store-thaltej`, because `staff_profiles.store_id` FKs to it and
 every RLS policy scopes through it — staff logins cannot work without it.
 
 This file previously also pushed a demo catalogue (8 invented products, 6 fake

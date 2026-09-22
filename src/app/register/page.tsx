@@ -75,7 +75,7 @@ export default function RegisterPage() {
             ))}
           </ol>
         </div>
-        <p className="text-[12.5px] text-white/40">Bandra Flagship · Managers only</p>
+        <p className="text-[12.5px] text-white/40">Thaltej, Ahmedabad · Managers only</p>
       </div>
 
       <main className="flex flex-1 items-center justify-center bg-[#faf8f6] px-4 py-8 sm:px-6">

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const storeId = String(body.storeId ?? caller.store_id ?? "store-bandra");
+    const storeId = String(body.storeId ?? caller.store_id ?? "store-thaltej");
     const profileRow: Record<string, unknown> = { id: created.user.id, email, name, role, store_id: storeId, active: true };
     if (phone) profileRow.phone = phone;
     const { error: upErr } = await admin.from("staff_profiles").upsert(profileRow, { onConflict: "id" });

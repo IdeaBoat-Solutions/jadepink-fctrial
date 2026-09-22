@@ -27,7 +27,7 @@ export default function DashboardPage() {
   return (
     <div className="staff-page">
       <PageHeader
-        kicker="Bandra Flagship · live"
+        kicker="JadePink Ahmedabad · live"
         title="Dashboard"
         sub="Revenue, stock health and today's floor — one glance."
         actions={

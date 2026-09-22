@@ -40,7 +40,7 @@ async function upsert(table, rows, onConflict) {
 /* The store is not demo data: staff_profiles.store_id FKs to it and every RLS
    policy scopes through it, so staff logins cannot work without this row. */
 await upsert("stores", [
-  { id: "store-bandra", name: "Bandra Flagship", code: "BANDRA", city: "Mumbai", address: "Linking Road, Bandra West, Mumbai 400050", active: true },
+  { id: "store-thaltej", name: "JadePink Ahmedabad", code: "JP-AHM-01", city: "Ahmedabad", address: "G-8 Harmony Icon, near Baghban Party Plot, Hebatpur Road, Thaltej, Ahmedabad 380054", active: true },
 ], "id");
 
 console.log("\nDone — store row only. Next: npm run seed:sj (real stock), then npm run seed:auth");
