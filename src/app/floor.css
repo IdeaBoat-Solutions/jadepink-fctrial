@@ -146,4 +146,12 @@
   }
 }
 
+/* Mobile tab bar clearance: the fixed FC tabs overlay the bottom of the
+   page on phones, so the work area ends above them (safe-area included). */
+@media (max-width: 767px) {
+  .floor-work {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+}
+
 /* shadcn sidebar owns mobile behavior (sheet drawer) — no custom rail rules. */

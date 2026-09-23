@@ -26,6 +26,85 @@ interface FloorNavItem {
   badge?: number;
 }
 
+/* Mobile tab bar — the FC's whole navigation in one thumb-friendly row.
+   Phones never touch the sidebar drawer: four sections plus a central
+   walk-in action, safe-area aware, badges where counts matter. Managers keep
+   the sidebar (their console is desktop-first). */
+function MobileTabs({
+  openCount,
+  creating,
+  onWalkIn,
+  isActive,
+}: {
+  openCount: number;
+  creating: boolean;
+  onWalkIn: () => void;
+  isActive: (href: string) => boolean;
+}) {
+  const tabs = [
+    { href: "/today", label: "My work", Icon: LayoutDashboard, badge: undefined as number | undefined },
+    { href: "/visits", label: "Visits", Icon: ClipboardList, badge: openCount || undefined },
+    { href: "/customers", label: "Customers", Icon: Users, badge: undefined as number | undefined },
+    { href: "/products", label: "Products", Icon: Package, badge: undefined as number | undefined },
+  ];
+  const left = tabs.slice(0, 2);
+  const right = tabs.slice(2);
+
+  const renderTab = (t: (typeof tabs)[number]) => {
+    const active = isActive(t.href);
+    return (
+      <Link
+        key={t.href}
+        href={t.href}
+        aria-current={active ? "page" : undefined}
+        className={`relative flex min-h-[60px] flex-1 flex-col items-center justify-center gap-1 rounded-xl transition-all duration-150 active:scale-95 ${
+          active ? "text-[var(--fp-brand-deep)]" : "text-[var(--fp-muted)]"
+        }`}
+      >
+        <span aria-hidden className="relative">
+          <t.Icon className="size-6" />
+          {typeof t.badge === "number" && t.badge > 0 && (
+            <span className="fp-num absolute -right-2.5 -top-1.5 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-[var(--fp-brand)] px-1 text-[10px] font-bold text-white">
+              {t.badge > 9 ? "9+" : t.badge}
+            </span>
+          )}
+        </span>
+        <span className="text-[11px] font-semibold leading-none">{t.label}</span>
+        <span
+          aria-hidden
+          className={`h-1 w-1 rounded-full transition-all duration-200 ${active ? "bg-[var(--fp-brand)] opacity-100" : "opacity-0"}`}
+        />
+      </Link>
+    );
+  };
+
+  return (
+    <nav
+      aria-label="Primary"
+      className="fp-tabs fixed inset-x-0 bottom-0 z-40 border-t border-[var(--fp-line)] bg-[var(--fp-surface)]/95 backdrop-blur md:hidden"
+    >
+      <div className="mx-auto flex max-w-lg items-stretch gap-1 px-2 pb-[env(safe-area-inset-bottom)] pt-1.5">
+        {left.map(renderTab)}
+        <div className="flex flex-1 flex-col items-center justify-start">
+          <button
+            type="button"
+            onClick={onWalkIn}
+            disabled={creating}
+            aria-label={creating ? "Recording walk-in" : "Record a new walk-in"}
+            className="-mt-6 grid size-[60px] place-items-center rounded-full bg-[var(--fp-brand)] text-white shadow-[0_10px_24px_-8px_rgba(142,58,78,0.7)] transition-all duration-150 hover:bg-[var(--fp-brand-deep)] active:scale-95 disabled:opacity-60"
+          >
+            <Plus className={`size-7 transition-transform duration-200 ${creating ? "animate-spin" : ""}`} />
+          </button>
+          <span className="mt-1 text-[11px] font-semibold leading-none text-[var(--fp-muted)]">
+            {creating ? "Saving…" : "Walk-in"}
+          </span>
+        </div>
+        {right.map(renderTab)}
+      </div>
+    </nav>
+  );
+}
+
 function routeLabel(pathname: string, role: Role): string {
   if (pathname.startsWith("/visits/")) return "Visit";
   if (pathname.startsWith("/visits")) return role === "manager" ? "Live floor · Visits" : "My visits";
@@ -226,10 +305,18 @@ export function FloorShell({ children }: { children: React.ReactNode }) {
               {children}
             </main>
           </SidebarInset>
+          {role !== "manager" && (
+            <MobileTabs
+              openCount={activeVisits.length}
+              creating={creating}
+              onWalkIn={() => void newWalkIn()}
+              isActive={isActive}
+            />
+          )}
         </SidebarProvider>
       </TooltipProvider>
 
-      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-50 mx-auto flex w-full max-w-md flex-col gap-2 px-4">
+      <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-[calc(104px+env(safe-area-inset-bottom))] z-50 mx-auto flex w-full max-w-md flex-col gap-2 px-4 md:bottom-[max(1rem,env(safe-area-inset-bottom))]">
         {toasts.map((t) => (
           <div key={t.id} className="fp-rise pointer-events-auto flex items-start gap-3 border border-[var(--fp-ink)] bg-[var(--fp-ink)] px-4 py-3 text-white">
             <span aria-hidden className="mt-1 size-1.5 shrink-0 bg-[#8dcea8]" />
