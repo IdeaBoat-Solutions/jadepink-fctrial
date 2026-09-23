@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { getStockSummary, listOrders, listRecentBilledItems } from "@/features/catalogue/repository";
@@ -5,6 +6,8 @@ import { formatINR, formatDateIN } from "@/lib/utils";
 
 /* Reports aggregate real orders + stock. All queries degrade to empty rather
    than throwing, so the page renders its empty states when nothing is imported. */
+export const metadata: Metadata = { title: "Reports" };
+
 export default async function ReportsPage() {
   const [stock, orders, billed] = await Promise.all([
     getStockSummary().catch(() => null),

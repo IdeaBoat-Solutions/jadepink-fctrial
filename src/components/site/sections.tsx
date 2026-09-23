@@ -20,8 +20,8 @@ function RowHeading({
   href?: string;
 }) {
   return (
-    <div className="reveal mx-auto mb-10 max-w-2xl text-center">
-      <div className="max-w-2xl">
+    <div className="reveal mx-auto mb-10 max-w-4xl text-center">
+      <div className="max-w-4xl">
         <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">{index}</p>
         <h2 className="mt-3 font-display text-4xl leading-[1.04] font-semibold tracking-[-0.01em] text-balance text-black sm:text-5xl">
           {title}
@@ -55,9 +55,9 @@ export function Categories() {
   return (
     <section id="collections" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 pt-16 pb-4 sm:px-8 sm:pt-24">
       <RowHeading
-        index="01 — Shop by category"
+        index="Shop by category"
         title="Six tight edits. No endless aisles."
-        body="If a rail is empty, it sold through. Ask what arrived Friday — the floor turns over every week."
+        body="If a rail is empty, it sold through. Ask what landed Friday."
         linkLabel="View just in"
         href="#new"
       />
@@ -99,9 +99,9 @@ export function Favourites() {
   return (
     <section id="new" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 py-16 sm:px-8 sm:py-24">
       <RowHeading
-        index="02 — Just in"
+        index="Just in"
         title="This week on the rail."
-        body="Pulled Friday. When a size goes, it goes — call the counter and we hold it till 8 PM."
+        body="New pieces land Friday. Call us — we hold your size till 8 PM."
         linkLabel="Ask in store"
         href="#visit"
       />
@@ -142,9 +142,9 @@ export function Designers() {
     <section id="designers" aria-label="Designers" className="border-y border-black/10 bg-[#FAFAF8] scroll-mt-32">
       <div className="mx-auto max-w-[1400px] px-4 py-16 sm:px-8 sm:py-24">
         <RowHeading
-          index="03 — Designers A–Z"
-          title="Heritage names. First-season experiments."
-          body="Established labels beside young designers, hung side by side. New names land every season."
+          index="Designers A–Z"
+          title="Big labels and new names."
+          body="Well-known brands next to young new designers. New names every season."
           linkLabel="Meet them in store"
           href="#visit"
         />
@@ -152,14 +152,14 @@ export function Designers() {
           {DESIGNER_GROUPS.map((g) => (
             <div key={g.craft} className="reveal border-t-2 border-black pt-5">
               <p className="text-[11px] font-semibold tracking-[0.28em] text-black uppercase">{g.craft}</p>
-              <ul className="mt-2 divide-y divide-black/10">
-                {g.names.map((n) => (
-                  <li key={n} className="flex items-baseline justify-between gap-4 py-2.5 text-[15px] text-black">
+              <p className="mt-3 text-[15px] leading-relaxed text-black">
+                {g.names.map((n, i) => (
+                  <span key={n}>
                     {n}
-                    <span aria-hidden className="text-[12px] text-black/30">↗</span>
-                  </li>
+                    {i < g.names.length - 1 && <span aria-hidden className="mx-1.5 text-black/30">·</span>}
+                  </span>
                 ))}
-              </ul>
+              </p>
             </div>
           ))}
         </div>
@@ -174,9 +174,9 @@ export function Reviews() {
   return (
     <section id="journal" aria-label="From the floor" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 py-16 sm:px-8 sm:py-24">
       <RowHeading
-        index="04 — From the floor"
+        index="From the floor"
         title="Notes, not campaigns."
-        body="What the stylists actually say to walk-ins — bridal timelines, what fits petite frames, what restocks."
+        body="Stylist advice: bridal timelines, petite fits, and what restocks."
       />
       <div className="grid gap-4 md:grid-cols-2">
         <figure className="reveal grid sm:grid-cols-2 border border-black/10">
@@ -237,12 +237,12 @@ export function Lifestyle() {
   return (
     <section id="lifestyle" className="border-t border-black/10 scroll-mt-32">
       <div className="mx-auto grid max-w-[1400px] md:grid-cols-[1.1fr_0.9fr]">
-        <div id="visit" className="reveal border-b border-black/10 px-4 py-14 sm:px-8 md:border-r md:border-b-0 sm:py-20 scroll-mt-32">
-          <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">05 — Our store</p>
-          <h2 className="mt-3 font-display text-4xl leading-[1.04] font-semibold text-black sm:text-5xl">
+        <div id="visit" className="reveal border-b border-black/10 px-4 py-14 text-center sm:px-8 md:border-r md:border-b-0 sm:py-20 scroll-mt-32">
+          <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">Our store</p>
+          <h2 className="mx-auto mt-3 max-w-[20ch] font-display text-4xl leading-[1.04] font-semibold text-balance text-black sm:text-5xl">
             Thaltej, not a mall.
           </h2>
-          <address className="mt-5 text-[15px] leading-relaxed text-black/70 not-italic">
+          <address className="mx-auto mt-5 max-w-[40ch] text-[15px] leading-relaxed text-black/70 not-italic">
             G-8 Harmony Icon, Hebatpur Road, near Baghban Party Plot,
             <br />
             Thaltej, Ahmedabad 380054
@@ -261,7 +261,7 @@ export function Lifestyle() {
               <p className="mt-1 text-[13.5px] font-medium text-black">With stylist</p>
             </div>
           </div>
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="mt-7 flex flex-wrap justify-center gap-3">
             <a
               href="tel:+919081288988"
               className="inline-flex min-h-[48px] items-center bg-black px-7 text-[12px] font-semibold tracking-[0.2em] text-white uppercase hover:bg-[#651E2A]"
@@ -288,12 +288,12 @@ export function Lifestyle() {
           </p>
         </div>
 
-        <div className="reveal bg-[#F4F2ED] px-4 py-14 sm:px-8 sm:py-20">
+        <div className="reveal bg-[#F4F2ED] px-4 py-14 text-center sm:px-8 sm:py-20">
           <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">The list</p>
-          <h2 className="mt-3 font-display text-3xl leading-tight font-semibold text-black sm:text-4xl">
-            Restocks, once a fortnight.
+          <h2 className="mx-auto mt-3 max-w-[20ch] font-display text-3xl leading-tight font-semibold text-balance text-black sm:text-4xl">
+            New pieces, twice a month.
           </h2>
-          <p className="mt-3 max-w-[40ch] text-[14.5px] leading-relaxed text-black/60">
+          <p className="mx-auto mt-3 max-w-[40ch] text-[14.5px] leading-relaxed text-black/60">
             New rails and quiet restocks. One email, every two weeks. No daily noise.
           </p>
           <NewsletterForm />

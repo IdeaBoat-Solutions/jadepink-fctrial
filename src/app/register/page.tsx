@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { PrimaryButton, TextInput, Field } from "@/components/ui";
 import { FULL_NAME_ERROR, isFullName, normalizeName } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type Me = { user: { id: string; email?: string } | null; profile: { name: string; role: string } | null };
 
 export default function RegisterPage() {
+  usePageTitle("Register staff");
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [name, setName] = useState("");

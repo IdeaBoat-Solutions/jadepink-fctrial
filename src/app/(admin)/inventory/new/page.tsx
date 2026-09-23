@@ -14,11 +14,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { PageHeader } from "@/components/layout/page-header";
 import { listCategories, listSuppliers } from "@/lib/api";
 import { productSchema, type Category, type ProductInput, type Supplier } from "@/lib/inventory";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Add product — live categories + suppliers from the API (never seed data),
    POST /api/products, real duplicate errors surfaced instead of a fake toast. */
 
 export default function NewProductPage() {
+  usePageTitle("New product");
   const router = useRouter();
   const form = useForm<ProductInput>({ resolver: zodResolver(productSchema) as Resolver<ProductInput>, defaultValues: { stock: 0, lowStockAt: 5 } });
   // useWatch (not form.watch) so React Compiler can memoize this component.

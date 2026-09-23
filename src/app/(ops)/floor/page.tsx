@@ -11,8 +11,10 @@ import { listFloorVisits, type FloorSummary } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { canViewLiveFloor } from "@/lib/policy";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function FloorPage() {
+  usePageTitle("Live floor");
   const { salespeople, profile, user, activeVisits, awaitingAssignment, createWalkIn, pushToast } = useStore();
   const router = useRouter();
   const [summaries, setSummaries] = useState<Map<string, FloorSummary>>(new Map());

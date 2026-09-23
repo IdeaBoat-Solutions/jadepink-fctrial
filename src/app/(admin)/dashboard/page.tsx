@@ -12,6 +12,7 @@ import { useApi } from "@/hooks/use-api";
 import { getDashboard, getVisitFunnel, type FunnelMetricsLive } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import { formatINR } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const EMPTY_FUNNEL: FunnelMetricsLive = {
   footfall: 0, trials: 0, billedVisits: 0, billedPieces: 0, billedValue: 0,
@@ -46,6 +47,7 @@ const JUMP_LINKS = [
 ] as const;
 
 export default function DashboardPage() {
+  usePageTitle("Dashboard");
   const { data, loading, error, reload } = useApi("dashboard", getDashboard);
   const { todayCounts, visits, profile } = useStore();
   const storeId = profile?.storeId ?? "";

@@ -42,12 +42,6 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-30 bg-white">
-      <div className="bg-[#101010] text-white">
-        <p className="mx-auto max-w-[1400px] truncate px-4 py-2 text-center text-[11px] font-medium tracking-[0.22em] uppercase sm:px-8">
-          Thaltej, Ahmedabad · Open daily 10:30 AM – 8:00 PM · +91 90812 88988
-        </p>
-      </div>
-
       <div className="border-b border-black/10">
         <div className="mx-auto grid max-w-[1400px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-4 sm:px-8">
           <div className="hidden text-[12px] tracking-[0.08em] text-black/60 md:block">

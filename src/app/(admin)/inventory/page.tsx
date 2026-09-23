@@ -17,6 +17,7 @@ import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { PaginationControls, usePageParam } from "@/components/pagination";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Products showcase over the LIVE catalogue (/api/products + /api/categories)
    through the typed src/lib/api wrappers. Search / category / stock filter in
@@ -25,6 +26,7 @@ import { PaginationControls, usePageParam } from "@/components/pagination";
    list of the users who bought that item. */
 
 function InventoryInner() {
+  usePageTitle("Inventory");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -216,7 +218,7 @@ function InventoryInner() {
             </CardContent>
           </Card>
 
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-x-auto md:block">
             <CardContent className="p-0">
               <Table className="min-w-[620px]">
                 <TableHeader>

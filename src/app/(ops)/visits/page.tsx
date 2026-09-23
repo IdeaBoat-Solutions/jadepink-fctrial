@@ -7,6 +7,7 @@ import { AccessNote, Btn, EmptyNote, StatusMark } from "@/components/floor/ui";
 import { EndVisitButton, FCQuickAssign } from "@/components/ops";
 import { timeAgo, clockTime } from "@/lib/utils";
 import type { VisitLive } from "@/lib/api";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function monogram(name: string): string {
   const p = name.trim().split(/\s+/);
@@ -14,6 +15,7 @@ function monogram(name: string): string {
 }
 
 export default function MyVisitsPage() {
+  usePageTitle("My visits");
   const { user, visits } = useStore();
   const router = useRouter();
 

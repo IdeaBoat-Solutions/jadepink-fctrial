@@ -16,6 +16,7 @@ import { stockStatus } from "@/lib/inventory";
 import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { PaginationControls, usePageParam } from "@/components/pagination";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Products catalogue — server search + server paging over the live catalogue
    (/api/products). Every filter lives in the URL so refresh, back and share
@@ -37,6 +38,7 @@ const SORT_LABEL: Record<SortKey, string> = {
 const SORTS: SortKey[] = ["newest", "price-asc", "price-desc", "stock-desc", "name"];
 
 function ProductsInner() {
+  usePageTitle("Products");
   const { user } = useStore();
   const searchParams = useSearchParams();
   const router = useRouter();

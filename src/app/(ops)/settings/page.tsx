@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Production-grade settings — the two-pane pattern heavy-user consoles use:
    sticky section nav on the left, focused sections on the right, every
@@ -186,6 +187,7 @@ function SessionSection() {
 }
 
 function SettingsInner() {
+  usePageTitle("Settings");
   const active = useScrollSpy(SECTIONS.map((s) => s.id));
   return (
     <div className="staff-page mx-auto w-full max-w-5xl">

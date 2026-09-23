@@ -8,6 +8,7 @@ import { canViewLiveFloor } from "@/lib/policy";
 import { getSalesSummary, type FloorVisit, type SalesSummary } from "@/lib/api";
 import type { VisitWithProductsDTO } from "@/features/visits/products/dto";
 import { formatINR } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type SalesState =
   | { status: "loading" }
@@ -16,6 +17,7 @@ type SalesState =
   | { status: "ready"; data: SalesSummary };
 
 export default function ActivityPage() {
+  usePageTitle("Activity");
   const { user, profile, todayCounts, activeVisits } = useStore();
   const router = useRouter();
   const [reasons, setReasons] = useState<Array<[string, number]> | null>(null);

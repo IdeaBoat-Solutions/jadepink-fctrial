@@ -258,7 +258,8 @@ export function FloorShell({ children }: { children: React.ReactNode }) {
             <SidebarFooter>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton size="lg" tooltip={`${first} · ${role === "manager" ? "Store manager" : "Sales"}`}>
+                  <SidebarMenuButton size="lg" asChild tooltip={`${first} · ${role === "manager" ? "Store manager" : "Sales"}`}>
+                    <span className="cursor-default">
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--fp-ink-soft)] text-[12px] font-bold text-[var(--fp-ink)]">
                       {first.charAt(0)}
                     </span>
@@ -267,6 +268,7 @@ export function FloorShell({ children }: { children: React.ReactNode }) {
                       <span className="block text-[11.5px] font-normal text-[var(--fp-muted)]">
                         {role === "manager" ? "Store manager" : "Sales"}
                       </span>
+                    </span>
                     </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

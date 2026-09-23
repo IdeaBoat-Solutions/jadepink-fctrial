@@ -135,13 +135,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg" tooltip={user?.name ? `${user.name} · ${user.role}` : "Staff portal"}>
+              <SidebarMenuButton size="lg" asChild tooltip={user?.name ? `${user.name} · ${user.role}` : "Staff portal"}>
+                <span className="cursor-default">
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-[12px] font-bold">
                   {(user?.name ?? "S").charAt(0)}
                 </span>
                 <span className="min-w-0 flex-1 leading-tight">
                   <span className="block truncate text-[12.5px] font-semibold">{user?.name ?? "Staff portal"}</span>
                   <span className="block text-[11.5px] font-normal text-muted-foreground">{user?.role ?? "sign in to continue"}</span>
+                </span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>

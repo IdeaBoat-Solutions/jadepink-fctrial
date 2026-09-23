@@ -8,11 +8,13 @@ import { Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass } from "@/componen
 import { formatMobileIN, isValidMobileIN, normalizeMobile } from "@/lib/domain";
 import { formatDateIN } from "@/lib/utils";
 import type { CustomerSnapshotLive } from "@/lib/api";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const SOURCES = ["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Friend", "Other"];
 const BUDGETS = ["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"];
 
 export default function CustomerDetailPage() {
+  usePageTitle("Customer");
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user, getCustomer, fetchCustomer, visits, createWalkIn, attachCustomerToVisit, pushToast, updateCustomer, deleteCustomer } = useStore();

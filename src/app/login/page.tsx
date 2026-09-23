@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { PrimaryButton, TextInput, Field } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const SUPABASE_CONFIGURED =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -17,6 +18,7 @@ function storeRole(role?: string): "fc" | "manager" {
 }
 
 export default function LoginPage() {
+  usePageTitle("Sign in");
   const { signIn, user } = useStore();
   const router = useRouter();
 

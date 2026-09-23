@@ -7,6 +7,7 @@ import { getProductDetail, type ProductDetailLive } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { BackButton, Gallery } from "./gallery";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* FC-facing product page: every photo on top, selling details below.
    Loads GET /api/products/[id] for the product. Commercials (cost/margin),
@@ -23,6 +24,7 @@ type State =
   | { status: "ready"; data: ProductDetailLive };
 
 export default function OpsProductPage() {
+  usePageTitle("Product");
   const { id } = useParams<{ id: string }>();
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);

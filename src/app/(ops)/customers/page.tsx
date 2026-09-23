@@ -10,6 +10,7 @@ import { Btn, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
 import { CustomerCreateForm, type CustomerCreateData } from "@/components/floor/customer-create-form";
 import { formatMobileIN, normalizeMobile } from "@/lib/domain";
 import type { CustomerSnapshotLive } from "@/lib/api";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Search-first: the customer standing in front of you is the whole screen.
    One large field, centered. Records load the instant they match. */
@@ -26,6 +27,7 @@ function SearchGlyph() {
 }
 
 function CustomersInner() {
+  usePageTitle("Customers");
   const { visits, createWalkIn, attachCustomerToVisit, pushToast, customers, searchCustomer, createCustomer } = useStore();
   // Unified search: one debounce + stale-guard implementation shared with the
   // visit identify flow (previously a third hand-rolled copy that drifted).

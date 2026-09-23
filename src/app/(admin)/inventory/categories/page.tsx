@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,8 @@ import { listCategories } from "@/features/catalogue/repository";
 
 /* Categories + live product counts (derived, never stored). Counts come from the
    same join the inventory list uses, so the two screens cannot disagree. */
+export const metadata: Metadata = { title: "Categories" };
+
 export default async function CategoriesPage() {
   const categories = await listCategories().catch(() => []);
   const total = categories.reduce((s, c) => s + c.productCount, 0);

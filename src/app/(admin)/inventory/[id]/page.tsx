@@ -7,7 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/layout/page-header";
 import { getProduct, listMovements, listPurchasesForProduct } from "@/features/catalogue/repository";
 import { stockStatus, stockLabel } from "@/lib/inventory";
+import type { Metadata } from "next";
 import { formatINR, formatDateIN } from "@/lib/utils";
+
+export const metadata: Metadata = { title: "Product" };
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -47,7 +50,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </div>
             </CardContent>
           </Card>
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto">
             <CardHeader><CardTitle>Movements</CardTitle></CardHeader>
             <CardContent className="p-0">
               <Table className="min-w-[480px]">
@@ -70,7 +73,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               </Table>
             </CardContent>
           </Card>
-          <Card className="overflow-hidden">
+          <Card className="overflow-x-auto">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle>Purchased by</CardTitle>

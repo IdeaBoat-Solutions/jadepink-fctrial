@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Star } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
@@ -5,6 +6,8 @@ import { listSuppliers } from "@/features/catalogue/repository";
 
 /* Real suppliers, derived from the client's export (Party Name), with active SKU
    counts computed from products rather than stored. */
+export const metadata: Metadata = { title: "Suppliers" };
+
 export default async function SuppliersPage({ searchParams }: { searchParams?: Promise<{ product?: string }> }) {
   const suppliers = await listSuppliers().catch(() => []);
   const sp = searchParams ? await searchParams : undefined;

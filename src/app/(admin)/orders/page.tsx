@@ -28,6 +28,7 @@ import { normalizeMobile, isValidMobileIN } from "@/lib/domain";
 import type { Order, OrderStatus, Product } from "@/lib/inventory";
 import { formatINR, formatDateIN } from "@/lib/utils";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Live order book: GET /api/orders (paged + status filter) behind the same
    card/table markup the server version had, plus manual order entry via
@@ -44,6 +45,7 @@ const STATUSES: Array<OrderStatus | "all"> = ["all", "pending", "confirmed", "sh
 type Line = { productId: string; name: string; price: number; qty: number };
 
 function OrdersInner() {
+  usePageTitle("Orders");
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -326,7 +328,7 @@ function OrdersInner() {
             </CardContent>
           </Card>
 
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-x-auto md:block">
             <CardContent className="p-0">
               <Table className="min-w-[720px]">
                 <TableHeader><TableRow><TableHead>Order</TableHead><TableHead>Customer</TableHead><TableHead>Items purchased</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Status</TableHead><TableHead>Placed</TableHead></TableRow></TableHeader>

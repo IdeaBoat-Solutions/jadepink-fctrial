@@ -24,8 +24,10 @@ export function Hero() {
             <p className="text-[11px] font-semibold tracking-[0.28em] text-white/80 uppercase">
               The bridal counter · Restocked Friday
             </p>
-            <h1 className="max-w-[14ch] font-display text-5xl leading-[1.0] font-semibold tracking-[-0.01em] text-balance text-white sm:text-7xl">
-              Aurora chain, tried on with a stylist.
+            <h1 className="font-display text-5xl leading-[1.0] font-semibold tracking-[-0.01em] text-white sm:text-7xl">
+              Aurora chain,
+              <br />
+              tried on with a stylist.
             </h1>
             <div className="flex flex-wrap items-center gap-6">
               <a

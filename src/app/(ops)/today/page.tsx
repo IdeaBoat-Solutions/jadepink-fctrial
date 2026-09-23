@@ -8,8 +8,10 @@ import { Btn, EmptyNote, Metric, StatusMark } from "@/components/floor/ui";
 import { DeleteVisitButton, EndVisitButton, FCQuickAssign } from "@/components/ops";
 import { greeting, timeAgo, clockTime } from "@/lib/utils";
 import type { VisitLive } from "@/lib/api";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 export default function TodayPage() {
+  usePageTitle("Today");
   const { user, visits, todayCounts, activeVisits, awaitingAssignment, createWalkIn, pushToast, salespeople } = useStore();
   const router = useRouter();
   const [creating, setCreating] = useState(false);
