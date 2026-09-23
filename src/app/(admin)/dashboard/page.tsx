@@ -2,16 +2,15 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { ArrowRight, Boxes, IndianRupee, Package, ShoppingCart, Tags, TriangleAlert, Truck, Users, BarChart3, Wallet } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/layout/page-header";
 import { RevenueChartSkeleton } from "@/components/admin/revenue-chart";
 import { useApi } from "@/hooks/use-api";
 import { getDashboard, getVisitFunnel, type FunnelMetricsLive } from "@/lib/api";
 import { useStore } from "@/lib/store";
-import { formatINR } from "@/lib/utils";
+import { formatINR, timeAgo } from "@/lib/utils";
 import { usePageTitle } from "@/hooks/use-page-title";
 
 const EMPTY_FUNNEL: FunnelMetricsLive = {
@@ -20,58 +19,95 @@ const EMPTY_FUNNEL: FunnelMetricsLive = {
   billedValuePerVisitor: 0,
 };
 
-/* Manager overview, top-down: today's floor first (what needs me right now),
-   then money + stock KPIs, revenue chart beside the FULL restock list
-   (out-of-stock first — nothing hidden behind a slice), then jump links.
-   Live store data (GET /api/dashboard) behind skeletons; floor counts come
-   from the live store so no second fetch is needed. */
+/* Manager morning brief: what needs a decision first, money second, doors
+   last. One prioritized "needs you" list (people before products), today's
+   takings in plain numbers, the shop-so-far strip, then compact links.
+   Live store data behind skeletons; floor counts come from the live store. */
 const RevenueChart = dynamic(
   () => import("@/components/admin/revenue-chart").then((m) => m.RevenueChart),
   { loading: () => <RevenueChartSkeleton />, ssr: false }
 );
 
-function stockOf(p: { stock: number; lowStockAt: number | null }): "in-stock" | "low-stock" | "out-of-stock" {
-  if (p.stock <= 0) return "out-of-stock";
-  if (p.lowStockAt != null && p.stock <= p.lowStockAt) return "low-stock";
-  return "in-stock";
-}
-
-const JUMP_LINKS = [
-  { href: "/today", label: "Open floor", desc: "Live visits, assign FCs", icon: ShoppingCart },
-  { href: "/inventory", label: "Inventory", desc: "Catalogue with filters", icon: Tags },
-  { href: "/inventory/categories", label: "Categories", desc: "Browse styles by category", icon: Package },
-  { href: "/orders", label: "Orders", desc: "Sales by channel", icon: Wallet },
-  { href: "/customers", label: "Customers", desc: "Directory + history", icon: Users },
-  { href: "/reports", label: "Reports", desc: "Channel mix, billed items", icon: BarChart3 },
-  { href: "/suppliers", label: "Suppliers", desc: "Reorder + ratings", icon: Truck },
-] as const;
+type Decision = {
+  key: string;
+  title: string;
+  sub: string;
+  href: string;
+  badge?: { label: string; variant: "destructive" | "warning" | "secondary" };
+};
 
 export default function DashboardPage() {
   usePageTitle("Dashboard");
   const { data, loading, error, reload } = useApi("dashboard", getDashboard);
-  const { todayCounts, visits, profile } = useStore();
+  const { visits, profile } = useStore();
   const storeId = profile?.storeId ?? "";
   const funnel = useApi<FunnelMetricsLive>(`funnel|${storeId}`, () =>
     storeId ? getVisitFunnel(storeId) : Promise.resolve({ ok: true, data: EMPTY_FUNNEL })
   );
-  const completed = visits.filter((v) => v.status === "COMPLETED").length;
+  const first = profile?.name?.split(" ")[0] || "Manager";
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+
+  const waiting = visits
+    .filter((v) => !v.assignedSalespersonId && ["ARRIVED", "IDENTIFYING", "ASSIGNED"].includes(v.status))
+    .sort((a, b) => +new Date(a.arrivedAt) - +new Date(b.arrivedAt));
 
   const attention = (data?.lowStock ?? []).slice().sort((a, b) => {
     const rank = (s: number) => (s <= 0 ? 0 : 1);
     return rank(a.stock) - rank(b.stock) || a.stock - b.stock;
   });
   const outCount = attention.filter((p) => p.stock <= 0).length;
+  const lowCount = attention.length - outCount;
+
+  /* People before products: waiting visitors, then empty shelves, then lows. */
+  const decisions: Decision[] = [
+    ...waiting.slice(0, 3).map((v) => ({
+      key: v.id,
+      title: v.customerName || "Unidentified customer",
+      sub: `Waiting ${timeAgo(v.arrivedAt)} · nobody assigned yet`,
+      href: "/floor",
+    })),
+    ...attention
+      .filter((p) => p.stock <= 0)
+      .slice(0, 3)
+      .map((p) => ({
+        key: p.id,
+        title: p.name,
+        sub: "None left on the shelf",
+        href: `/inventory/${p.id}`,
+        badge: { label: "Out", variant: "destructive" as const },
+      })),
+    ...attention
+      .filter((p) => p.stock > 0)
+      .slice(0, Math.max(0, 6 - waiting.slice(0, 3).length - attention.filter((p) => p.stock <= 0).slice(0, 3).length))
+      .map((p) => ({
+        key: p.id,
+        title: p.name,
+        sub: `Only ${p.stock} left`,
+        href: `/inventory/${p.id}`,
+        badge: { label: "Low", variant: "warning" as const },
+      })),
+  ].slice(0, 6);
+
+  const briefBits: string[] = [];
+  if (waiting.length > 0) briefBits.push(`${waiting.length} waiting for help`);
+  if (outCount > 0) briefBits.push(`${outCount} out of stock`);
+  else if (lowCount > 0) briefBits.push(`${lowCount} running low`);
+  if ((funnel.data?.billedValue ?? 0) > 0) briefBits.push(`${formatINR(funnel.data!.billedValue)} collected`);
+  const brief = briefBits.length > 0 ? `${briefBits.join(" · ")}.` : "Floor is clear and shelves are full.";
 
   return (
     <div className="staff-page">
-      <PageHeader
-        kicker="Store overview · live"
-        title="Dashboard"
-        sub="Today's floor first, then money and stock — one glance."
-        actions={
-          <Button className="group min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild><Link href="/today">Open floor <ArrowRight data-icon="inline-end" className="transition-transform duration-150 group-hover:translate-x-0.5" /></Link></Button>
-        }
-      />
+      {/* Brief header — date, greeting, one sentence on the shop. */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="staff-kicker">{today}</p>
+          <h1 className="staff-display mt-1.5 text-[34px] leading-none sm:text-[40px]">Good morning, {first}</h1>
+          <p className="staff-sub">{loading && !data ? "Reading today's numbers…" : brief}</p>
+        </div>
+        <Button className="group min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild>
+          <Link href="/today">Open floor <ArrowRight data-icon="inline-end" className="transition-transform duration-150 group-hover:translate-x-0.5" /></Link>
+        </Button>
+      </div>
 
       {error && !data && (
         <div role="alert" className="staff-banner-error flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3.5">
@@ -83,178 +119,146 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Today on the floor — needs-me-now numbers, always on screen */}
-      <section aria-label="Today on the floor">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: "Walk-ins today", value: String(todayCounts.walkIns), href: "/today" },
-            { label: "Active visits", value: String(todayCounts.active), href: "/floor" },
-            { label: "Awaiting assignment", value: String(todayCounts.awaiting), href: "/floor", warn: todayCounts.awaiting > 0 },
-            { label: "Completed today", value: String(completed), href: "/today" },
-          ].map((s) => (
-            <Link
-              key={s.label}
-              href={s.href}
-              className={`group flex items-center justify-between gap-3 rounded-2xl border bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(28,25,23,0.04)] transition-all duration-150 hover:-translate-y-px active:translate-y-0 ${"warn" in s && s.warn ? "border-warn/50 bg-warn-bg hover:border-warn" : "border-[var(--staff-line)] hover:border-[var(--staff-ink)]"}`}
-            >
-              <span>
-                <span className={`tnum block text-[26px] font-semibold leading-none tracking-tight ${"warn" in s && s.warn ? "text-warn" : "text-[var(--staff-ink)]"}`}>{s.value}</span>
-                <span className="mt-1 block text-[12.5px] font-medium text-[var(--staff-muted)]">{s.label}</span>
-              </span>
-              <span aria-hidden className="text-[16px] font-bold text-[var(--staff-line-strong)] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--staff-ink)]">→</span>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {/* Today's conversion funnel — GET /api/visits/funnel, computed from
-          live visits + visit_products, never invented client-side. */}
-      <section aria-label="Today's funnel">
+      {/* Needs you first — one prioritized list, not three sections. */}
+      <section aria-label="Needs your decision">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-1">
-            <CardTitle>Today&apos;s funnel</CardTitle>
-            <p className="text-[13px] text-muted-foreground">Footfall → trial → bill</p>
-          </CardHeader>
-          <CardContent aria-busy={funnel.loading && !funnel.data}>
-            {funnel.error && !funnel.data && (
-              <p className="text-[13.5px] text-muted-foreground">Funnel unavailable right now — the numbers above are unaffected.</p>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-1">
+            <CardTitle>Needs you first</CardTitle>
+            {decisions.length > 0 && (
+              <span className="tnum rounded-full bg-muted px-2.5 py-0.5 text-[12px] font-semibold text-muted-foreground">
+                {decisions.length}
+              </span>
             )}
-            {funnel.data ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[
-                  { label: "Footfall", value: String(funnel.data.footfall), note: "visits today" },
-                  { label: "Trials", value: String(funnel.data.trials), note: funnel.data.footfallToTrialPct != null ? `${funnel.data.footfallToTrialPct}% of footfall` : "no trials yet" },
-                  { label: "Billed visits", value: String(funnel.data.billedVisits), note: funnel.data.trialToBillPct != null ? `${funnel.data.trialToBillPct}% of trials` : "nothing billed yet" },
-                  { label: "Billed value", value: formatINR(funnel.data.billedValue), note: `${funnel.data.billedPieces} piece${funnel.data.billedPieces === 1 ? "" : "s"} billed` },
-                ].map((f) => (
-                  <div key={f.label} className="rounded-xl border border-[var(--staff-line)] bg-white px-4 py-3.5">
-                    <p className="tnum text-[26px] font-semibold leading-none tracking-tight text-[var(--staff-ink)]">{f.value}</p>
-                    <p className="mt-1 block text-[12.5px] font-medium text-[var(--staff-muted)]">{f.label}</p>
-                    <p className="mt-0.5 text-[12px] text-muted-foreground">{f.note}</p>
-                  </div>
+          </CardHeader>
+          <CardContent className="px-2 pb-2">
+            {loading && !data ? (
+              <div className="flex flex-col gap-1.5 px-2 py-1" aria-busy="true" aria-label="Loading decisions">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton-soft h-[60px] rounded-xl" style={{ animationDelay: `${i * 120}ms` }} />
                 ))}
               </div>
+            ) : decisions.length > 0 ? (
+              <ul className="divide-y divide-border/70">
+                {decisions.map((d, i) => (
+                  <li key={d.key}>
+                    <Link href={d.href} className="group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-muted/50">
+                      <span aria-hidden className="tnum w-6 shrink-0 text-center text-[13px] font-bold text-muted-foreground/60">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-semibold tracking-tight">{d.title}</span>
+                        <span className="mt-0.5 block truncate text-[13px] text-muted-foreground">{d.sub}</span>
+                      </span>
+                      {d.badge && <Badge variant={d.badge.variant}>{d.badge.label}</Badge>}
+                      <span aria-hidden className="shrink-0 text-[15px] font-bold text-muted-foreground/50 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground">→</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="skeleton-soft h-[92px] rounded-2xl" style={{ animationDelay: `${i * 110}ms` }} />
-                ))}
-              </div>
+              <p className="mx-2 rounded-xl bg-muted/50 px-4 py-6 text-center text-[13.5px] text-muted-foreground">
+                Nothing urgent — no one waiting, nothing out of stock.
+              </p>
             )}
           </CardContent>
         </Card>
       </section>
 
-      {/* Money + stock KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy={loading && !data}>
-        {data ? (
-          [
-            { label: "Revenue · all time", value: formatINR(data.kpis.revenue), icon: IndianRupee, note: `${data.kpis.orders} orders`, href: "/orders" },
-            { label: "Stock value", value: formatINR(data.kpis.stockValue), icon: Wallet, note: `${data.kpis.units} units · ${data.kpis.skus} SKUs`, href: "/inventory" },
-            { label: "Units on hand", value: String(data.kpis.units), icon: Boxes, note: `${data.kpis.skus} SKUs live`, href: "/inventory" },
-            { label: "Attention needed", value: String(data.kpis.low + data.kpis.out), icon: TriangleAlert, note: `${data.kpis.out} out · ${data.kpis.low} low — open restock list`, warn: data.kpis.low + data.kpis.out > 0, href: "/inventory?stock=low-stock" },
-          ].map((k) => (
-            <Link key={k.label} href={k.href} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <Card className="h-full transition-all duration-150 hover:-translate-y-px hover:shadow-[0_8px_18px_-12px_rgba(28,25,23,0.4)]">
-              <CardHeader className="flex flex-row items-center justify-between pb-1">
-                <CardTitle className="text-[13px] font-medium text-muted-foreground">{k.label}</CardTitle>
-                <span className={`grid size-7 place-items-center rounded-lg ${"warn" in k && k.warn ? "bg-warn-bg text-warn" : "bg-muted text-muted-foreground"}`}><k.icon className="size-4" /></span>
-              </CardHeader>
-              <CardContent>
-                <p className={`tnum text-[26px] font-semibold tracking-tight ${"warn" in k && k.warn ? "text-warn" : ""}`}>{k.value}</p>
-                <p className="mt-0.5 text-[12.5px] text-muted-foreground">{k.note} <span aria-hidden>→</span></p>
-              </CardContent>
-            </Card>
-            </Link>
-          ))
-        ) : (
-          [0, 1, 2, 3].map((i) => (
-            <Card key={i} aria-hidden={!loading}>
-              <CardHeader className="pb-1"><div className="skeleton-soft h-4 w-28 rounded-md" /></CardHeader>
-              <CardContent>
-                <div className="skeleton-soft h-8 w-24 rounded-md" style={{ animationDelay: `${i * 110}ms` }} />
-                <div className="skeleton-soft mt-2 h-3.5 w-20 rounded-md" style={{ animationDelay: `${i * 110}ms` }} />
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+      {/* Today's money + revenue chart. */}
+      <div className="grid items-start gap-3 lg:grid-cols-[1fr_1.4fr]">
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle>Today&apos;s takings</CardTitle>
+          </CardHeader>
+          <CardContent aria-busy={funnel.loading && !funnel.data}>
+            {funnel.data ? (
+              <dl>
+                <div className="flex items-baseline justify-between gap-3 border-b border-dashed py-3">
+                  <dt className="text-[13.5px] text-muted-foreground">Collected</dt>
+                  <dd className="staff-display text-[34px] leading-none">{formatINR(funnel.data.billedValue)}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 border-b border-dashed py-3">
+                  <dt className="text-[13.5px] text-muted-foreground">Bills closed</dt>
+                  <dd className="tnum text-[20px] font-semibold">{funnel.data.billedVisits}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3 py-3">
+                  <dt className="text-[13.5px] text-muted-foreground">Pieces sold</dt>
+                  <dd className="tnum text-[20px] font-semibold">{funnel.data.billedPieces}</dd>
+                </div>
+              </dl>
+            ) : (
+              <div className="flex flex-col gap-2 py-1" aria-busy="true" aria-label="Loading takings">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton-soft h-[52px] rounded-xl" style={{ animationDelay: `${i * 120}ms` }} />
+                ))}
+              </div>
+            )}
+            {funnel.error && !funnel.data && (
+              <p className="pt-1 text-[13px] text-muted-foreground">Takings unavailable right now — yesterday&apos;s chart still works.</p>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="grid items-start gap-3 lg:grid-cols-[1.4fr_1fr]">
         <Card className="overflow-hidden">
           <CardHeader>
-            <CardTitle>Revenue by day</CardTitle>
-            <p className="text-[13px] text-muted-foreground">Live orders aggregated by the dashboard API.</p>
+            <CardTitle>Sales by day</CardTitle>
+            <p className="text-[13px] text-muted-foreground">Each bar is one day&apos;s shop + online sales.</p>
           </CardHeader>
           <CardContent>
             {data ? <RevenueChart data={data.revenue} /> : <RevenueChartSkeleton />}
           </CardContent>
         </Card>
+      </div>
 
+      {/* Shop so far — lifetime numbers in one quiet strip. */}
+      <section aria-label="Shop so far">
         <Card>
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-            <CardTitle>
-              Needs restock
-              {attention.length > 0 && (
-                <Badge variant="secondary" className="tnum ml-2 align-middle">
-                  {attention.length}{outCount > 0 && ` · ${outCount} out`}
-                </Badge>
-              )}
-            </CardTitle>
-            <Button variant="link" size="sm" className="group min-h-[44px]" asChild><Link href="/inventory">View all <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span></Link></Button>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="px-2 py-2" aria-busy={loading && !data}>
             {data ? (
-              attention.length ? (
-                <div className="flex max-h-[420px] flex-col gap-2 overflow-y-auto pr-0.5">
-                  {attention.map((p) => {
-                    const s = stockOf(p);
-                    return (
-                      <Link key={p.id} href={`/inventory/${p.id}`} className="group flex shrink-0 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150 hover:-translate-y-px hover:border-foreground hover:shadow-[0_8px_18px_-12px_rgba(28,25,23,0.4)] active:translate-y-0">
-                        <span className="min-w-0">
-                          <span className="block truncate text-[14px] font-semibold">{p.name}</span>
-                          <span className="tnum block text-[12px] text-muted-foreground">{p.sku} · {p.stock} left</span>
-                        </span>
-                        <Badge variant={s === "out-of-stock" ? "destructive" : "warning"}>
-                          {s === "out-of-stock" ? "Out" : "Low"}
-                        </Badge>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="rounded-xl bg-muted/50 px-4 py-6 text-center text-[13.5px] text-muted-foreground">Stock is healthy — nothing needs reorder.</p>
-              )
+              <ul className="grid grid-cols-1 divide-y divide-border/70 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                {[
+                  { label: "Total sales", value: formatINR(data.kpis.revenue), note: `${data.kpis.orders} bills`, href: "/orders" },
+                  { label: "Products live", value: String(data.kpis.skus), note: `${data.kpis.units} pieces on the shelf`, href: "/inventory" },
+                  { label: "Stock worth", value: formatINR(data.kpis.stockValue), note: "at cost price", href: "/inventory" },
+                ].map((k) => (
+                  <li key={k.label}>
+                    <Link href={k.href} className="group block rounded-xl px-4 py-3.5 transition-colors hover:bg-muted/50">
+                      <p className="text-[12.5px] font-medium text-muted-foreground">{k.label}</p>
+                      <p className="tnum mt-0.5 text-[24px] font-semibold tracking-tight">{k.value}</p>
+                      <p className="mt-0.5 text-[12.5px] text-muted-foreground">{k.note} <span aria-hidden>→</span></p>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              [0, 1, 2].map((i) => (
-                <div key={i} className="skeleton-soft h-[58px] rounded-xl" style={{ animationDelay: `${i * 120}ms` }} />
-              ))
+              <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-3" aria-busy="true" aria-label="Loading shop totals">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton-soft h-[92px] rounded-xl" style={{ animationDelay: `${i * 110}ms` }} />
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Jump links — organised doors to every module, no filler */}
-      <section aria-label="Jump to a module">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {JUMP_LINKS.map((j) => (
-            <Link
-              key={j.href}
-              href={j.href}
-              className="group flex items-center gap-3 rounded-2xl border border-[var(--staff-line)] bg-white px-4 py-3 transition-all duration-150 hover:-translate-y-px hover:border-[var(--staff-ink)] hover:shadow-[0_8px_18px_-12px_rgba(28,25,23,0.4)] active:translate-y-0"
-            >
-              <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f3eeea] text-[#57534e] transition-colors duration-150 group-hover:bg-[var(--staff-ink)] group-hover:text-white">
-                <j.icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold tracking-tight text-[var(--staff-ink)]">{j.label}</span>
-                <span className="block truncate text-[12px] text-[var(--staff-muted)]">{j.desc}</span>
-              </span>
-              <span aria-hidden className="shrink-0 text-[14px] font-bold text-[var(--staff-line-strong)] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[var(--staff-ink)]">→</span>
-            </Link>
-          ))}
-        </div>
       </section>
+
+      {/* Doors — compact text links, not icon cards. */}
+      <nav aria-label="Shop sections" className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+        {[
+          { href: "/today", label: "Today's floor" },
+          { href: "/inventory", label: "All products" },
+          { href: "/inventory/categories", label: "Categories" },
+          { href: "/orders", label: "All sales" },
+          { href: "/customers", label: "Shoppers" },
+          { href: "/reports", label: "Reports" },
+          { href: "/suppliers", label: "Suppliers" },
+          { href: "/team", label: "Team" },
+        ].map((l) => (
+          <Link key={l.href} href={l.href} className="group flex min-h-[44px] items-center justify-between gap-2 border-b border-dashed py-2 text-[14px] font-medium hover:text-[var(--staff-brand)]">
+            {l.label}
+            <span aria-hidden className="text-muted-foreground/50 transition-transform duration-150 group-hover:translate-x-0.5">→</span>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }

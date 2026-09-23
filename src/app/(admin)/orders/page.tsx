@@ -26,7 +26,7 @@ import { useApi } from "@/hooks/use-api";
 import { createOrder, listOrdersPage, listProducts, type Paged } from "@/lib/api";
 import { normalizeMobile, isValidMobileIN } from "@/lib/domain";
 import type { Order, OrderStatus, Product } from "@/lib/inventory";
-import { formatINR, formatDateIN } from "@/lib/utils";
+import { formatINR, formatDateIN, formatChannel } from "@/lib/utils";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { usePageTitle } from "@/hooks/use-page-title";
 
@@ -132,7 +132,7 @@ function OrdersInner() {
     setBusy(false);
     if (r.ok) {
       toast.success(`Order ${r.data.code} recorded`, {
-        description: `${formatINR(r.data.total)} · ${r.data.items.length} line${r.data.items.length === 1 ? "" : "s"} · ${channel}`,
+        description: `${formatINR(r.data.total)} · ${r.data.items.length} line${r.data.items.length === 1 ? "" : "s"} · ${formatChannel(channel)}`,
       });
       setOpen(false);
       setName(""); setPhone(""); setChannel("walk-in"); setPq(""); setHits([]); setLines([]); setFormErr("");
@@ -147,7 +147,7 @@ function OrdersInner() {
       <PageHeader
         kicker="Sales"
         title="Orders"
-        sub={`${total} orders · walk-in, instagram, website.`}
+        sub={`${total} sales · from the shop, Instagram and website.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setFormErr(""); }}>
@@ -158,21 +158,20 @@ function OrdersInner() {
               </DialogTrigger>
               <DialogContent className="max-w-lg">
                 <DialogHeader>
-                  <DialogTitle>Record a manual order</DialogTitle>
+                  <DialogTitle>Add a sale made outside the shop</DialogTitle>
                   <DialogDescription>
-                    For remote sales (DM, website). Floor billing lands here on its own — use this for
-                    orders taken outside the store.
+                    For Instagram, website or phone sales. Counter bills appear here on their own.
                   </DialogDescription>
                 </DialogHeader>
                 <form
                   className="flex flex-col gap-3"
                   onSubmit={(e) => { e.preventDefault(); void submit(); }}
                 >
-                  <label htmlFor="order-name" className="text-[13px] font-semibold text-muted-foreground">Customer name</label>
+                  <label htmlFor="order-name" className="text-[13px] font-semibold text-muted-foreground">Shopper&apos;s name</label>
                   <Input id="order-name" value={name} onChange={(e) => { setName(e.target.value); setFormErr(""); }} placeholder="Priya Shah" autoComplete="off" />
                   <label htmlFor="order-phone" className="text-[13px] font-semibold text-muted-foreground">Mobile</label>
                   <Input id="order-phone" type="tel" inputMode="tel" autoComplete="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setFormErr(""); }} placeholder="98765 43210" className="tnum" />
-                  <label htmlFor="order-channel" className="text-[13px] font-semibold text-muted-foreground">Channel</label>
+                  <label htmlFor="order-channel" className="text-[13px] font-semibold text-muted-foreground">Where did this sale come from?</label>
                   <Select value={channel} onValueChange={(v) => setChannel(v as Order["channel"])}>
                     <SelectTrigger id="order-channel" aria-label="Channel" className="min-h-[44px]">
                       <SelectValue />
@@ -184,7 +183,7 @@ function OrdersInner() {
                       <SelectItem value="meta-lead">Meta lead</SelectItem>
                     </SelectContent>
                   </Select>
-                  <label htmlFor="order-product" className="text-[13px] font-semibold text-muted-foreground">Products</label>
+                  <label htmlFor="order-product" className="text-[13px] font-semibold text-muted-foreground">What did they buy?</label>
                   <Input id="order-product" value={pq} onChange={(e) => setPq(e.target.value)} placeholder="Search name, SKU, barcode…" autoComplete="off" />
                   {hits.length > 0 && (
                     <ul className="max-h-40 overflow-y-auto rounded-xl border">
@@ -216,7 +215,7 @@ function OrdersInner() {
                         </li>
                       ))}
                       <li className="flex justify-between border-t pt-2 text-[14px] font-semibold">
-                        <span>Total (preview)</span>
+                        <span>Total</span>
                         <span className="tnum">{formatINR(previewTotal)}</span>
                       </li>
                     </ul>
@@ -285,21 +284,21 @@ function OrdersInner() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-[15px] font-semibold tracking-tight">{o.code}</p>
-                        <p className="mt-0.5 text-[12px] text-muted-foreground">{o.channel}{o.fcName ? ` · ${o.fcName}` : ""}</p>
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">{formatChannel(o.channel)}{o.fcName ? ` · ${o.fcName}` : ""}</p>
                       </div>
-                      <Badge variant={VARIANT[o.status]}>{o.status}</Badge>
+                      <Badge variant={VARIANT[o.status]} className="capitalize">{o.status}</Badge>
                     </div>
                     <div className="mt-2.5 flex items-end justify-between gap-3 border-t border-dashed pt-2.5">
                       <div className="min-w-0 text-[13px]">
                         <p className="truncate font-medium">{o.customerName}</p>
                         <p className="tnum truncate text-[12px] text-muted-foreground">{o.customerPhone}</p>
-                        <p className="tnum text-[12px] text-muted-foreground">{pcs} pcs · {formatDateIN(o.createdAt)}</p>
+                        <p className="tnum text-[12px] text-muted-foreground">{pcs} pieces · {formatDateIN(o.createdAt)}</p>
                       </div>
                       <p className="tnum shrink-0 text-[16px] font-semibold tracking-tight">{formatINR(o.total)}</p>
                     </div>
                     <details className="group/details mt-2.5 rounded-xl border border-dashed bg-muted/30 px-3 py-2">
                       <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">
-                        Items purchased ({pcs})
+                        What they bought ({pcs})
                         <ChevronDown aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/details:rotate-180" />
                       </summary>
                       <ul className="mt-2 flex flex-col divide-y divide-dashed">
@@ -321,8 +320,8 @@ function OrdersInner() {
               {!total && (
                 <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
                   <span aria-hidden className="empty-plate"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h15l-1.5 9h-12z" /><path d="M6 7 5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="17" cy="20" r="1.5" /></svg></span>
-                  <p className="mt-1 text-[15px] font-semibold">No orders yet.</p>
-                  <p className="text-[13.5px] text-muted-foreground">Walk-in sales land here the moment they close.</p>
+                  <p className="mt-1 text-[15px] font-semibold">No sales yet.</p>
+                  <p className="text-[13.5px] text-muted-foreground">Counter bills appear here the moment they close.</p>
                 </div>
               )}
             </CardContent>
@@ -331,11 +330,11 @@ function OrdersInner() {
           <Card className="hidden overflow-x-auto md:block">
             <CardContent className="p-0">
               <Table className="min-w-[720px]">
-                <TableHeader><TableRow><TableHead>Order</TableHead><TableHead>Customer</TableHead><TableHead>Items purchased</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Status</TableHead><TableHead>Placed</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Bill</TableHead><TableHead>Shopper</TableHead><TableHead>What they bought</TableHead><TableHead className="text-right">Total</TableHead><TableHead>Status</TableHead><TableHead>When</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {items.map((o) => (
                     <TableRow key={o.id} className="align-top transition-colors hover:bg-muted/40">
-                      <TableCell className="font-semibold tracking-tight">{o.code}<p className="text-[12px] font-normal text-muted-foreground">{o.channel}{o.fcName ? ` · ${o.fcName}` : ""}</p></TableCell>
+                      <TableCell className="font-semibold tracking-tight">{o.code}<p className="text-[12px] font-normal text-muted-foreground">{formatChannel(o.channel)}{o.fcName ? ` · ${o.fcName}` : ""}</p></TableCell>
                       <TableCell><span className="font-medium">{o.customerName}</span><p className="tnum text-[12px] text-muted-foreground">{o.customerPhone}</p></TableCell>
                       <TableCell>
                         <ul className="flex min-w-[220px] flex-col gap-1">
@@ -345,20 +344,20 @@ function OrdersInner() {
                               <span className="tnum text-muted-foreground">{formatINR(it.qty * it.price)}</span>
                             </li>
                           ))}
-                          {!o.items.length && <li className="text-[13px] text-muted-foreground">No line items.</li>}
+                          {!o.items.length && <li className="text-[13px] text-muted-foreground">Nothing listed.</li>}
                         </ul>
-                        <p className="tnum mt-1 text-[12px] text-muted-foreground">{o.items.reduce((s, i) => s + i.qty, 0)} pcs</p>
+                        <p className="tnum mt-1 text-[12px] text-muted-foreground">{o.items.reduce((s, i) => s + i.qty, 0)} pieces</p>
                       </TableCell>
                       <TableCell className="tnum text-right font-semibold">{formatINR(o.total)}</TableCell>
-                      <TableCell><Badge variant={VARIANT[o.status]}>{o.status}</Badge></TableCell>
+                      <TableCell><Badge variant={VARIANT[o.status]} className="capitalize">{o.status}</Badge></TableCell>
                       <TableCell className="text-[13px] text-muted-foreground">{formatDateIN(o.createdAt)}</TableCell>
                     </TableRow>
                   ))}
                   {!total && (
                     <TableRow><TableCell colSpan={6} className="py-12 text-center">
                       <span aria-hidden className="empty-plate mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h15l-1.5 9h-12z" /><path d="M6 7 5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="17" cy="20" r="1.5" /></svg></span>
-                      <p className="mt-2 text-[15px] font-semibold">No orders{status !== "all" ? ` with status “${status}”` : " yet"}.</p>
-                      <p className="mt-0.5 text-[13.5px] text-muted-foreground">Walk-in sales land here the moment they close.</p>
+                      <p className="mt-2 text-[15px] font-semibold">No sales{status !== "all" ? ` marked “${status}”` : " yet"}.</p>
+                      <p className="mt-0.5 text-[13.5px] text-muted-foreground">Counter bills appear here the moment they close.</p>
                       {status !== "all" && (
                         <button onClick={() => { setStatus("all"); setPage(1); }} className="mt-2 inline-flex min-h-[44px] items-center rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">Show all</button>
                       )}

@@ -40,3 +40,14 @@ export function formatDateIN(iso: string): string {
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
+
+/* Channel codes ("meta-lead") are never shown raw — staff read words. */
+export function formatChannel(channel: string): string {
+  switch (channel) {
+    case "walk-in": return "Walk-in";
+    case "instagram": return "Instagram";
+    case "website": return "Website";
+    case "meta-lead": return "Meta lead";
+    default: return channel ? channel.charAt(0).toUpperCase() + channel.slice(1) : "Walk-in";
+  }
+}

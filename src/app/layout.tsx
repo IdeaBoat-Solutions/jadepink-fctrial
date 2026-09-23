@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Cormorant_Garamond, Jost, Newsreader, Outfit, Playfair_Display } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { StoreProvider } from "@/lib/store";
+import { THEME_INIT_SCRIPT } from "@/components/theme";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -68,6 +70,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${lux.variable} ${jost.variable} ${outfit.variable} ${newsreader.variable} h-full antialiased`}>
+      <head>
+        {/* Pre-paint theme class: runs before first paint so dark-mode staff
+            never flash light. next/script is the sanctioned path — a raw
+            <script> in the React tree trips Next 16's script-tag error. */}
+        <Script id="staff-theme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full">
         {/* Theme/tooltip/toast providers live in (admin)/layout — only the
             admin shell uses them, so public + ops routes skip that JS. */}

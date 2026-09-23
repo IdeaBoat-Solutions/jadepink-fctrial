@@ -746,7 +746,7 @@ export function FloorBoard({
           pct={trialledTotal ? Math.round((decided / trialledTotal) * 100) : 0}
         />
         <StatCard
-          label="Liked & retained"
+          label="Liked"
           value={(summary?.liked ?? 0) + (summary?.purchased ?? 0)}
           sub="Ready to pack"
           tone="green"
@@ -755,14 +755,14 @@ export function FloorBoard({
         <StatCard
           label="Dropped"
           value={summary?.dropped ?? 0}
-          sub="Restock return"
+          sub="Back on the rail"
           tone="red"
           pct={products.length ? Math.round(((summary?.dropped ?? 0) / products.length) * 100) : 0}
         />
         <div className="rounded-xl border border-[#e9e2d8] bg-white p-4">
           <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6b645c]">Bag total</p>
           <p className="fp-num mt-1.5 text-[26px] font-bold leading-none tracking-tight text-[#211d18]">{formatINR(bagTotal)}</p>
-          <p className="fp-num mt-1.5 text-[12px] text-[#6b645c]">Avg SKU: {formatINR(bagAvg)}</p>
+          <p className="fp-num mt-1.5 text-[12px] text-[#6b645c]">Avg per piece: {formatINR(bagAvg)}</p>
         </div>
       </div>
 
@@ -806,7 +806,7 @@ export function FloorBoard({
             onChange={(e) => setSort(e.target.value as SortKey)}
             className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-2.5 text-[16px] font-semibold text-[#211d18] sm:flex-none sm:text-[13.5px]"
           >
-            <option value="priority">Trial Priority</option>
+            <option value="priority">Try first</option>
             <option value="price-desc">Price: High to Low</option>
             <option value="price-asc">Price: Low to High</option>
             <option value="name">Name A–Z</option>
@@ -1110,8 +1110,8 @@ export function FloorBoard({
           </SideSection>
 
           <SideSection
-            label="Direct assignment target"
-            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Direct Assignment Target</p>}
+            label="Fitting room"
+            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Fitting Room</p>}
             meta={<p className="text-[11.5px] font-semibold text-[#57534e]">Active: {suiteLabelLocal(suite) ?? "—"}</p>}
           >
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Assign fitting suite">
@@ -1137,7 +1137,7 @@ export function FloorBoard({
 
           <SideSection
             label="Runner request"
-            title={<p className="text-[14px] font-bold text-[#211d18]">Runner Request</p>}
+            title={<p className="text-[14px] font-bold text-[#211d18]">Runner request</p>}
           >
             <p className="text-[13px] text-[#7a736a]">Size swap or steamer{suiteLabelLocal(suite) ? ` to ${suiteLabelLocal(suite)}` : ""}</p>
             <form

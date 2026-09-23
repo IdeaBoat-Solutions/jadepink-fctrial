@@ -18,7 +18,7 @@ export default async function CategoriesPage() {
       <PageHeader
         kicker="Catalogue"
         title="Categories"
-        sub={`${categories.length} categor${categories.length === 1 ? "y" : "ies"} across ${total} SKUs.`}
+        sub={`${categories.length} group${categories.length === 1 ? "" : "s"} across ${total} products.`}
       />
 
       {!categories.length && (
@@ -29,6 +29,9 @@ export default async function CategoriesPage() {
             <p className="text-[13.5px] text-muted-foreground">
               Categories appear here from the product catalogue — add a product with a category to file it.
             </p>
+            <Button className="mt-2 min-h-[44px] bg-[var(--staff-brand)] text-white hover:bg-[var(--staff-brand-deep)]" asChild>
+              <Link href="/inventory/new">Add the first product</Link>
+            </Button>
           </CardContent>
         </Card>
       )}

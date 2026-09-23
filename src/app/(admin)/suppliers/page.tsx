@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
 import { listSuppliers } from "@/features/catalogue/repository";
@@ -18,14 +20,14 @@ export default async function SuppliersPage({ searchParams }: { searchParams?: P
       <PageHeader
         kicker="Catalogue"
         title="Suppliers"
-        sub={`${suppliers.length} sourcing partners · reorder + ratings.`}
+        sub={`${suppliers.length} suppliers · reorder stock and see ratings.`}
         trail={[{ label: "Inventory", href: "/inventory" }, { label: "Suppliers" }]}
       />
 
       {productCtx && (
         <p role="status" className="staff-banner-note rounded-xl px-4 py-3 text-[13.5px]">
-          <strong>Reorder context kept</strong> — you came from a product.{" "}
-          <a href={`/inventory/${productCtx}`} className="font-semibold underline underline-offset-2">Back to product</a>
+          <strong>Buying for a product</strong> — pick a supplier below, or{" "}
+          <a href={`/inventory/${productCtx}`} className="font-semibold underline underline-offset-2">go back to it</a>
         </p>
       )}
 
@@ -37,6 +39,9 @@ export default async function SuppliersPage({ searchParams }: { searchParams?: P
             <p className="text-[13.5px] text-muted-foreground">
               Suppliers appear here from the product catalogue — add a product with a supplier to start sourcing.
             </p>
+            <Button className="mt-2 min-h-[44px] bg-[var(--staff-brand)] text-white hover:bg-[var(--staff-brand-deep)]" asChild>
+              <Link href="/inventory/new">Add the first product</Link>
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -52,10 +57,10 @@ export default async function SuppliersPage({ searchParams }: { searchParams?: P
                   <p className="mt-0.5 text-[13px] text-muted-foreground">{s.contact || "No contact on file"} · {s.city || "—"}</p>
                 </div>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-bg px-2.5 py-1 text-[13px] font-semibold text-warn"><Star className="size-3.5 fill-current" />{s.rating}</span>
+              <span title="Supplier rating out of 5" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-bg px-2.5 py-1 text-[13px] font-semibold text-warn"><Star className="size-3.5 fill-current" aria-hidden />{s.rating}<span className="font-normal opacity-80">/5</span></span>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center justify-between gap-2 border-t border-dashed pt-3">
-              <p className="tnum text-[13px] text-muted-foreground">{s.activeProducts} active SKUs</p>
+              <p className="tnum text-[13px] text-muted-foreground">{s.activeProducts} products in your shop</p>
               {s.phone ? (
                 <a href={`tel:${s.phone.replace(/\s/g, "")}`} className="tnum inline-flex min-h-[44px] items-center text-[13px] font-semibold underline underline-offset-2 hover:text-foreground">{s.phone}</a>
               ) : (

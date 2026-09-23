@@ -103,10 +103,10 @@ export default function NewProductPage() {
 
   return (
     <div className="staff-page mx-auto w-full max-w-2xl">
-      <PageHeader kicker="Catalogue" title="Add product" sub="SKU, price, stock and category — saved to the live catalogue." trail={[{ label: "Inventory", href: "/inventory" }, { label: "New product" }]} />
+      <PageHeader kicker="Catalogue" title="Add product" sub="Fill this in once — it appears in the shop list right away." trail={[{ label: "Inventory", href: "/inventory" }, { label: "New product" }]} />
       {restored && (
         <p role="status" className="staff-banner-note flex flex-wrap items-center justify-between gap-2 rounded-xl px-4 py-2.5 text-[13.5px]">
-          <span><strong>Draft restored</strong> — your unsaved input is back.</span>
+          <span><strong>Unfinished product is back</strong> — your typing was saved.</span>
           <button type="button" onClick={discardDraft} className="inline-flex min-h-[44px] items-center rounded-lg px-2 font-semibold underline underline-offset-2">Discard</button>
         </p>
       )}
@@ -115,28 +115,28 @@ export default function NewProductPage() {
         <CardContent className="pt-5">
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
             <Field>
-              <FieldLabel htmlFor="name">Name</FieldLabel>
-              <Input id="name" {...form.register("name")} placeholder="Name as printed on the label" className="min-h-[48px] rounded-xl" />
+              <FieldLabel htmlFor="name">Product name</FieldLabel>
+              <Input id="name" {...form.register("name")} placeholder="As printed on the price tag" className="min-h-[48px] rounded-xl" />
               {form.formState.errors.name && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.name.message}</p>}
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
-                <FieldLabel htmlFor="sku">SKU</FieldLabel>
-                <Input id="sku" {...form.register("sku")} placeholder="JP-DR-009" className="min-h-[48px] rounded-xl" />
+                <FieldLabel htmlFor="sku">Item code (SKU)</FieldLabel>
+                <Input id="sku" {...form.register("sku")} placeholder="JP-DR-009 — one of a kind" className="min-h-[48px] rounded-xl" />
                 {form.formState.errors.sku && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.sku.message}</p>}
               </Field>
               <Field>
-                <FieldLabel htmlFor="stock">Opening stock</FieldLabel>
+                <FieldLabel htmlFor="stock">How many in stock</FieldLabel>
                 <Input id="stock" type="number" {...form.register("stock", { valueAsNumber: true })} className="tnum min-h-[48px] rounded-xl" aria-invalid={!!form.formState.errors.stock} />
                 {form.formState.errors.stock && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.stock.message}</p>}
               </Field>
               <Field>
-                <FieldLabel htmlFor="price">Price (₹)</FieldLabel>
+                <FieldLabel htmlFor="price">Selling price (₹) — what shoppers pay</FieldLabel>
                 <Input id="price" type="number" {...form.register("price", { valueAsNumber: true })} className="tnum min-h-[48px] rounded-xl" aria-invalid={!!form.formState.errors.price} />
                 {form.formState.errors.price && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.price.message}</p>}
               </Field>
               <Field>
-                <FieldLabel htmlFor="lowStockAt">Low-stock at</FieldLabel>
+                <FieldLabel htmlFor="lowStockAt">Warn me when stock falls below</FieldLabel>
                 <Input id="lowStockAt" type="number" {...form.register("lowStockAt", { valueAsNumber: true })} className="tnum min-h-[48px] rounded-xl" aria-invalid={!!form.formState.errors.lowStockAt} />
                 {form.formState.errors.lowStockAt && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.lowStockAt.message}</p>}
               </Field>

@@ -33,10 +33,27 @@
 }
 
 .floor-os .fp-name {
-  font-family: var(--font-newsreader), Georgia, serif;
+  font-family: var(--font-lux), "Cormorant Garamond", Georgia, serif;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   font-variant-ligatures: common-ligatures;
+}
+
+/* Display moments — hero names, greetings. Thin, high-contrast, quiet.
+   Large sizes only: Cormorant Light below ~24px loses legibility. */
+.floor-os .fp-display {
+  font-family: var(--font-lux), "Cormorant Garamond", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  font-variant-ligatures: common-ligatures;
+}
+
+/* Kickers — wide tracking, small size, never bold. */
+.floor-os .fp-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
 }
 
 .floor-os .fp-num {

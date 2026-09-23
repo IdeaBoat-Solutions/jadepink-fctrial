@@ -134,7 +134,7 @@ function InventoryInner() {
       <PageHeader
         kicker="Catalogue"
         title="Inventory"
-        sub={`${total} SKUs · search, filter, open for stock moves + purchase history.`}
+        sub={`${total} products · search, filter, tap one to see stock and who bought it.`}
         trail={[{ label: "Inventory" }]}
         actions={<Button className="group min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button>}
       />
@@ -210,7 +210,7 @@ function InventoryInner() {
               {!rows.length && (
                 <div className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
                   <span aria-hidden className="empty-plate"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></span>
-                  <p className="mt-1 text-[15px] font-semibold">No SKUs match.</p>
+                  <p className="mt-1 text-[15px] font-semibold">No products match.</p>
                   <p className="text-[13.5px] text-muted-foreground">Try a shorter search or clear the filters.</p>
                   <button onClick={clearAll} className="mt-2 inline-flex min-h-[44px] items-center rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">Clear filters</button>
                 </div>
@@ -257,7 +257,7 @@ function InventoryInner() {
                   {!rows.length && (
                     <TableRow><TableCell colSpan={6} className="py-12 text-center">
                       <span aria-hidden className="empty-plate mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></span>
-                      <p className="mt-2 text-[15px] font-semibold">No SKUs match.</p>
+                      <p className="mt-2 text-[15px] font-semibold">No products match.</p>
                       <p className="mt-0.5 text-[13.5px] text-muted-foreground">Try a shorter search or clear the filters.</p>
                       <button onClick={clearAll} className="mt-2 inline-flex min-h-[44px] items-center rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">Clear filters</button>
                     </TableCell></TableRow>

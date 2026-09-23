@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { getProduct, listMovements, listPurchasesForProduct } from "@/features/catalogue/repository";
 import { stockStatus, stockLabel } from "@/lib/inventory";
 import type { Metadata } from "next";
-import { formatINR, formatDateIN } from "@/lib/utils";
+import { formatINR, formatDateIN, formatChannel } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Product" };
 
@@ -46,15 +46,15 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 {(p.barcode || p.designNo) && (
                   <p className="tnum">Barcode {p.barcode || "—"} · Design {p.designNo || "—"}</p>
                 )}
-                <p>Reorder at ≤ {p.lowStockAt} units</p>
+                <p>Reorder when {p.lowStockAt} or fewer are left</p>
               </div>
             </CardContent>
           </Card>
           <Card className="overflow-x-auto">
-            <CardHeader><CardTitle>Movements</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Ins and outs</CardTitle></CardHeader>
             <CardContent className="p-0">
               <Table className="min-w-[480px]">
-                <TableHeader><TableRow><TableHead>Type</TableHead><TableHead className="text-right">Qty</TableHead><TableHead>Reason</TableHead><TableHead>By</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>In or out</TableHead><TableHead className="text-right">How many</TableHead><TableHead>Why</TableHead><TableHead>Done by</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {moves.map((m) => (
                     <TableRow key={m.id} className="transition-colors hover:bg-muted/40">
@@ -76,19 +76,19 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <Card className="overflow-x-auto">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
-                <CardTitle>Purchased by</CardTitle>
-                <p className="tnum mt-0.5 text-[13px] text-muted-foreground">{bought.totalQty} pcs · {formatINR(bought.totalRevenue)}</p>
+                <CardTitle>Who bought this</CardTitle>
+                <p className="tnum mt-0.5 text-[13px] text-muted-foreground">{bought.totalQty} pieces · {formatINR(bought.totalRevenue)} collected</p>
               </div>
               <Badge variant="outline">{bought.items.length} orders</Badge>
             </CardHeader>
             <CardContent className="p-0">
               <Table className="min-w-[560px]">
-                <TableHeader><TableRow><TableHead>Customer</TableHead><TableHead>Order</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Line total</TableHead><TableHead>Bought</TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Shopper</TableHead><TableHead>Bill</TableHead><TableHead className="text-right">How many</TableHead><TableHead className="text-right">Line total</TableHead><TableHead>When</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {bought.items.map((b) => (
                     <TableRow key={`${b.orderId}-${b.customerPhone}`} className="transition-colors hover:bg-muted/40">
                       <TableCell><span className="font-medium">{b.customerName}</span><p className="tnum text-[12px] text-muted-foreground">{b.customerPhone}{b.fcName ? ` · FC ${b.fcName}` : ""}</p></TableCell>
-                      <TableCell><span className="font-semibold tracking-tight">{b.orderCode}</span><p className="text-[12px] capitalize text-muted-foreground">{b.channel}</p></TableCell>
+                      <TableCell><span className="font-semibold tracking-tight">{b.orderCode}</span><p className="text-[12px] text-muted-foreground">{formatChannel(b.channel)}</p></TableCell>
                       <TableCell className="tnum text-right font-semibold">{b.qty} × {formatINR(b.price)}</TableCell>
                       <TableCell className="tnum text-right font-semibold">{formatINR(b.qty * b.price)}</TableCell>
                       <TableCell className="text-[13px] text-muted-foreground">{b.orderedAt ? formatDateIN(b.orderedAt) : "—"}</TableCell>
@@ -96,8 +96,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   ))}
                   {!bought.items.length && <TableRow><TableCell colSpan={5} className="py-10 text-center">
                     <span aria-hidden className="empty-plate mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h15l-1.5 9h-12z" /><path d="M6 7 5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="17" cy="20" r="1.5" /></svg></span>
-                    <p className="mt-2 text-[14px] font-semibold">No purchases yet.</p>
-                    <p className="mt-0.5 text-[13px] text-muted-foreground">Walk-in sales land here the moment they close.</p>
+                    <p className="mt-2 text-[14px] font-semibold">No sales yet.</p>
+                    <p className="mt-0.5 text-[13px] text-muted-foreground">Bills for this item will appear here.</p>
                   </TableCell></TableRow>}
                 </TableBody>
               </Table>
@@ -105,12 +105,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </Card>
         </div>
         <Card className="h-fit lg:sticky lg:top-20">
-          <CardHeader><CardTitle>Commercials</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Money side</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-2.5 text-[14px]">
-            <div className="flex justify-between gap-3"><span className="text-muted-foreground">Margin / unit</span><strong className="tnum">{formatINR(p.price - p.cost)}</strong></div>
-            <div className="flex justify-between gap-3"><span className="text-muted-foreground">Stock value</span><strong className="tnum">{formatINR(p.stock * p.cost)}</strong></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">Profit per piece</span><strong className="tnum">{formatINR(p.price - p.cost)}</strong></div>
+            <div className="flex justify-between gap-3"><span className="text-muted-foreground">Money tied in stock</span><strong className="tnum">{formatINR(p.stock * p.cost)}</strong></div>
             <div className="flex justify-between gap-3 border-t border-dashed pt-2.5"><span className="text-muted-foreground">Supplier</span><strong className="text-right">{p.supplierName}</strong></div>
-            <p className="text-[12.5px] leading-relaxed text-muted-foreground">Reorder keeps this product attached — the supplier list opens filtered to it.</p>
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">Reorder opens your suppliers with this product already picked.</p>
             <Button asChild className="group mt-2 min-h-[48px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0"><Link href={`/suppliers?product=${p.id}`}>Reorder <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span></Link></Button>
           </CardContent>
         </Card>
