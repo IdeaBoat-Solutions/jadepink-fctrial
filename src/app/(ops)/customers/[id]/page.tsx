@@ -8,11 +8,13 @@ import { Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass } from "@/componen
 import { formatMobileIN, isValidMobileIN, normalizeMobile } from "@/lib/domain";
 import { formatDateIN } from "@/lib/utils";
 import type { CustomerSnapshotLive } from "@/lib/api";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 const SOURCES = ["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Friend", "Other"];
 const BUDGETS = ["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"];
 
 export default function CustomerDetailPage() {
+  usePageTitle("Customer");
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user, getCustomer, fetchCustomer, visits, createWalkIn, attachCustomerToVisit, pushToast, updateCustomer, deleteCustomer } = useStore();
@@ -83,10 +85,10 @@ export default function CustomerDetailPage() {
         <Link href="/customers" className="text-[13.5px] font-semibold text-[var(--fp-muted)]">Customers</Link>
         {isManager && <Btn tone="quiet" onClick={() => setEditing(true)}>Edit record</Btn>}
       </div>
-      <section className="mt-3 rounded-xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-6 shadow-[var(--fp-shadow)]">
+      <section className="mt-3 rounded-xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-4 shadow-[var(--fp-shadow)] sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="fp-name text-[34px] leading-none">{customer.name}</h1>
+            <h1 className="fp-name break-words text-[28px] leading-none sm:text-[34px]">{customer.name}</h1>
             <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">
               {formatMobileIN(customer.phone)}
               {customer.tier && <span className="ml-2 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
@@ -113,9 +115,9 @@ export default function CustomerDetailPage() {
         {startErr && <p role="alert" className="mt-3 text-[13.5px] font-medium text-[var(--fp-drop)]">{startErr}</p>}
 
         <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-[var(--fp-line)] bg-[var(--fp-line)] text-[14px]">
-          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num mt-0.5 text-[22px] font-semibold leading-none">{customer.visitCount}</dd></div>
-          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[22px] font-semibold leading-none">{customer.purchaseCount}</dd></div>
-          <div className="bg-[var(--fp-surface)] px-4 py-3"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[15px] font-semibold leading-none">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
+          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.visitCount}</dd></div>
+          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.purchaseCount}</dd></div>
+          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[13px] font-semibold leading-snug sm:text-[15px]">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
         </dl>
       </section>
 

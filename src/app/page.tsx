@@ -51,17 +51,17 @@ const STORE_JSONLD = {
 
 export default function PublicLanding() {
   return (
-    <div className="boutique boutique-page-bg min-h-dvh">
+    <div className="min-h-dvh bg-white text-[#101010] antialiased">
       <a
-        href="#top"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-full focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:text-cream"
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-black focus:px-4 focus:py-2 focus:text-sm focus:text-white"
       >
         Skip to content
       </a>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STORE_JSONLD) }} />
       <SiteMotion />
       <Navbar />
-      <main>
+      <main id="main-content" tabIndex={-1} className="focus:outline-none">
         <Hero />
         <Categories />
         <Favourites />

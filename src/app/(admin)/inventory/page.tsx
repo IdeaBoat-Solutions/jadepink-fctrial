@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,7 @@ import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
 import { PaginationControls, usePageParam } from "@/components/pagination";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 /* Products showcase over the LIVE catalogue (/api/products + /api/categories)
    through the typed src/lib/api wrappers. Search / category / stock filter in
@@ -24,10 +26,17 @@ import { PaginationControls, usePageParam } from "@/components/pagination";
    list of the users who bought that item. */
 
 function InventoryInner() {
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [cat, setCat] = useState("all");
-  const [stock, setStock] = useState("all");
+  usePageTitle("Inventory");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
+  const [debouncedQ, setDebouncedQ] = useState(() => (searchParams.get("q") ?? "").trim());
+  const [cat, setCat] = useState(() => searchParams.get("category") ?? "all");
+  const [stock, setStock] = useState(() => {
+    const s = searchParams.get("stock");
+    return s === "in-stock" || s === "low-stock" || s === "out-of-stock" ? s : "all";
+  });
   const [cats, setCats] = useState<Category[]>([]);
   const [rows, setRows] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,6 +51,39 @@ function InventoryInner() {
     const t = window.setTimeout(() => setDebouncedQ(q.trim()), 300);
     return () => window.clearTimeout(t);
   }, [q]);
+
+  /* Filters live in the URL (?q=&category=&stock=) so refresh, back and share
+     keep the exact list. Page resets to 1 on filter change via resetKey. */
+  const syncing = useRef(false);
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    let changed = false;
+    const setOrDelete = (k: string, v: string, isDefault: boolean) => {
+      if (isDefault) {
+        if (params.has(k)) { params.delete(k); changed = true; }
+      } else if (params.get(k) !== v) { params.set(k, v); changed = true; }
+    };
+    setOrDelete("q", debouncedQ, debouncedQ === "");
+    setOrDelete("category", cat, cat === "all");
+    setOrDelete("stock", stock, stock === "all");
+    if (!changed) return;
+    syncing.current = true;
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+    window.setTimeout(() => { syncing.current = false; }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, cat, stock]);
+
+  /* Adopt back/forward navigation: if the URL changed externally, follow it. */
+  useEffect(() => {
+    if (syncing.current) return;
+    const uq = searchParams.get("q") ?? "";
+    const uc = searchParams.get("category") ?? "all";
+    const us = searchParams.get("stock") ?? "all";
+    if (uq !== q) setQ(uq);
+    if (uc !== cat) setCat(uc);
+    if (us !== stock) setStock(us);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,18 +133,19 @@ function InventoryInner() {
     <div className="staff-page">
       <PageHeader
         kicker="Catalogue"
-        title="Products"
+        title="Inventory"
         sub={`${total} SKUs · search, filter, open for stock moves + purchase history.`}
+        trail={[{ label: "Inventory" }]}
         actions={<Button className="group min-h-[44px] bg-[var(--staff-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--staff-brand-deep)] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button>}
       />
 
-      <Card className="shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
+      <Card>
         <CardContent className="flex flex-col gap-2 pt-4 md:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search name, SKU, barcode, brand, design…" className="min-h-[48px] rounded-xl pl-10 transition-all focus:ring-4 focus:ring-[var(--staff-brand)]/10" aria-label="Search inventory" />
+            <Search aria-hidden className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="Search name, SKU, barcode, brand, design…" className="min-h-[48px] rounded-xl pl-10" aria-label="Search inventory" />
             {q && (
-              <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[36px] w-9 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95">✕</button>
+              <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[44px] w-11 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"><X className="size-4" /></button>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2 md:flex md:gap-2">
@@ -127,7 +170,7 @@ function InventoryInner() {
       </Card>
 
       {err && (
-        <p role="alert" className="rounded-xl border border-[#f0b6b9] bg-[#fdecec] px-4 py-3 text-[13.5px] font-medium text-[#7d1a1f]">{err}</p>
+        <p role="alert" className="staff-banner-error rounded-xl px-4 py-3 text-[13.5px] font-medium">{err}</p>
       )}
 
       {loading ? (
@@ -156,7 +199,7 @@ function InventoryInner() {
                       </span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1.5">
-                      <Badge variant={s === "out-of-stock" ? "destructive" : s === "low-stock" ? "secondary" : "default"}>
+                      <Badge variant={s === "out-of-stock" ? "destructive" : s === "low-stock" ? "warning" : "success"}>
                         {s === "in-stock" ? "In stock" : s === "low-stock" ? "Low" : "Out"}
                       </Badge>
                       <span aria-hidden className="text-[13px] font-semibold text-muted-foreground transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-foreground">Open →</span>
@@ -175,7 +218,7 @@ function InventoryInner() {
             </CardContent>
           </Card>
 
-          <Card className="hidden overflow-hidden md:block">
+          <Card className="hidden overflow-x-auto md:block">
             <CardContent className="p-0">
               <Table className="min-w-[620px]">
                 <TableHeader>
@@ -201,18 +244,23 @@ function InventoryInner() {
                         <TableCell className="tnum text-right font-medium">{formatINR(p.price)}</TableCell>
                         <TableCell className="tnum text-right font-semibold">{p.stock}</TableCell>
                         <TableCell>
-                          <Badge variant={s === "out-of-stock" ? "destructive" : s === "low-stock" ? "secondary" : "default"}>
+                          <Badge variant={s === "out-of-stock" ? "destructive" : s === "low-stock" ? "warning" : "success"}>
                             {s === "in-stock" ? "In stock" : s === "low-stock" ? "Low" : "Out"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" className="min-h-[36px] transition-all duration-150 group-hover:border-foreground" asChild><Link href={`/inventory/${p.id}`}>Open</Link></Button>
+                          <Button variant="outline" size="sm" className="min-h-[44px] transition-all duration-150 group-hover:border-foreground" asChild><Link href={`/inventory/${p.id}`}>Open</Link></Button>
                         </TableCell>
                       </TableRow>
                     );
                   })}
                   {!rows.length && (
-                    <TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">No SKUs match. Clear filters.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="py-12 text-center">
+                      <span aria-hidden className="empty-plate mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></span>
+                      <p className="mt-2 text-[15px] font-semibold">No SKUs match.</p>
+                      <p className="mt-0.5 text-[13.5px] text-muted-foreground">Try a shorter search or clear the filters.</p>
+                      <button onClick={clearAll} className="mt-2 inline-flex min-h-[44px] items-center rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">Clear filters</button>
+                    </TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

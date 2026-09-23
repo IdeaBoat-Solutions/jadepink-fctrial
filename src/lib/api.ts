@@ -280,11 +280,13 @@ export interface Paged<T> {
   end: number;
 }
 
-export const listProducts = (f: { q?: string; category?: string; stock?: string; page?: number; pageSize?: number } = {}) => {
+export const listProducts = (f: { q?: string; category?: string; stock?: string; supplier?: string; brand?: string; minPrice?: number | string; maxPrice?: number | string; sort?: string; page?: number; pageSize?: number } = {}) => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "" && v !== "all") p.set(k, String(v));
   return callBody<Paged<Product>>(`/api/products?${p.toString()}`);
 };
+
+export const listBrands = () => callBody<{ data: string[] }>("/api/brands");
 
 export const listCategories = () => callBody<{ data: Category[] }>("/api/categories");
 export const listSuppliers = () => callBody<{ data: Supplier[] }>("/api/suppliers");

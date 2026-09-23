@@ -398,14 +398,15 @@ body {
 }
 
 /* Route-enter transition — remounts via template.tsx on every navigation.
-   Snappy by design: opacity-only (no transform → no layout shift, pure GPU
-   composite), 120ms so tab-to-tab moves feel instant, never floaty. */
+   A short fade + 6px rise reads as movement between sections without layout
+   shift (transform-only, GPU composite), 160ms so tab-to-tab moves feel
+   instant, never floaty. */
 .route-enter {
-  animation: route-in 120ms ease-out;
+  animation: route-in 160ms ease-out;
 }
 @keyframes route-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .route-enter { animation: none; }
@@ -586,6 +587,19 @@ body {
   background: #f3eeea;
   border: 1px solid var(--staff-line);
   color: var(--staff-faint);
+}
+
+/* Banners — one error language, one neutral-note language.
+   Pages must use these instead of hard-coded hex banners. */
+.staff-banner-error {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.staff-banner-note {
+  border: 1px solid var(--staff-line);
+  background: #fff;
+  color: var(--staff-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

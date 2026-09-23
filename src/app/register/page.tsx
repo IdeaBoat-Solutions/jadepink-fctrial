@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { PrimaryButton, TextInput, Field } from "@/components/ui";
 import { FULL_NAME_ERROR, isFullName, normalizeName } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 type Me = { user: { id: string; email?: string } | null; profile: { name: string; role: string } | null };
 
 export default function RegisterPage() {
+  usePageTitle("Register staff");
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [name, setName] = useState("");
@@ -128,10 +130,21 @@ export default function RegisterPage() {
               </Field>
               <fieldset>
                 <legend className="text-[13px] font-semibold text-[#44403c]">Role</legend>
-                <div className="mt-1.5 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Role">
+                <div
+                  className="mt-1.5 grid grid-cols-2 gap-2"
+                  role="radiogroup"
+                  aria-label="Role"
+                  onKeyDown={(e) => {
+                    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                    e.preventDefault();
+                    const next = role === "FC" ? "STORE_MANAGER" : "FC";
+                    setRole(next);
+                    e.currentTarget.querySelector<HTMLButtonElement>(`button[data-role="${next}"]`)?.focus();
+                  }}
+                >
                   {(["FC", "STORE_MANAGER"] as const).map((r) => (
                     <button
-                      key={r} type="button" role="radio" aria-checked={role === r} onClick={() => setRole(r)}
+                      key={r} type="button" role="radio" aria-checked={role === r} tabIndex={role === r ? 0 : -1} data-role={r} onClick={() => setRole(r)}
                       className={cn(
                         "min-h-[52px] rounded-lg border px-3 text-left transition-colors",
                         role === r ? "border-[var(--staff-brand)] bg-[#fdf0f4]" : "border-[#d6c9bb] bg-white hover:border-[#1c1917]"

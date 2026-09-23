@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -9,13 +7,15 @@ import { getProductDetail, type ProductDetailLive } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { BackButton, Gallery } from "./gallery";
+import { usePageTitle } from "@/hooks/use-page-title";
 
-/* FC-facing product page: every photo on top, all details below.
-   Loads GET /api/products/[id] — one round trip for the product AND its
-   stock ledger, so the FC can see what moved (restock, sale, adjustment)
-   without fanning out to N endpoints. Commercials (cost/margin) stay on the
-   manager-only /inventory/[id] page. Parent product id — variant size/colour
-   is shown on the floor card that linked here. */
+/* FC-facing product page: every photo on top, selling details below.
+   Loads GET /api/products/[id] for the product. Commercials (cost/margin),
+   supplier/reorder and the stock ledger stay on the manager-only
+   /inventory/[id] page — floor staff get price, sizes/colours, availability
+   and tag identifiers (SKU/barcode/design) to match the physical piece.
+   Parent product id — variant size/colour is shown on the floor card that
+   linked here. */
 
 type State =
   | { status: "loading" }
@@ -24,6 +24,7 @@ type State =
   | { status: "ready"; data: ProductDetailLive };
 
 export default function OpsProductPage() {
+  usePageTitle("Product");
   const { id } = useParams<{ id: string }>();
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -92,7 +93,6 @@ export default function OpsProductPage() {
   }
 
   const p = state.data.product;
-  const movements = state.data.movements;
   const s = stockStatus(p);
   const images = (p.imageUrls ?? []).filter(Boolean);
   const stockLabel = s === "in-stock" ? `In stock · ${p.stock}` : s === "low-stock" ? `Low · ${p.stock}` : "Out of stock";
@@ -106,8 +106,6 @@ export default function OpsProductPage() {
     ["Category", p.categoryName || "—"],
     ["Brand", p.brandName || "—"],
     ["Design", p.designNo || "—"],
-    ["Supplier", p.supplierName || "—"],
-    ["HSN", p.hsnCode || "—"],
   ];
 
   return (
@@ -140,41 +138,13 @@ export default function OpsProductPage() {
           {facts.map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]">
               <dt className="shrink-0 text-[#7a736a]">{k}</dt>
-              <dd className={`min-w-0 text-right font-semibold text-[#211d18] ${k === "SKU" || k === "Barcode" || k === "HSN" ? "font-mono text-[13px]" : ""}`}>
+              <dd className={`min-w-0 text-right font-semibold text-[#211d18] ${k === "SKU" || k === "Barcode" ? "font-mono text-[13px]" : ""}`}>
                 {v}
               </dd>
             </div>
           ))}
         </dl>
       </div>
-
-      {/* Stock ledger — served by the same /api/products/[id] payload. */}
-      <section className="mt-4 rounded-xl border border-[#e9e2d8] bg-white p-4 sm:p-5" aria-label="Stock activity">
-        <h2 className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Stock activity</h2>
-        {movements.length === 0 ? (
-          <p className="mt-2 text-[14px] text-[#7a736a]">No stock movements recorded yet.</p>
-        ) : (
-          <ul className="mt-2 flex flex-col">
-            {movements.slice(0, 5).map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 border-b border-[#f1ece4] py-2 text-[14px] last:border-b-0">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={`size-1.5 shrink-0 rounded-full ${m.type === "IN" ? "bg-[#1c6b46]" : m.type === "OUT" ? "bg-[#b23a48]" : "bg-[#9a5b00]"}`}
-                  />
-                  <span className="tnum shrink-0 font-semibold text-[#211d18]">
-                    {m.type === "IN" ? "+" : m.type === "OUT" ? "−" : "±"}{m.qty}
-                  </span>
-                  <span className="min-w-0 truncate text-[#57534e]">{m.reason || m.type.toLowerCase()}</span>
-                </span>
-                <span className="tnum shrink-0 text-[12.5px] text-[#7a736a]">
-                  {new Date(m.at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

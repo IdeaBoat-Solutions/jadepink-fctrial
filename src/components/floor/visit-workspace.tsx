@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HistoryLayers } from "@/components/ops";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
+import { CustomerCreateForm, type CustomerCreateData } from "@/components/floor/customer-create-form";
 import { useStore } from "@/lib/store";
 import { useCustomerSearch } from "@/features/customers/use-customer-search";
 import { createCustomerSchema } from "@/features/customers/schemas";
@@ -14,9 +15,6 @@ import { getVisitTimeline, type VisitLive, type VisitTimelineEventLive } from "@
 import { canAssignOthers, canReassignVisit } from "@/lib/policy";
 import { roundRobinNext } from "@/lib/round-robin";
 import { clockTime, formatDateIN } from "@/lib/utils";
-
-const SOURCES = ["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Friend", "Other"];
-const BUDGETS = ["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"];
 
 function stepOf(visit: VisitLive): number {
   if (visit.status === "COMPLETED" || visit.status === "CANCELLED") return 4;
@@ -35,12 +33,12 @@ const SUITE_LABELS_LOCAL: Record<string, string> = {
   SALON_VIP: "Salon VIP",
 };
 
-/* Header chip reads "Fitting Room 03" for SUITE_03, plain label otherwise. */
+/* Single suite vocabulary everywhere: "Suite 01/02/03 · Salon VIP".
+   Matches floor-board SUITES so runners, toasts and header chips agree. */
 function FittingRoom({ suite }: { suite: string | null }) {
   if (!suite) return <>No suite assigned</>;
   const label = SUITE_LABELS_LOCAL[suite] ?? suite;
-  const m = label.match(/Suite (\d+)/);
-  return <>{m ? `Fitting Room ${m[1]}` : label}</>;
+  return <>{label}</>;
 }
 
 function humanEvent(type: string): string {
@@ -157,7 +155,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const isManager = store.user?.role === "manager";
   const [assignOpen, setAssignOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [events, setEvents] = useState<VisitTimelineEventLive[] | null>(null);
   const [billing, setBilling] = useState<"idle" | "saving" | "done" | "err">("idle");
@@ -212,70 +209,91 @@ function VisitBody({ visit }: { visit: VisitLive }) {
 
   const mine = !visit.assignedSalespersonId || visit.assignedSalespersonId === store.user?.id;
   const blocked = !isManager && visit.status === "ACTIVE" && !mine;
+  const isActive = visit.status === "ACTIVE" && billing !== "done";
+  const isClosed = visit.status === "COMPLETED" || visit.status === "CANCELLED" || billing === "done";
+  /* One status for the whole header — the workspace below always shows the
+     matching next step, so the pill and the page can never disagree. */
+  const headStatus = !visit.customerId
+    ? { mark: "waiting", label: "Needs identification" }
+    : !visit.assignedSalespersonId
+      ? { mark: "waiting", label: "Needs an FC" }
+      : isClosed
+        ? { mark: "completed", label: "Closed" }
+        : isActive
+          ? { mark: "active", label: "On the floor" }
+          : { mark: "selected", label: "Ready to start" };
 
   return (
     <div>
-      {/* Ops-console customer header: who, whose customer, how long, where. */}
-      <div className="rounded-xl border border-[#e9e2d8] bg-white p-5">
+      {/* Wayfinding: never strand an FC mid-fitting — back keeps queue context. */}
+      <nav aria-label="Back to floor" className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+        <Link href={isManager ? "/floor" : "/today"} className="inline-flex min-h-11 items-center gap-1 font-semibold text-[var(--fp-brand)]">
+          <span aria-hidden>←</span> {isManager ? "Back to live floor" : "Back to my work"}
+        </Link>
+        <span aria-hidden className="text-[var(--fp-line-strong)]">·</span>
+        <span className="text-[var(--fp-muted)]">Visit {visitCode}</span>
+        <span aria-hidden className="text-[var(--fp-line-strong)]">·</span>
+        <span className="text-[var(--fp-muted)]">{STEPS[step]}</span>
+      </nav>
+      {/* Header: who + where in the visit. Product actions only exist while
+          the floor board below is live — a pre-identify visit never shows
+          dead buttons that tap through to nothing. */}
+      <div className="rounded-xl border border-[#e9e2d8] bg-white p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-[26px] font-bold uppercase leading-none tracking-tight text-[#211d18]">
+              <h1 className="break-words text-[26px] font-bold uppercase leading-none tracking-tight text-[#211d18]">
                 {customer?.name || visit.customerName || "Unidentified customer"}
               </h1>
+              <StatusMark value={headStatus.mark} label={headStatus.label} />
               {tier && customer && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[var(--fp-brand-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--fp-brand)]">
-                  <span aria-hidden>◉</span> {tier} · {customer.visitCount} visits
+                  <span aria-hidden>◉</span> {tier}
                 </span>
               )}
             </div>
-            <p className="fp-num mt-2 inline-block rounded bg-[#eef2ee] px-2 py-0.5 text-[12px] font-bold text-[#43544c]">{visitCode}</p>
             <p className="mt-2 text-[13.5px] text-[#57534e]">
-              FC: <strong className="font-semibold text-[#211d18]">{fc?.name ?? "Unassigned"}</strong>
+              <strong className="font-semibold text-[#211d18]">{fc?.name ?? "No FC yet"}</strong>
               <span className="mx-2 text-[#cfc6bb]">·</span>
-              Started {visit.startedAt ? clockTime(visit.startedAt) : clockTime(visit.arrivedAt)}
-              {elapsedMin !== null && <span className="font-semibold"> (Active {elapsedMin} min)</span>}
-            </p>
-            <p className="mt-1.5">
-              <span className="inline-block rounded bg-[#f1ece4] px-2 py-1 text-[12px] font-bold text-[#57534e]">
-                <FittingRoom suite={suite} />
-              </span>
+              {visit.startedAt ? `On floor since ${clockTime(visit.startedAt)}` : `Arrived ${clockTime(visit.arrivedAt)}`}
+              {elapsedMin !== null && <span className="font-semibold"> ({elapsedMin} min)</span>}
+              {suite && (
+                <>
+                  <span className="mx-2 text-[#cfc6bb]">·</span>
+                  <FittingRoom suite={suite} />
+                </>
+              )}
+              <span className="mx-2 text-[#cfc6bb]">·</span>
+              <span className="fp-num">{visitCode}</span>
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <button
-              type="button"
-              onClick={() => fireBoard("scan")}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[#23403a] px-4 text-[13.5px] font-bold text-white transition-transform hover:bg-[#1a312c] active:scale-[0.98]"
-            >
-              <span aria-hidden>▮▮▮</span> Scan product
-            </button>
-            <button
-              type="button"
-              onClick={() => fireBoard("search")}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[#f1ece4] px-4 text-[13.5px] font-bold text-[#211d18] transition-colors hover:bg-[#e7dfd3]"
-            >
-              <span aria-hidden>＋</span> Add SKU
-            </button>
-            {customer && (
+          {isActive && (
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               <button
                 type="button"
-                onClick={() => setHistoryOpen(true)}
+                onClick={() => fireBoard("scan")}
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[#23403a] px-4 text-[13.5px] font-bold text-white transition-transform hover:bg-[#1a312c] active:scale-[0.98]"
+              >
+                <span aria-hidden>▮▮▮</span> Scan product
+              </button>
+              <button
+                type="button"
+                onClick={() => fireBoard("search")}
                 className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[#f1ece4] px-4 text-[13.5px] font-bold text-[#211d18] transition-colors hover:bg-[#e7dfd3]"
               >
-                Customer History
+                <span aria-hidden>＋</span> Add by SKU
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => fireBoard("summary")}
-              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[var(--fp-brand)] px-4 text-[13.5px] font-bold text-white transition-[transform,background-color] hover:bg-[var(--fp-brand-deep)] active:scale-[0.98]"
-            >
-              Finish & Continue to Billing →
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => fireBoard("summary")}
+                className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[var(--fp-brand)] px-4 text-[13.5px] font-bold text-white transition-[transform,background-color] hover:bg-[var(--fp-brand-deep)] active:scale-[0.98]"
+              >
+                Finish & bill →
+              </button>
+            </div>
+          )}
         </div>
-        <div className="mt-3 flex gap-2 border-t border-[#f1ece4] pt-3">
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-[#f1ece4] pt-3">
           <Btn tone="quiet" onClick={() => void loadTimeline()}>Visit timeline</Btn>
           {isManager && visit.status !== "COMPLETED" && (
             <Btn tone="line" onClick={() => setAssignOpen(true)}>{visit.assignedSalespersonId ? "Reassign FC" : "Assign FC"}</Btn>
@@ -361,28 +379,15 @@ function VisitBody({ visit }: { visit: VisitLive }) {
         />
       )}
 
-      {historyOpen && customer && (
-        <Drawer kicker="History" title={customer.name} onClose={() => setHistoryOpen(false)}>
-          <CustomerFacts customer={customer} />
-          <PastVisits customerId={customer.id} />
-          <Link href={`/customers/${customer.id}`} className="mt-4 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]">
-            Open full profile
-          </Link>
-        </Drawer>
-      )}
-
       {timelineOpen && (
         <Drawer kicker="This visit" title="Timeline" onClose={() => setTimelineOpen(false)}>
           {!events && <div className="fp-skel h-24" aria-busy="true" />}
           {events && events.length === 0 && <EmptyNote title="No events yet." body="Arrival, identification and product steps will appear here." />}
           <ol>
             {events?.map((e) => (
-              <li key={e.id} className="grid grid-cols-[72px_1fr] gap-3 border-b border-[var(--fp-line)] py-2.5 text-[14px]">
-                <span className="fp-num text-[var(--fp-muted)]">{clockTime(e.at)}</span>
-                <span>
-                  {humanEvent(e.type)}
-                  {e.detail ? <span className="block text-[13px] text-[var(--fp-muted)]">{e.detail}</span> : null}
-                </span>
+              <li key={e.id} className="border-b border-[var(--fp-line)] py-2.5 text-[14px]">
+                <p className="font-medium">{humanEvent(e.type)}</p>
+                {e.detail ? <p className="mt-0.5 text-[13px] text-[var(--fp-muted)]">{e.detail}</p> : null}
               </li>
             ))}
           </ol>
@@ -415,47 +420,13 @@ function ArrivalFlow({
   } = useCustomerSearch();
   const showCreateForm = submitted && searched && results.length === 0;
 
-  // Create-form fields (the search box + its async state live in the hook).
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [area, setArea] = useState("");
-  /* No fabricated default: budget stays unset ("Not asked") unless the FC
-     actually asks. The old ₹5–15k default stamped a guess onto records. */
-  const [budget, setBudget] = useState("");
-  const [source, setSource] = useState("Walk-in");
-  const [fcId, setFcId] = useState(() =>
-    store.user && !canAssignOthers(store.user.role) ? store.user.id : "",
-  );
+  // Create + attach run through the shared CustomerCreateForm below — this
+  // step only owns the submit, not the fields.
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
   const [attaching, setAttaching] = useState(false);
   // Local errors for create/attach/start; search errors come from the hook.
   const [err, setErr] = useState<{ title: string; body: string } | null>(null);
-
-  /* Seed the create form from the searched query the moment it appears, so the
-     FC never re-types the number they just searched. Re-seeds on each fresh
-     "no record" result. */
-  const seeded = useRef(false);
-  useEffect(() => {
-    if (showCreateForm && !seeded.current) {
-      seeded.current = true;
-      setName(prefillName);
-      setPhone(prefillMobile);
-      setArea("");
-    }
-    if (!showCreateForm) seeded.current = false;
-  }, [showCreateForm, prefillName, prefillMobile]);
-
-  /* Registered FCs with live load — the whole roster shows for every role,
-     the create-form dropdown included. Moving another FC's active visit
-     still needs a manager (guarded in pick). */
-  const fcLoad = new Map<string, number>();
-  store.visits.forEach((v) => {
-    if (v.assignedSalespersonId && (v.status === "ACTIVE" || v.status === "ASSIGNED")) {
-      fcLoad.set(v.assignedSalespersonId, (fcLoad.get(v.assignedSalespersonId) ?? 0) + 1);
-    }
-  });
-  const fcRoster = store.salespeople.filter((s) => s.active);
 
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const ready = !!visit.customerId && !!visit.assignedSalespersonId;
@@ -473,15 +444,15 @@ function ArrivalFlow({
     return true;
   };
 
-  const create = async () => {
+  const create = async (data: CustomerCreateData) => {
     // Single source of truth: the zod schema validates exactly what the
     // server enforces (name needs letters, phone must be a valid IN mobile).
     const parsed = createCustomerSchema.safeParse({
-      name,
-      phone,
-      source,
-      area: area.trim() || undefined,
-      budget: budget || undefined,
+      name: data.name,
+      phone: data.phone,
+      source: data.source,
+      area: data.area.trim() || undefined,
+      budget: data.budget || undefined,
     });
     if (!parsed.success) {
       const msg = parsed.error.issues[0]?.message ?? "Check the name and number and try again.";
@@ -499,7 +470,7 @@ function ArrivalFlow({
     const r = await store.createCustomerAndAttach(visit.id, {
       name: parsed.data.name,
       mobile,
-      source: parsed.data.source ?? source,
+      source: parsed.data.source ?? data.source,
       area: parsed.data.area ?? undefined,
       budget: parsed.data.budget ?? undefined,
     });
@@ -519,16 +490,18 @@ function ArrivalFlow({
       if (!attached) return;
     }
     if (!target) return;
-    if (fcId) {
-      const a = await store.assignSalesperson(visit.id, fcId);
-      const fcName = store.salespeople.find((s) => s.id === fcId)?.name;
+    /* No FC picker on the form — identify and assign stay separate steps.
+       FCs always serve their own walk-in, so they land on the visit directly;
+       managers pick who serves from the roster beside this form. */
+    if (store.user && !canAssignOthers(store.user.role)) {
+      const a = await store.assignSalesperson(visit.id, store.user.id);
       store.pushToast(
-        a.ok ? (r.ok ? "Customer created" : "Existing customer attached") : "Customer created — FC not assigned",
-        a.ok ? `${target.name} is with ${fcName ?? "the FC"}.` : (a.message || "Pick the FC on the next step."),
+        a.ok ? "You're serving them" : "Customer added",
+        a.ok ? `${target.name} is with you — start the visit.` : `${target.name} is on this visit. Pick an FC alongside.`,
       );
       return;
     }
-    store.pushToast(r.ok ? "Customer created" : "Existing customer attached", `${target.name} is on this visit.`);
+    store.pushToast(r.ok ? "Customer created" : "Existing customer attached", `${target.name} is on this visit. Pick an FC alongside.`);
   };
 
   const start = async () => {
@@ -549,8 +522,8 @@ function ArrivalFlow({
 
         {!visit.customerId && (
           <section className="mt-5" aria-label="Identify customer">
-            <h2 className="text-[18px] font-semibold tracking-tight">Customer looked up on the spot</h2>
-            <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Name and mobile number searched against the database. Known customers return with purchase history.</p>
+            <h2 className="text-[18px] font-semibold tracking-tight">Who&apos;s visiting?</h2>
+            <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Search by name or mobile — known customers come back with their history.</p>
             <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void search(); }}>
               <Field label="Name or mobile" htmlFor="lookup-q" required>
                 <input
@@ -610,64 +583,16 @@ function ArrivalFlow({
             })()}
 
             {showCreateForm && (
-              <form className="fp-rise mt-5 max-w-md" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-                <h3 className="text-[16px] font-semibold">New customer captured</h3>
-                <p className="mt-1 text-[13.5px] text-[var(--fp-muted)]">
-                  No record for “{query.trim()}”.
-                  Name, number, area, budget and how they heard about the store — 30 seconds while they are with you.
-                </p>
-                <div className="mt-4 flex flex-col gap-3">
-                  <Field label="Name" htmlFor="nc-name" required hint="One name is fine — same-named customers are told apart by mobile.">
-                    <input id="nc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Priya" className={inputClass} autoFocus />
-                  </Field>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Mobile" htmlFor="nc-mobile" required>
-                      <input
-                        id="nc-mobile"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+91 98765 43210"
-                        inputMode="tel"
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Area" htmlFor="nc-area" hint="Neighbourhood — e.g. Satellite, Vastrapur.">
-                      <input id="nc-area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Satellite" autoComplete="off" className={inputClass} />
-                    </Field>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Budget" htmlFor="nc-budget">
-                      <select id="nc-budget" value={budget} onChange={(e) => setBudget(e.target.value)} className={inputClass}>
-                        <option value="">Not asked</option>
-                        {BUDGETS.map((b) => <option key={b}>{b}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="How did you hear about us?" htmlFor="nc-source">
-                      <select id="nc-source" value={source} onChange={(e) => setSource(e.target.value)} className={inputClass}>
-                        {SOURCES.map((s) => <option key={s}>{s}</option>)}
-                      </select>
-                    </Field>
-                  </div>
-                  <Field label="Serving FC" htmlFor="nc-fc" hint="Registered salesperson — optional, skips the assign step.">
-                    {/* Native select: Radix portals its list to document.body and
-                        aria-hides the page while open, which trips Chrome's
-                        "Blocked aria-hidden ... descendant retained focus" warning. */}
-                    <select id="nc-fc" aria-label="Serving FC" value={fcId} onChange={(e) => setFcId(e.target.value)} className={inputClass}>
-                      <option value="">Select FC…</option>
-                      {fcRoster.length === 0 && <option value="none" disabled>No FCs available</option>}
-                      {fcRoster.map((sp) => {
-                        const n = fcLoad.get(sp.id) ?? 0;
-                        return (
-                          <option key={sp.id} value={sp.id}>
-                            {sp.name}{sp.id === store.user?.id ? " (you)" : ""} · {n === 0 ? "free now" : `${n} active`}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </Field>
-                  <Btn type="submit" tone="brand" disabled={saving}>{saving ? "Creating…" : "Create customer"}</Btn>
-                </div>
-              </form>
+              <CustomerCreateForm
+                idPrefix="visit-nc"
+                initialName={prefillName}
+                initialPhone={prefillMobile}
+                contextLine={`No record for “${query.trim()}”. Just the name and number — the rest can wait.`}
+                submitLabel="Create & continue"
+                saving={saving}
+                error={err?.body}
+                onSubmit={(data) => void create(data)}
+              />
             )}
           </section>
         )}
@@ -777,50 +702,15 @@ function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visi
       {open && (
         <div className="border-t border-[#f1ece4] px-5 pb-4 pt-2">
           <HistoryLayers customerId={customerId} />
+          <Link
+            href={`/customers/${customerId}`}
+            className="mt-3 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]"
+          >
+            Open full profile
+          </Link>
         </div>
       )}
     </section>
-  );
-}
-
-function CustomerFacts({ customer }: { customer: { visitCount: number; purchaseCount: number; lastVisitAt: string | null; phone: string } }) {
-  return (
-    <dl className="grid grid-cols-3 gap-3 border-b border-[var(--fp-line)] pb-4 text-[14px]">
-      <div><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num text-[20px] font-semibold">{customer.visitCount}</dd></div>
-      <div><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num text-[20px] font-semibold">{customer.purchaseCount}</dd></div>
-      <div><dt className="text-[12px] text-[var(--fp-faint)]">Last</dt><dd className="text-[14px] font-semibold">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "—"}</dd></div>
-    </dl>
-  );
-}
-
-function PastVisits({ customerId }: { customerId: string }) {
-  /* Real past history comes from the server (/api/customers/:id/history) —
-     the client store only holds TODAY's visits, so without this a returning
-     customer would look like they'd never been in. HistoryLayers shows each
-     past visit with its trialled / liked / billed items. */
-  const { visits } = useStore();
-  const live = useMemo(
-    () => visits.filter((v) => v.customerId === customerId).sort((a, b) => +new Date(b.arrivedAt) - +new Date(a.arrivedAt)),
-    [visits, customerId],
-  );
-
-  return (
-    <div>
-      <HistoryLayers customerId={customerId} />
-      {live.length > 0 && (
-        <div className="mt-4 border-t border-[var(--fp-line)] pt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">On the floor today</p>
-          <ul className="mt-1">
-            {live.map((v) => (
-              <li key={v.id} className="border-b border-[var(--fp-line)] py-3 text-[14px]">
-                <p className="font-semibold">{formatDateIN(v.arrivedAt) || clockTime(v.arrivedAt)}</p>
-                <p className="text-[13px] text-[var(--fp-muted)]">{v.fcName || "FC unassigned"} · {v.status === "ACTIVE" ? "On the floor now" : "In progress"}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -829,14 +719,14 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
   const manager = canAssignOthers(user?.role);
 
   return (
-    <Drawer kicker="Assignment · round robin" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC — round robin"} onClose={onClose}>
+    <Drawer kicker="Assignment" title={visit.assignedSalespersonId ? "Reassign FC" : "Assign FC"} onClose={onClose}>
       {!manager && (
         <p className="mb-3 text-[13.5px] text-[var(--fp-muted)]">The whole roster is listed — tap any FC to put them on this visit. Moving a visit that is already with a colleague needs a manager.</p>
       )}
       {manager && (
         <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
-          Walk-ins rotate in roster order — fair share across the floor. You can reassign any walk-in;
-          the override is logged with who changed it (see Visit timeline).
+          The FC marked Up next is the round-robin turn — fair share across the floor.
+          You can still pick anyone; reassigns are logged with who changed it (see Visit timeline).
         </p>
       )}
       <FcRoster visit={visit} onAssigned={() => window.setTimeout(onClose, 500)} />
@@ -898,8 +788,9 @@ function DeleteVisitDrawer({
   );
 }
 
-/* The assignment rail: same roster + round-robin logic the drawer uses, so the
-   arrival terminal can show it inline (wide screens) instead of behind a tap.
+/* The assignment rail: same roster the drawer uses, so the arrival terminal
+   can show it inline (wide screens) instead of behind a tap. Assignment
+   follows round robin — the FC the rotation points at is marked "Up next".
    Every FC on the roster is listed for every role; moving someone else's
    active visit still needs a manager. Locked until a customer is attached —
    the server would reject the pick. */
@@ -914,6 +805,10 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
     }
   });
   const roster = salespeople;
+  /* Round robin picks the suggested assignee: the FC after the most recently
+     assigned visit (fewest active load when there is no history). Any FC can
+     still be tapped — the mark only keeps walk-ins rotating fairly. */
+  const nextUp = roundRobinNext(salespeople, visits);
 
   const pick = async (id: string, name: string) => {
     if (locked) {
@@ -943,39 +838,29 @@ function FcRoster({ visit, onAssigned, locked }: { visit: VisitLive; onAssigned?
         <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">Identify the customer first — then every FC below can be picked.</p>
       )}
       {roster.length === 0 && <EmptyNote title="No salesperson is available to assign." body="Ask a manager to activate staff for this store." />}
-      {(() => {
-        const next = roundRobinNext(salespeople, visits);
-        if (!next) return null;
-        const isCurrent = visit.assignedSalespersonId === next.id;
-        return (
-          <button
-            type="button"
-            disabled={saving !== null || isCurrent}
-            onClick={() => void pick(next.id, next.name)}
-            className="mb-3 flex min-h-[52px] w-full items-center justify-between gap-3 rounded-lg bg-[#23403a] px-4 text-left text-white disabled:opacity-50"
-          >
-            <span className="text-[14px] font-bold">
-              {isCurrent ? `Round robin — ${next.name} is already on this visit` : `Round robin — next up: ${next.name} →`}
-            </span>
-            {saving === next.id && <span className="text-[12.5px]">Assigning…</span>}
-          </button>
-        );
-      })()}
       <ul className="flex flex-col gap-2" aria-label="Fashion consultants">
         {roster.map((sp) => {
           const n = load.get(sp.id) ?? 0;
           const state = !sp.active ? "offline" : n > 0 ? "busy" : "available";
           const selected = done === sp.id;
+          const suggested = nextUp?.id === sp.id && !selected;
           return (
             <li key={sp.id}>
               <button
                 onClick={() => void pick(sp.id, sp.name)}
                 disabled={saving !== null || state === "offline"}
-                className={`flex min-h-[64px] w-full items-center justify-between gap-3 border px-3 text-left ${selected ? "border-[var(--fp-ok)] bg-[var(--fp-ok-bg)]" : "border-[var(--fp-line)] bg-white hover:border-[var(--fp-ink)]"}`}
+                className={`flex min-h-[64px] w-full items-center justify-between gap-3 border px-3 text-left ${selected ? "border-[var(--fp-ok)] bg-[var(--fp-ok-bg)]" : suggested ? "border-[#23403a] bg-white hover:border-[#23403a]" : "border-[var(--fp-line)] bg-white hover:border-[var(--fp-ink)]"}`}
               >
                 <span>
-                  <span className="block text-[15px] font-semibold">{sp.name}{sp.id === user?.id ? " (you)" : ""}</span>
-                  <span className="text-[12.5px] text-[var(--fp-muted)]">{n === 0 ? "No active customers" : `${n} active`}</span>
+                  <span className="flex flex-wrap items-center gap-2 text-[15px] font-semibold">
+                    <span>{sp.name}{sp.id === user?.id ? " (you)" : ""}</span>
+                    {suggested && (
+                      <span className="rounded-full bg-[#23403a] px-2 py-0.5 text-[11px] font-bold text-white">Up next</span>
+                    )}
+                  </span>
+                  <span className="text-[12.5px] text-[var(--fp-muted)]">
+                    {suggested ? "Round-robin turn — fair rotation" : n === 0 ? "No active customers" : `${n} active`}
+                  </span>
                 </span>
                 {saving === sp.id ? <span className="text-[13px] font-semibold">Assigning…</span> : selected ? <span className="text-[13px] font-semibold text-[var(--fp-ok)]">Assigned</span> : <StatusMark value={state} />}
               </button>

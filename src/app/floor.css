@@ -67,27 +67,24 @@
   transform: none;
 }
 
-.floor-shell {
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  min-height: 100dvh;
-}
-
-.floor-rail {
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--fp-line);
+/* shadcn sidebar themed to the floor — same primitives as admin,
+   warm stone tokens instead of neutral. */
+.floor-sidebar {
+  --sidebar: var(--fp-surface);
+  --sidebar-foreground: var(--fp-ink);
+  --sidebar-primary: var(--fp-brand);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--fp-ink-soft);
+  --sidebar-accent-foreground: var(--fp-ink);
+  --sidebar-border: var(--fp-line);
+  --sidebar-ring: var(--fp-brand);
   background: var(--fp-surface);
-  padding: 16px 12px 12px;
+  color: var(--fp-ink);
 }
 
 .floor-main {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  background: transparent;
 }
 
 .floor-top {
@@ -99,16 +96,26 @@
   justify-content: space-between;
   gap: 12px;
   height: 52px;
-  padding: 0 20px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--fp-line);
   background: color-mix(in srgb, var(--fp-paper) 92%, white);
+}
+@media (min-width: 640px) {
+  .floor-top {
+    padding: 0 20px;
+  }
 }
 
 .floor-work {
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 20px 20px 40px;
+  padding: 16px 12px 32px;
+}
+@media (min-width: 640px) {
+  .floor-work {
+    padding: 20px 20px 40px;
+  }
 }
 
 .fp-skel {
@@ -139,29 +146,12 @@
   }
 }
 
-@media (max-width: 900px) {
-  .floor-shell {
-    grid-template-columns: 1fr;
-  }
-  .floor-rail {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    height: auto;
-    flex-direction: row;
-    align-items: center;
-    gap: 4px;
-    overflow-x: auto;
-    padding: 8px 10px;
-    border-right: 0;
-    border-bottom: 1px solid var(--fp-line);
-  }
-  .floor-rail nav {
-    display: flex;
-    gap: 2px;
-  }
-  .floor-brand-copy,
-  .floor-rail-foot {
-    display: none;
+/* Mobile tab bar clearance: the fixed FC tabs overlay the bottom of the
+   page on phones, so the work area ends above them (safe-area included). */
+@media (max-width: 767px) {
+  .floor-work {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
 }
+
+/* shadcn sidebar owns mobile behavior (sheet drawer) — no custom rail rules. */

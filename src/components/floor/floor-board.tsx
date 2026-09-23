@@ -397,10 +397,12 @@ export function FloorBoard({
     setErr(null);
   };
 
-  /* Workspace header buttons (Scan product / Add SKU / summary) trigger the
-     board's drawers and panels. Deferred in a timer (the codebase pattern for
-     external-state sync) so no setState runs in the effect body; the seq
-     guard makes each header tap fire exactly once. */
+  /* Workspace header buttons (Scan product / Add by SKU / Finish & bill)
+     trigger the board's drawers and panels. They only render while the visit
+     is ACTIVE, so every tap always has a mounted board to answer it. Deferred
+     in a timer (the codebase pattern for external-state sync) so no setState
+     runs in the effect body; the seq guard makes each header tap fire
+     exactly once. */
   const consumedSeq = useRef(0);
   useEffect(() => {
     if (!externalAction || externalAction.seq === consumedSeq.current) return;
@@ -783,7 +785,7 @@ export function FloorBoard({
                 type="button"
                 aria-pressed={active}
                 onClick={() => setFilter(key)}
-                className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold uppercase tracking-wide transition-colors ${
+                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-bold uppercase tracking-wide transition-colors ${
                   active
                     ? "bg-[#23403a] text-white"
                     : hot
@@ -797,12 +799,12 @@ export function FloorBoard({
             );
           })}
         </div>
-        <label className="ml-auto inline-flex min-h-[40px] items-center gap-2 text-[13px] font-medium text-[#6b645c]">
+        <label className="inline-flex min-h-[44px] w-full items-center gap-2 text-[13px] font-medium text-[#6b645c] sm:ml-auto sm:w-auto">
           Sort:
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            className="min-h-[40px] rounded-lg border border-[#e0d7c9] bg-white px-2.5 text-[13.5px] font-semibold text-[#211d18]"
+            className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-2.5 text-[16px] font-semibold text-[#211d18] sm:flex-none sm:text-[13.5px]"
           >
             <option value="priority">Trial Priority</option>
             <option value="price-desc">Price: High to Low</option>
@@ -816,7 +818,7 @@ export function FloorBoard({
         <div className="mt-3">
           <form
             id="add-product-search"
-            className="flex min-w-[220px] flex-1 items-center gap-2"
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               if (searchResults?.length) pickActive();
@@ -843,10 +845,11 @@ export function FloorBoard({
               aria-label="Search products"
               autoComplete="off"
               role="combobox"
+              aria-autocomplete="list"
               aria-expanded={!!searchResults?.length}
               aria-controls="product-suggestions"
               aria-activedescendant={activeIdx >= 0 && searchResults?.[activeIdx] ? `suggest-${searchResults[activeIdx].id}` : undefined}
-              className="min-h-11 flex-1 rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 text-[15px]"
+              className="min-h-11 min-w-0 flex-1 basis-40 rounded-lg border border-[var(--fp-line-strong)] bg-white px-3 text-[16px] sm:text-[15px]"
             />
             <Btn type="submit" tone="ink" disabled={searching || searchQuery.trim().length < 2}>{searching ? "Searching…" : "Search"}</Btn>
           </form>
@@ -870,15 +873,25 @@ export function FloorBoard({
                 id={`suggest-${c.id}`}
                 role="option"
                 aria-selected={i === activeIdx}
+                aria-disabled={c.alreadyAdded || undefined}
+                tabIndex={c.alreadyAdded ? -1 : 0}
                 onMouseEnter={() => setActiveIdx(i)}
+                onFocus={() => setActiveIdx(i)}
                 onClick={() => { if (!c.alreadyAdded) addVariant(c.id, c.product.name); }}
+                onKeyDown={(e) => {
+                  if (c.alreadyAdded) return;
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    addVariant(c.id, c.product.name);
+                  }
+                }}
                 className={`flex cursor-pointer items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0 ${i === activeIdx ? "bg-[var(--fp-ink-soft)]" : ""}`}
               >
                 <ProductIdentity name={c.product.name} nameHi={<Hi text={c.product.name} query={searchQuery} />} sku={c.sku} size={c.size} colour={c.colour} price={c.price} imageUrl={c.imageUrl} compact href={`/products/${c.product.id}`} />
                 {c.alreadyAdded ? (
                   <span className="shrink-0 text-[13px] font-semibold text-[var(--fp-wait)]">Added</span>
                 ) : (
-                  <Btn tone="ink" disabled={busy === `add-${c.id}`} onClick={(e) => { e.stopPropagation(); addVariant(c.id, c.product.name); }}>
+                  <Btn tone="ink" className="shrink-0" disabled={busy === `add-${c.id}`} onClick={(e) => { e.stopPropagation(); addVariant(c.id, c.product.name); }}>
                     {busy === `add-${c.id}` ? "Adding…" : "Add"}
                   </Btn>
                 )}
@@ -963,7 +976,7 @@ export function FloorBoard({
             meta={<span className="text-[11px] font-semibold text-[#7a736a]">{camState === "live" ? "Camera live" : camState === "denied" ? "Camera blocked" : "Manual entry"}</span>}
           >
             <div className="relative overflow-hidden rounded-lg bg-[#23403a]">
-              <video ref={videoRef} muted playsInline className="aspect-[4/3] w-full object-cover opacity-90" />
+              <video ref={videoRef} muted playsInline aria-label="Live camera view for scanning product barcodes. Use manual entry below if the camera is unavailable." className="aspect-[16/10] max-h-[260px] w-full object-cover opacity-90 sm:aspect-[4/3] sm:max-h-none" />
               <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
                 <div className="h-[55%] w-[72%] rounded border-2 border-dashed border-white/60" />
               </div>
@@ -1012,13 +1025,13 @@ export function FloorBoard({
                 </div>
               )}
               {camState === "live" && (
-                <div className="absolute right-2 top-2 flex gap-1.5">
+                <div className="absolute right-2 top-2 flex flex-wrap justify-end gap-1.5">
                   <button
                     type="button"
                     onClick={() => void toggleTorch()}
                     aria-pressed={torchOn}
                     aria-label="Toggle flash"
-                    className={`inline-flex min-h-[36px] items-center rounded-full px-3 text-[12.5px] font-bold ${torchOn ? "bg-white text-[#23403a]" : "bg-white/20 text-white"}`}
+                    className={`inline-flex min-h-[44px] items-center rounded-full px-3.5 text-[12.5px] font-bold ${torchOn ? "bg-white text-[#23403a]" : "bg-white/20 text-white"}`}
                   >
                     Flash
                   </button>
@@ -1026,7 +1039,7 @@ export function FloorBoard({
                     type="button"
                     onClick={closeScan}
                     aria-label="Stop camera"
-                    className="inline-flex min-h-[36px] items-center rounded-full bg-white/20 px-3 text-[12.5px] font-bold text-white"
+                    className="inline-flex min-h-[44px] items-center rounded-full bg-white/20 px-3.5 text-[12.5px] font-bold text-white"
                   >
                     Stop
                   </button>
@@ -1083,7 +1096,7 @@ export function FloorBoard({
                   placeholder="JP-KUR-4091-M"
                   aria-label="Enter SKU manually"
                   autoComplete="off"
-                  className="w-full bg-transparent font-mono text-[14px] outline-none placeholder:text-[#736c64]"
+                  className="w-full bg-transparent font-mono text-[16px] outline-none placeholder:text-[#736c64] sm:text-[14px]"
                 />
               </div>
               <button
@@ -1101,7 +1114,7 @@ export function FloorBoard({
             title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Direct Assignment Target</p>}
             meta={<p className="text-[11.5px] font-semibold text-[#57534e]">Active: {suiteLabelLocal(suite) ?? "—"}</p>}
           >
-            <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Assign fitting suite">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Assign fitting suite">
               {SUITES.map((s) => {
                 const active = suite === s.id;
                 return (
@@ -1111,7 +1124,7 @@ export function FloorBoard({
                     disabled={suiteBusy}
                     onClick={() => void assignSuite(s.id)}
                     aria-pressed={active}
-                    className={`min-h-[40px] rounded-lg px-1 text-[12px] font-bold transition-colors disabled:opacity-60 ${
+                    className={`min-h-[44px] rounded-lg px-1 text-[12px] font-bold transition-colors disabled:opacity-60 ${
                       active ? "bg-[#23403a] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]"
                     }`}
                   >
@@ -1138,7 +1151,7 @@ export function FloorBoard({
                 aria-label="Runner request note"
                 autoComplete="off"
                 maxLength={200}
-                className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-3 text-[14px] outline-none placeholder:text-[#736c64]"
+                className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-3 text-[16px] outline-none placeholder:text-[#736c64] sm:text-[14px]"
               />
               <button
                 type="submit"
@@ -1394,7 +1407,7 @@ function SideSection({
             onClick={toggle}
             aria-expanded={open}
             aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
-            className="inline-flex min-h-[32px] items-center rounded-lg bg-[#f1ece4] px-2.5 text-[12px] font-bold text-[#57534e] transition-colors hover:bg-[#e7dfd3]"
+            className="inline-flex min-h-[44px] items-center rounded-lg bg-[#f1ece4] px-3 text-[12px] font-bold text-[#57534e] transition-colors hover:bg-[#e7dfd3]"
           >
             {open ? "Hide" : "Show"}
           </button>
@@ -1537,34 +1550,34 @@ function StatePill({ status }: { status: ProductVisitStatus }) {
   if (status === "TRIAL_IN_PROGRESS" || status === "TRIAL_COMPLETED") {
     const active = status === "TRIAL_IN_PROGRESS";
     return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${active ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)]" : "bg-[#eef2ee] text-[#43544c]"}`}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide ${active ? "bg-[var(--fp-brand-soft)] text-[var(--fp-brand)]" : "bg-[#eef2ee] text-[#43544c]"}`}>
         {active && <span aria-hidden className="size-1.5 rounded-full bg-[var(--fp-brand)]" />} Trial
       </span>
     );
   }
   if (status === "LIKED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6f2ea] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#1c6b46]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6f2ea] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-[#1c6b46]">
         Liked (Ready for billing)
       </span>
     );
   }
   if (status === "PURCHASED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#23403a] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#23403a] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-white">
         Billed
       </span>
     );
   }
   if (status === "DROPPED") {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#57534e]">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-[#57534e]">
         Dropped
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#57534e]">
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[12px] font-bold uppercase tracking-wide text-[#57534e]">
       Selected
     </span>
   );
@@ -1607,27 +1620,40 @@ function ProductRow({
   const p = card.product;
   const dropped = card.status === "DROPPED";
   return (
-    <article className={`rounded-xl border border-[#e9e2d8] border-l-4 ${EDGE[card.status]} bg-white p-4`}>
-      <div className="flex gap-4">
-        <button type="button" onClick={onOpen} className="relative block w-[120px] shrink-0 self-start" aria-label={`Open ${p.name}`}>
+    <article className={`rounded-xl border border-[#e9e2d8] border-l-4 ${EDGE[card.status]} bg-white p-3 sm:p-4`}>
+      <div className="flex gap-3 sm:gap-4">
+        <button type="button" onClick={onOpen} className="relative block w-24 shrink-0 self-start sm:w-[120px]" aria-label={`Open ${p.name}`}>
           {p.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- catalogue photos come from per-project storage hosts
             <img src={p.imageUrl} alt="" loading="lazy" decoding="async" className="aspect-[3/4] w-full rounded-lg bg-[#f1ece4] object-cover" />
           ) : (
             <span aria-hidden className="grid aspect-[3/4] w-full place-items-center rounded-lg bg-[#f1ece4] text-[28px] font-bold text-[#a8a094]">{p.name.slice(0, 1)}</span>
           )}
-          <span title={p.sku} className="absolute left-1.5 top-1.5 max-w-[108px] truncate rounded bg-white/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#57534e]">SKU #{p.sku.slice(-4)}</span>
+          <span title={`SKU ${p.sku} — tap details to copy`} className="absolute left-1.5 top-1.5 max-w-[80px] truncate rounded bg-white/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#57534e] sm:max-w-[112px]">SKU {p.sku}</span>
         </button>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
             <StatePill status={card.status} />
             <p className={`fp-num shrink-0 text-[17px] font-bold tracking-tight text-[#211d18] ${dropped ? "line-through opacity-60" : ""}`}>{formatINR(p.price)}</p>
           </div>
           <Link href={`/products/${p.id}`} className="mt-1.5 block w-full text-left" aria-label={`Open ${p.name} details`}>
             <h3 className="line-clamp-2 text-[16.5px] font-bold leading-snug tracking-tight text-[#211d18] underline decoration-[#cfc6bb] decoration-1 underline-offset-2 hover:decoration-[#211d18]">{p.name}</h3>
           </Link>
-          <p className="mt-1 truncate text-[13px] text-[#57534e]">
-            <span className="font-mono text-[12px]">{p.sku}</span> · <strong className="font-semibold">Size {p.size}</strong> · {p.colour}
+          <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-[#57534e]">
+            <span className="truncate font-mono text-[12px]" title={p.sku}>{p.sku}</span>
+            <span aria-hidden>·</span>
+            <strong className="shrink-0 font-semibold">Size {p.size}</strong>
+            <span aria-hidden>·</span>
+            <span className="min-w-0 flex-1 basis-16 truncate">{p.colour}</span>
+            <button
+              type="button"
+              onClick={() => { void navigator.clipboard?.writeText(p.sku).catch(() => {}); }}
+              aria-label={`Copy SKU ${p.sku}`}
+              title="Copy full SKU"
+              className="grid min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-md text-[12px] text-[#a8a094] hover:bg-[#f1ece4] hover:text-[#211d18]"
+            >
+              <span aria-hidden>⧉</span>
+            </button>
           </p>
           {card.status === "TRIAL_IN_PROGRESS" && card.timeline.trialStartedAt && (
             <p className="mt-1 text-[12.5px] text-[#7a736a]">Trying now · started {ago(card.timeline.trialStartedAt)}</p>

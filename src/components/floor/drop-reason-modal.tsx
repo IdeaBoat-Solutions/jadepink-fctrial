@@ -72,17 +72,39 @@ export function DropReasonModal({
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   useEffect(() => {
+    const panel = panelRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), textarea, input, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    panelRef.current?.focus();
+    panel?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
       recognitionRef.current?.stop();
+      previouslyFocused?.focus?.();
     };
   }, [onClose]);
 
@@ -133,7 +155,7 @@ export function DropReasonModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(30,27,23,0.5)] p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(30,27,23,0.5)] p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
@@ -142,9 +164,9 @@ export function DropReasonModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="fp-rise flex max-h-[92vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_30px_60px_-20px_rgba(30,27,23,0.45)] outline-none"
+        className="fp-rise flex max-h-[92dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_30px_60px_-20px_rgba(30,27,23,0.45)] outline-none"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#f1ece4] px-6 pt-5 pb-4">
+        <div className="flex items-start justify-between gap-3 border-b border-[#f1ece4] px-4 pt-5 pb-4 sm:px-6">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-full bg-[var(--fp-brand-soft)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[var(--fp-brand)]">
@@ -166,7 +188,7 @@ export function DropReasonModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="flex items-center gap-3 rounded-xl bg-[#f7f5f1] p-3">
             {card.product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- catalogue photos come from per-project storage hosts
@@ -186,7 +208,7 @@ export function DropReasonModal({
           <p className="mt-5 text-[15px] font-bold text-[#211d18]">Why didn&apos;t the customer like this piece?</p>
           <p className="mt-1 text-[13px] text-[#7a736a]">Tap to classify the drop reason for automated merchandising feedback.</p>
 
-          <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="Drop reason">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Drop reason">
             {reasons.map((r) => {
               const active = r.id === reasonId;
               const label = GRID_LABEL[r.code] ?? r.label;
@@ -220,7 +242,7 @@ export function DropReasonModal({
                       type="button"
                       aria-pressed={active}
                       onClick={() => setSubCategory((cur) => (cur === s ? null : s))}
-                      className={`inline-flex min-h-9 items-center gap-1 rounded-full px-3 text-[13px] font-semibold transition-colors ${
+                      className={`inline-flex min-h-[44px] items-center gap-1 rounded-full px-3 text-[13px] font-semibold transition-colors ${
                         active ? "bg-[var(--fp-ok-bg)] text-[var(--fp-ok)]" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]"
                       }`}
                     >
@@ -243,7 +265,7 @@ export function DropReasonModal({
                 aria-pressed={listening}
                 aria-label={listening ? "Stop dictation" : "Dictate note"}
                 title={listening ? "Listening…" : "Dictate"}
-                className={`grid size-8 place-items-center rounded-full ${listening ? "bg-[var(--fp-brand)] text-white" : "text-[#7a736a] hover:bg-[#f1ece4]"}`}
+                className={`grid size-11 place-items-center rounded-full ${listening ? "bg-[var(--fp-brand)] text-white" : "text-[#7a736a] hover:bg-[#f1ece4]"}`}
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 19v3" />
@@ -259,14 +281,14 @@ export function DropReasonModal({
                 maxLength={500}
                 autoFocus={isOther}
                 placeholder={isOther ? "Tell us in your words — it goes to the vendor report." : "e.g. Customer loved the colour, needs 2 inches hemmed"}
-                className="w-full rounded-lg border border-[#e0d7c9] bg-white px-3 py-2.5 pr-9 text-[14.5px] text-[#211d18] placeholder:text-[#a8a094] focus:border-[#211d18] focus:outline-none"
+                className="w-full rounded-lg border border-[#e0d7c9] bg-white px-3 py-2.5 pr-12 text-[16px] text-[#211d18] placeholder:text-[#a8a094] focus:border-[#211d18] focus:outline-none sm:text-[14.5px]"
               />
               {note && (
                 <button
                   type="button"
                   onClick={() => setNote("")}
                   aria-label="Clear note"
-                  className="absolute right-2 top-2.5 grid size-6 place-items-center rounded text-[#a8a094] hover:bg-[#f1ece4] hover:text-[#211d18]"
+                  className="absolute right-1.5 top-1.5 grid size-11 place-items-center rounded text-[#a8a094] hover:bg-[#f1ece4] hover:text-[#211d18]"
                 >
                   <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M5 5l10 10M15 5 5 15" /></svg>
                 </button>
@@ -275,7 +297,7 @@ export function DropReasonModal({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 border-t border-[#f1ece4] px-6 py-4">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[#f1ece4] px-4 py-4 sm:px-6">
           <button
             type="button"
             onClick={onClose}

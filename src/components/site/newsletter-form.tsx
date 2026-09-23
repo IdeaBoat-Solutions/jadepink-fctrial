@@ -6,7 +6,6 @@
    No fake latency: validation is synchronous and local. */
 
 import { useId, useState } from "react";
-import { Button } from "@/components/ui/button";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -35,17 +34,12 @@ export function NewsletterForm() {
     return (
       <div
         role="status"
-        className="reveal mt-6 flex items-center gap-4 rounded-2xl bg-brand/10 p-5 ring-1 ring-brand/25"
+        className="reveal mt-6 border border-black/15 bg-white p-5"
       >
-        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-brand/15">
-          <span className="size-2.5 rounded-full bg-brand" aria-hidden="true" />
-        </span>
-        <div>
-          <p className="font-medium tracking-[0.01em] text-ink">You&apos;re on the list</p>
-          <p className="mt-1 text-sm text-ink/65">
-            Styling notes, once a fortnight — to <span className="font-medium text-ink">{status.email}</span>.
-          </p>
-        </div>
+        <p className="text-[15px] font-semibold text-black">You&apos;re on the list</p>
+        <p className="mt-1 text-sm text-black/60">
+          Styling notes, once a fortnight — to <span className="font-medium text-black">{status.email}</span>.
+        </p>
       </div>
     );
   }
@@ -54,7 +48,7 @@ export function NewsletterForm() {
 
   return (
     <div className="mt-6">
-      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={onSubmit} noValidate>
+      <form className="flex flex-col gap-0 border border-black/25 bg-white focus-within:border-black sm:flex-row sm:items-center" onSubmit={onSubmit} noValidate>
         <label className="sr-only" htmlFor="newsletter-email">
           Email address
         </label>
@@ -71,18 +65,21 @@ export function NewsletterForm() {
           }}
           aria-invalid={showError}
           aria-describedby={showError ? errorId : undefined}
-          className="min-w-0 flex-1 rounded-full bg-input px-5 py-2.5 text-sm text-ink ring-1 ring-shadow outline-none transition-[box-shadow,background-color] duration-200 placeholder:text-ink/35 hover:bg-glass-strong focus:ring-2 focus:ring-brand/60 aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-destructive/60"
+          className="min-h-[52px] min-w-0 flex-1 bg-transparent px-4 text-[16px] text-black outline-none placeholder:text-black/40"
         />
-        <Button type="submit" variant="boutique" size="boutique">
-          Join the list
-        </Button>
+        <button
+          type="submit"
+          className="inline-flex min-h-[52px] shrink-0 items-center justify-center bg-black px-6 text-[12px] font-semibold tracking-[0.2em] text-white uppercase hover:bg-[#651E2A]"
+        >
+          Subscribe
+        </button>
       </form>
       {showError ? (
-        <p id={errorId} role="alert" className="mt-3 text-sm text-brand">
+        <p id={errorId} role="alert" className="mt-3 text-sm font-medium text-[#651E2A]">
           {status.message}
         </p>
       ) : (
-        <p className="mt-3 text-[13px] text-ink/65">One email a fortnight. Unsubscribe anytime.</p>
+        <p className="mt-3 text-[13px] text-black/55">One email a fortnight. Unsubscribe anytime.</p>
       )}
     </div>
   );

@@ -112,10 +112,17 @@ export function mapProduct(row: Joined<ProductRow>): Product {
 
 /* ---------- Products ---------- */
 
+export type ProductSort = "newest" | "price-asc" | "price-desc" | "stock-desc" | "name";
+
 export interface ProductFilters {
   q?: string;
   categoryId?: string;
   stockStatus?: "in-stock" | "low-stock" | "out-of-stock";
+  supplierId?: string;
+  brand?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: ProductSort;
   page?: number;
   pageSize?: number;
 }
@@ -136,6 +143,10 @@ export async function listProducts(f: ProductFilters = {}) {
     .select(`${PRODUCT_SELECT}, categories(id, name), suppliers(id, name)`, { count: "exact" });
 
   if (f.categoryId && f.categoryId !== "all") query = query.eq("category_id", f.categoryId);
+  if (f.supplierId && f.supplierId !== "all") query = query.eq("supplier_id", f.supplierId);
+  if (f.brand && f.brand !== "all") query = query.eq("brand_name", f.brand);
+  if (typeof f.minPrice === "number" && Number.isFinite(f.minPrice)) query = query.gte("price", Math.max(0, f.minPrice));
+  if (typeof f.maxPrice === "number" && Number.isFinite(f.maxPrice)) query = query.lte("price", Math.max(0, f.maxPrice));
   if (f.stockStatus === "out-of-stock") query = query.lte("stock", 0);
   else if (f.stockStatus === "low-stock") query = query.gt("stock", 0).lte("stock", 5);
   else if (f.stockStatus === "in-stock") query = query.gt("stock", 5);
@@ -150,9 +161,14 @@ export async function listProducts(f: ProductFilters = {}) {
   }
 
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await query
-    .order("updated_at", { ascending: false })
-    .range(from, from + pageSize - 1);
+  const order = f.sort ?? "newest";
+  const ordered =
+    order === "price-asc" ? query.order("price", { ascending: true })
+    : order === "price-desc" ? query.order("price", { ascending: false })
+    : order === "stock-desc" ? query.order("stock", { ascending: false })
+    : order === "name" ? query.order("name", { ascending: true })
+    : query.order("updated_at", { ascending: false });
+  const { data, error, count } = await ordered.range(from, from + pageSize - 1);
 
   if (error) throw new Error(error.message);
   const items = (data ?? []).map((r) => mapProduct(r as unknown as Joined<ProductRow>));
@@ -212,6 +228,19 @@ export async function listSuppliers(): Promise<Supplier[]> {
     activeProducts: byId.get(s.id as string) ?? 0,
     rating: Number(s.rating ?? 0),
   }));
+}
+
+/* Distinct brand names for the filter dropdown — one narrow column, not rows. */
+export async function listBrands(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("products").select("brand_name").not("brand_name", "is", null).limit(1000);
+  if (error) throw new Error(error.message);
+  const set = new Set<string>();
+  for (const r of data ?? []) {
+    const b = ((r as { brand_name: string | null }).brand_name ?? "").trim();
+    if (b) set.add(b);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, "en-IN"));
 }
 
 /* ---------- Orders ---------- */
@@ -290,6 +319,49 @@ export async function listOrdersSince(sinceISO: string, limit = 500) {
     fcName: ((r as { fc_name: string | null }).fc_name ?? "").trim() || null,
     createdAt: String((r as { created_at: string }).created_at),
   }));
+}
+
+/* ---------- Recent billed items ----------
+   Flat line-item feed for Reports: the newest order_items with their order
+   attached (bill code, customer, FC, channel, date). Bounded, newest first. */
+
+export interface BilledItem {
+  orderId: string;
+  orderCode: string;
+  productName: string;
+  qty: number;
+  price: number;
+  customerName: string;
+  channel: string;
+  fcName?: string;
+  orderedAt: string;
+}
+
+export async function listRecentBilledItems(limit = 20): Promise<BilledItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("order_items")
+    .select("qty, price, product_name, orders(id, code, customer_name, channel, fc_name, created_at)")
+    .order("id", { ascending: false })
+    .limit(Math.min(100, Math.max(1, limit)));
+  if (error) throw new Error(error.message);
+  return (data ?? [])
+    .map((r) => {
+      const o = (r as unknown as { qty: number; price: number; product_name: string; orders: { id: string; code: string; customer_name: string; channel: string; fc_name: string | null; created_at: string } | null }).orders;
+      if (!o?.id) return null;
+      return {
+        orderId: o.id,
+        orderCode: o.code ?? "—",
+        productName: (r as { product_name: string }).product_name ?? "—",
+        qty: Number((r as { qty: number }).qty ?? 0),
+        price: Number((r as { price: number }).price ?? 0),
+        customerName: o.customer_name ?? "Walk-in customer",
+        channel: o.channel ?? "walk-in",
+        fcName: o.fc_name ?? undefined,
+        orderedAt: o.created_at ?? "",
+      } as BilledItem;
+    })
+    .filter((i): i is BilledItem => !!i);
 }
 
 /* ---------- Stock movements ---------- */

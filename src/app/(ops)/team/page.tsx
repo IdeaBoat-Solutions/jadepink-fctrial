@@ -8,6 +8,7 @@ import { AccessNote, Btn, EmptyNote, ErrorNote, StatusMark } from "@/components/
 import { canViewLiveFloor } from "@/lib/policy";
 import { listActiveVisits, listStaffRoster, type StaffRosterRow, type VisitLive } from "@/lib/api";
 import { clockTime, timeAgo } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/use-page-title";
 
 function stateLabel(v: VisitLive): { key: string; label: string } {
   if (v.status === "COMPLETED") return { key: "completed", label: "Completed" };
@@ -17,6 +18,7 @@ function stateLabel(v: VisitLive): { key: string; label: string } {
 }
 
 export default function TeamPage() {
+  usePageTitle("Sales team");
   const { user, salespeople, profile } = useStore();
   const router = useRouter();
   const [todayList, setTodayList] = useState<VisitLive[] | null>(null);
