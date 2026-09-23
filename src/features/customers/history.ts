@@ -21,6 +21,8 @@ export interface PastVisitHistory {
   arrivedAt: string;
   status: string;
   fcName: string;
+  /** Per-visit budget (migration 230) — null until the FC captures one. */
+  budget?: string | null;
   trialled: number;
   liked: number;
   purchased: number;
@@ -56,14 +58,32 @@ export async function getCustomerHistory(
   const { data: customer } = await supabase.from("customers").select("id").eq("id", customerId).maybeSingle();
   if (!customer) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_NOT_FOUND, "Customer not found", 404);
 
-  const { data: visits } = await supabase
+  const { data: visits, error: visitsError } = await supabase
     .from("visits")
-    .select("id, status, arrived_at, assigned_salesperson_id, created_at")
+    .select("id, status, arrived_at, assigned_salesperson_id, created_at, budget")
     .eq("customer_id", customerId)
     .order("arrived_at", { ascending: false })
     .limit(Math.min(Math.max(limit, 1), 50));
 
-  const rows = visits ?? [];
+  // Tolerant of pre-230 databases: retry without the budget column.
+  type VisitHistoryRow = {
+    id: string;
+    status: string;
+    arrived_at: string | null;
+    created_at: string;
+    assigned_salesperson_id: string | null;
+    budget?: string | null;
+  };
+  let rows = (visits ?? []) as VisitHistoryRow[];
+  if (visitsError && /budget/i.test(visitsError.message ?? "")) {
+    const retry = await supabase
+      .from("visits")
+      .select("id, status, arrived_at, assigned_salesperson_id, created_at")
+      .eq("customer_id", customerId)
+      .order("arrived_at", { ascending: false })
+      .limit(Math.min(Math.max(limit, 1), 50));
+    rows = (retry.data ?? []) as VisitHistoryRow[];
+  }
   if (rows.length === 0) return [];
 
   const spIds = [...new Set(rows.map((v) => v.assigned_salesperson_id).filter(Boolean))] as string[];
@@ -161,6 +181,7 @@ export async function getCustomerHistory(
       arrivedAt: v.arrived_at ?? v.created_at,
       status: v.status,
       fcName: (v.assigned_salesperson_id && spNames.get(v.assigned_salesperson_id)) || "FC unassigned",
+      budget: (v as { budget?: string | null }).budget ?? null,
       trialled,
       liked,
       purchased,

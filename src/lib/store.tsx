@@ -11,6 +11,7 @@ import {
   type CustomerSnapshotLive, type SalespersonLive, type StaffProfile, type VisitLive,
   assignFC, attachCustomer, cancelVisit, completeVisit, createCustomer, createCustomerAndAttach, createWalkIn,
   getCustomerById, getMe, listActiveVisits, listSalespersons, searchCustomerByPhone, searchCustomersByName, startVisit,
+  setVisitBudget,
   updateCustomerRecord, deleteCustomerRecord, deleteVisitRecord,
 } from "@/lib/api";
 
@@ -47,9 +48,11 @@ interface StoreCtx {
   createCustomer: (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
   updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string; tier: string | null } } | { ok: false; code: string; message?: string }>;
   deleteCustomer: (id: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
-  attachCustomerToVisit: (visitId: string, customerId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
+  attachCustomerToVisit: (visitId: string, customerId: string, budget?: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   /** Atomic create-customer + attach-to-visit. One round trip, no orphaned record. */
   createCustomerAndAttach: (visitId: string, input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive; visit: VisitLive } | { ok: false; code: string; message?: string }>;
+  /** Per-visit budget (migration 230) — separate field on every new visit. */
+  setVisitBudget: (visitId: string, budget: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   completeVisit: (visitId: string) => Promise<boolean>;
@@ -283,8 +286,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const };
   }, []);
 
-  const attachCustomerOp = useCallback(async (visitId: string, customerId: string) => {
-    const r = await attachCustomer(visitId, customerId);
+  const attachCustomerOp = useCallback(async (visitId: string, customerId: string, budget?: string) => {
+    const r = await attachCustomer(visitId, customerId, budget);
+    if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
+    setVisits((prev) => prev.map((v) => (v.id === visitId ? r.data : v)));
+    return { ok: true as const };
+  }, []);
+
+  const setVisitBudgetOp = useCallback(async (visitId: string, budget: string) => {
+    const r = await setVisitBudget(visitId, budget);
     if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
     setVisits((prev) => prev.map((v) => (v.id === visitId ? r.data : v)));
     return { ok: true as const };
@@ -411,6 +421,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     deleteCustomer: deleteCustomerOp,
     attachCustomerToVisit: attachCustomerOp,
     createCustomerAndAttach: createCustomerAndAttachOp,
+    setVisitBudget: setVisitBudgetOp,
     assignSalesperson: assignOp,
     startVisit: startVisitOp,
     completeVisit: completeVisitOp,

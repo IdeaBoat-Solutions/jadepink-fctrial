@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
+import { HistoryWithWhatsApp, ContactIcons } from "@/components/ops";
 import { Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass } from "@/components/floor/ui";
 import { formatMobileIN, isValidMobileIN, normalizeMobile } from "@/lib/domain";
 import { formatDateIN } from "@/lib/utils";
@@ -89,9 +90,10 @@ export default function CustomerDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="fp-name break-words text-[28px] leading-none sm:text-[34px]">{customer.name}</h1>
-            <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">
+            <p className="fp-num mt-2 flex flex-wrap items-center gap-2 text-[14px] text-[var(--fp-muted)]">
               {formatMobileIN(customer.phone)}
-              {customer.tier && <span className="ml-2 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
+              <ContactIcons phone={customer.phone} name={customer.name} />
+              {customer.tier && <span className="ml-1 font-semibold text-[var(--fp-brand-deep)]">{customer.tier} member</span>}
             </p>
             {(customer.area || customer.budget || customer.source) && (
               <p className="mt-1.5 text-[13.5px] text-[var(--fp-muted)]">
@@ -119,6 +121,13 @@ export default function CustomerDetailPage() {
           <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.purchaseCount}</dd></div>
           <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[13px] font-semibold leading-snug sm:text-[15px]">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
         </dl>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">History — visits + WhatsApp</h2>
+        <div className="mt-3">
+          <HistoryWithWhatsApp customerId={customer.id} phone={customer.phone} name={customer.name} visitId={liveVisit?.id ?? null} />
+        </div>
       </section>
 
       <section className="mt-8">

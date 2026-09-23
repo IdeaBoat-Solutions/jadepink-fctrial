@@ -65,8 +65,10 @@ export async function createWalkIn(auth: AuthContext, storeId: string) {
 }
 
 /* attachCustomerToVisit (§21): verify → link → IDENTIFYING + CUSTOMER_ATTACHED.
-   First attach also increments the customer's visit count (bookkeeping, §42). */
-export async function attachCustomerToVisit(auth: AuthContext, visitId: string, customerId: string) {
+   First attach also increments the customer's visit count (bookkeeping, §42).
+   Optional per-visit budget: stored on visits.budget (migration 230), never
+   overwriting the customer profile — each new visit gets its own field. */
+export async function attachCustomerToVisit(auth: AuthContext, visitId: string, customerId: string, budget?: string) {
   const supabase = await createClient();
   const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
   if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
@@ -87,8 +89,14 @@ export async function attachCustomerToVisit(auth: AuthContext, visitId: string, 
   });
   if (error || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not attach customer", 422);
 
+  const cleanBudget = (budget ?? "").trim().slice(0, 40) || null;
+  if (cleanBudget) {
+    // Best-effort: ignored when migration 230 hasn't been applied yet.
+    await supabase.from("visits").update({ budget: cleanBudget }).eq("id", visitId);
+  }
+
   const [dto] = await enrichVisits(supabase, [updated as VisitRow]);
-  return dto;
+  return cleanBudget ? { ...dto, budget: cleanBudget } : dto;
 }
 
 /* createCustomerAndAttach: the "no record" path as ONE atomic write.
@@ -139,11 +147,17 @@ export async function createCustomerAndAttach(
 
   // Re-read the visit so the caller gets the enriched DTO (customerName, fcName).
   const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  const cleanBudget = input.budget?.trim().slice(0, 40) || null;
+  if (cleanBudget) {
+    // Mirror the profile budget onto this visit only (migration 230).
+    // Best-effort: ignored when the column doesn't exist yet.
+    await supabase.from("visits").update({ budget: cleanBudget }).eq("id", visitId);
+  }
   const [dto] = await enrichVisits(supabase, [visit as VisitRow]);
   const c = customer as { id: string; name: string; mobile: string };
   return {
     customer: { id: c.id, name: c.name, phone: formatPhoneIN(c.mobile) },
-    visit: dto,
+    visit: cleanBudget ? { ...dto, budget: cleanBudget } : dto,
   };
 }
 
@@ -373,6 +387,40 @@ export async function requestRunner(auth: AuthContext, visitId: string, note: st
   return { requested: true as const, suite: (visit as VisitRow).suite ?? null, note: clean };
 }
 
+/* Per-visit budget (migration 230): editable until the visit closes. Stored on
+   visits.budget only — the customer profile keeps its own default for next time. */
+export async function setVisitBudget(auth: AuthContext, visitId: string, budget: string | null) {
+  const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  assertStoreAccess(auth, (visit as VisitRow).store_id);
+  if (visit.status === "COMPLETED" || visit.status === "CANCELLED") {
+    throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit is closed", 422);
+  }
+  const clean = (budget ?? "").trim().slice(0, 40) || null;
+  const { data: updated, error } = await supabase
+    .from("visits")
+    .update({ budget: clean })
+    .eq("id", visitId)
+    .select("*")
+    .single();
+  if (error || !updated) {
+    throw new Stage2Error(
+      STAGE2_ERRORS.INVALID_VISIT_STATE,
+      "Could not save the visit budget — run migration 230 in Supabase first",
+      422,
+    );
+  }
+  await supabase.from("visit_events").insert({
+    visit_id: visitId,
+    event_type: "BUDGET_CAPTURED",
+    actor_id: auth.userId,
+    metadata: clean ? { budget: clean } : {},
+  });
+  const [dto] = await enrichVisits(supabase, [updated as VisitRow]);
+  return dto;
+}
+
 /* Today's visits for one store (§10, §19): every operational status — not just
 /* Today's visits for one store (§10, §19): every operational status — not just
    active — so Today counts (walk-ins / active / completed / awaiting) and the
@@ -447,6 +495,9 @@ export async function getVisitTimeline(auth: AuthContext, visitId: string) {
       detail = [suite, note].filter(Boolean).join(" · ") || "Runner called";
     } else if (r.eventType === "PRODUCT_NOTE_UPDATED") {
       detail = [sku, note ? `Note: ${note}` : "Note cleared"].filter(Boolean).join(" · ") || null;
+    } else if (r.eventType === "BUDGET_CAPTURED") {
+      const b = typeof meta.budget === "string" && meta.budget.trim() ? meta.budget.trim() : null;
+      detail = b ? `Budget: ${b}` : "Budget cleared";
     } else {
       detail = sku;
     }

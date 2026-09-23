@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { CustomerSnapshotLive, PastVisitHistoryLive } from "@/lib/api";
-import { getCustomerHistory } from "@/lib/api";
+import { MessageCircle, Phone } from "lucide-react";
+import type { CustomerSnapshotLive, PastVisitHistoryLive, WhatsAppLogLive } from "@/lib/api";
+import { addWhatsAppLog, getCustomerHistory, getWhatsAppLogs, whatsAppLink } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +15,38 @@ import { useStore } from "@/lib/store";
    Kept exports: CustomerSnapshot + HistoryLayers (also used by the parked
    .route-conflicts route), FCQuickAssign, DeleteVisitButton, EndVisitButton. */
 
+/* ---------- Contact icons: WhatsApp + Call ----------
+   wa.me deep-link built from the stored mobile — no Business API wired yet,
+   so WhatsApp history below is the manual follow-up log next to this button. */
+
+export function ContactIcons({ phone, name }: { phone: string; name?: string }) {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (!digits) return null;
+  const wa = whatsAppLink(phone, name ? `Hi ${name}, this is JadePink!` : undefined);
+  return (
+    <span className="inline-flex items-center gap-1.5" aria-label={`Contact options`}>
+      <a
+        href={wa}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Chat on WhatsApp`}
+        title="Chat on WhatsApp"
+        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-[#d9efe2] bg-[#eefaf2] px-2 text-[#177245] hover:border-[#177245]"
+      >
+        <MessageCircle className="size-4" aria-hidden />
+      </a>
+      <a
+        href={`tel:+91${digits.slice(-10)}`}
+        aria-label="Call customer"
+        title="Call customer"
+        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-[#e8dfd6] bg-white px-2 text-[#57534e] hover:border-[#1c1917] hover:text-[#1c1917]"
+      >
+        <Phone className="size-4" aria-hidden />
+      </a>
+    </span>
+  );
+}
+
 /* ---------- Compact customer snapshot (supporting info, not the task) ---------- */
 
 export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnapshotLive; compact?: boolean }) {
@@ -22,7 +55,10 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[18px] font-semibold tracking-tight text-[#1c1917]">{customer.name}</p>
-          <p className="tnum text-[14px] text-[#57534e]">{customer.phone}</p>
+          <p className="tnum flex items-center gap-2 text-[14px] text-[#57534e]">
+            {customer.phone}
+            <ContactIcons phone={customer.phone} name={customer.name} />
+          </p>
           {(customer.area || customer.budget || customer.source) && (
             <p className="mt-1 text-[12.5px] text-[#78716c]">
               {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
@@ -64,7 +100,7 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
 
 const HISTORY_PAGE = 3;
 
-export function HistoryLayers({ customerId }: { customerId: string }) {
+export function HistoryLayers({ customerId, phone, name }: { customerId: string; phone?: string; name?: string }) {
   const [history, setHistory] = useState<PastVisitHistoryLive[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [limit, setLimit] = useState(HISTORY_PAGE);
@@ -93,6 +129,12 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
   const visible = history.slice(0, limit);
   return (
     <div className="flex flex-col gap-2">
+      {phone && (
+        <div className="flex items-center justify-between px-1 py-1">
+          <span className="text-[12.5px] font-medium text-[#78716c]">Visit history</span>
+          <ContactIcons phone={phone} name={name} />
+        </div>
+      )}
       {loadErr && <p role="alert" className="px-1 text-[13px] font-medium text-[#b4232a]">{loadErr}</p>}
       {history.length === 0 && !loadErr && (
         <p className="px-1 py-3 text-[13.5px] text-[#78716c]">
@@ -110,7 +152,10 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
             >
               <span className="min-w-0">
                 <span className="block truncate text-[14px] font-semibold text-[#1c1917]">{h.dateLabel} <span className="font-normal text-[#78716c]">· FC: {h.fcName}</span></span>
-                <span className="tnum block text-[12.5px] text-[#57534e]">Trialled {h.trialled} · Liked {h.liked} · Purchased {h.purchased}</span>
+                <span className="tnum block text-[12.5px] text-[#57534e]">
+                  Trialled {h.trialled} · Liked {h.liked} · Purchased {h.purchased}
+                  {h.budget ? <span className="font-semibold text-[#1c1917]"> · Budget {h.budget}</span> : null}
+                </span>
               </span>
               <span aria-hidden className={cn("shrink-0 text-[#78716c] transition-transform", expanded && "rotate-180")}>▾</span>
             </button>
@@ -141,6 +186,189 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
           Older visits ({history.length - visible.length} more)
         </button>
       )}
+    </div>
+  );
+}
+
+/* ---------- WhatsApp follow-up log (manual, migration 230) ----------
+   Sits next to visit history: "Open WhatsApp" deep-links to wa.me, and every
+   sent/received message the FC cares about is logged here with one tap. */
+
+const WA_DIRECTIONS = [
+  { value: "outgoing", label: "Sent" },
+  { value: "incoming", label: "Received" },
+  { value: "note", label: "Note" },
+] as const;
+
+export function WhatsAppPanel({ customerId, phone, name, visitId }: { customerId: string; phone?: string; name?: string; visitId?: string | null }) {
+  const [logs, setLogs] = useState<WhatsAppLogLive[] | null>(null);
+  const [loadErr, setLoadErr] = useState("");
+  const [body, setBody] = useState("");
+  const [direction, setDirection] = useState<WhatsAppLogLive["direction"]>("outgoing");
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const r = await getWhatsAppLogs(customerId);
+      if (cancelled) return;
+      if (!r.ok) {
+        setLogs([]);
+        setLoadErr(r.message || "Could not load WhatsApp log.");
+        return;
+      }
+      setLogs(r.data);
+      setLoadErr("");
+    })();
+    return () => { cancelled = true; };
+  }, [customerId]);
+
+  const save = async () => {
+    const text = body.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    setSaveErr("");
+    const r = await addWhatsAppLog(customerId, { body: text, direction, visitId: visitId ?? null });
+    setSaving(false);
+    if (!r.ok) {
+      setSaveErr(r.message || "Could not save the note.");
+      return;
+    }
+    setLogs((prev) => (prev ? [r.data, ...prev] : [r.data]));
+    setBody("");
+  };
+
+  if (logs === null) {
+    return <p className="px-1 py-3 text-[13.5px] text-[#78716c]" aria-busy="true">Loading WhatsApp log…</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {phone && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-1">
+          <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#177245]">
+            <MessageCircle className="size-4" aria-hidden /> WhatsApp follow-ups
+          </span>
+          <a
+            href={whatsAppLink(phone, name ? `Hi ${name}, this is JadePink!` : undefined)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#1faa55] px-3.5 text-[13px] font-bold text-white hover:bg-[#177245]"
+          >
+            <MessageCircle className="size-4" aria-hidden /> Open WhatsApp
+          </a>
+        </div>
+      )}
+      {loadErr && <p role="alert" className="px-1 text-[13px] font-medium text-[#b4232a]">{loadErr}</p>}
+      {logs.length === 0 && !loadErr && (
+        <p className="px-1 py-2 text-[13.5px] text-[#78716c]">
+          No WhatsApp follow-ups logged yet. Chat on WhatsApp, then log the outcome here.
+        </p>
+      )}
+      {logs.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {logs.map((l) => (
+            <li key={l.id} className="rounded-lg border border-[#e8dfd6] bg-[#faf8f6] px-4 py-2.5">
+              <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-[#78716c]">
+                <span className={cn(
+                  "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-bold",
+                  l.direction === "incoming" ? "bg-[#e8f0fe] text-[#1a56db]" : l.direction === "note" ? "bg-[#f1ece4] text-[#57534e]" : "bg-[#d9efe2] text-[#177245]",
+                )}>
+                  {l.direction === "incoming" ? "Received" : l.direction === "note" ? "Note" : "Sent"}
+                </span>
+                <span className="tnum">
+                  {new Date(l.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                </span>
+              </p>
+              <p className="mt-1 text-[13.5px] leading-relaxed text-[#1c1917]">{l.body}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="mt-1 flex flex-col gap-2 rounded-lg border border-[#e8dfd6] p-3"
+        onSubmit={(e) => { e.preventDefault(); void save(); }}
+      >
+        <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Log type">
+          {WA_DIRECTIONS.map((d) => (
+            <button
+              key={d.value}
+              type="button"
+              role="radio"
+              aria-checked={direction === d.value}
+              onClick={() => setDirection(d.value)}
+              className={cn(
+                "min-h-9 rounded-full border px-3 text-[12.5px] font-semibold",
+                direction === d.value
+                  ? "border-[#1c1917] bg-[#1c1917] text-white"
+                  : "border-[#d6c9bb] text-[#57534e] hover:border-[#1c1917]",
+              )}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <label className="sr-only" htmlFor={`wa-log-${customerId}`}>Log WhatsApp follow-up</label>
+        <textarea
+          id={`wa-log-${customerId}`}
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="e.g. Sent catalogue on WhatsApp — likes pastel lehengas"
+          rows={2}
+          maxLength={1000}
+          className="w-full rounded-lg border border-[#d6c9bb] bg-white px-3 py-2 text-[14px] text-[#1c1917] placeholder:text-[#a8a29e] focus:border-[#1c1917] focus:outline-none"
+        />
+        {saveErr && <p role="alert" className="text-[13px] font-medium text-[#b4232a]">{saveErr}</p>}
+        <button
+          type="submit"
+          disabled={!body.trim() || saving}
+          className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1c1917] px-4 text-[13.5px] font-bold text-white disabled:opacity-40"
+        >
+          {saving ? "Saving…" : "Log follow-up"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ---------- History tabs: visits + WhatsApp side by side ---------- */
+
+export function HistoryWithWhatsApp({ customerId, phone, name, visitId }: { customerId: string; phone?: string; name?: string; visitId?: string | null }) {
+  const [tab, setTab] = useState<"visits" | "whatsapp">("visits");
+  return (
+    <div>
+      <div className="flex gap-1.5" role="tablist" aria-label="Customer history">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "visits"}
+          onClick={() => setTab("visits")}
+          className={cn(
+            "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13.5px] font-bold",
+            tab === "visits" ? "bg-[#1c1917] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]",
+          )}
+        >
+          Visit history
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "whatsapp"}
+          onClick={() => setTab("whatsapp")}
+          className={cn(
+            "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13.5px] font-bold",
+            tab === "whatsapp" ? "bg-[#1faa55] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]",
+          )}
+        >
+          <MessageCircle className="size-4" aria-hidden /> WhatsApp
+        </button>
+      </div>
+      <div className="mt-2" role="tabpanel">
+        {tab === "visits"
+          ? <HistoryLayers customerId={customerId} phone={phone} name={name} />
+          : <WhatsAppPanel customerId={customerId} phone={phone} name={name} visitId={visitId} />}
+      </div>
     </div>
   );
 }

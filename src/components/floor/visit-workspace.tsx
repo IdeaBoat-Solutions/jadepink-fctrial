@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HistoryLayers } from "@/components/ops";
+import { HistoryWithWhatsApp } from "@/components/ops";
+import { CUSTOMER_BUDGETS } from "@/features/customers/schemas";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
 import { CustomerCreateForm, type CustomerCreateData } from "@/components/floor/customer-create-form";
@@ -65,6 +66,7 @@ function humanEvent(type: string): string {
     PRODUCT_UNDROPPED: "Drop undone",
     DROP_REASON_CAPTURED: "Drop reason updated",
     PRODUCT_PURCHASED: "Billed",
+    BUDGET_CAPTURED: "Budget updated",
     SUITE_ASSIGNED: "Suite assigned",
     RUNNER_REQUESTED: "Runner called",
   };
@@ -316,7 +318,26 @@ function VisitBody({ visit }: { visit: VisitLive }) {
       {/* Returning customer → their past history shows on the visit itself,
           not only behind the History button. New customers skip this entirely. */}
       {customer && customer.visitCount > 0 && (
-        <PastHistoryPanel customerId={customer.id} visitCount={customer.visitCount} />
+        <PastHistoryPanel
+          customerId={customer.id}
+          visitCount={customer.visitCount}
+          phone={customer.phone}
+          name={customer.name}
+          visitId={visit.id}
+        />
+      )}
+
+      {/* Per-visit budget: every new visit gets its own field, prefilled from
+          the customer profile but stored on the visit — visit #2 never
+          overwrites visit #1. */}
+      {customer && !isClosed && (
+        <VisitBudgetField
+          key={`${visit.id}:${visit.budget ?? ""}:${customer.budget ?? ""}`}
+          visitId={visit.id}
+          visitBudget={visit.budget ?? null}
+          profileBudget={customer.budget ?? null}
+          closed={isClosed}
+        />
       )}
 
       {blocked && (
@@ -681,7 +702,7 @@ function Snapshot({ customer }: { customer: { name: string; phone: string; visit
    (visits + trialled/liked/billed items) from the server and defaults open to
    the most recent visit, so an FC sees history without tapping anything.
    Collapsible — today's trial is the task, history is supporting context. */
-function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visitCount: number }) {
+function PastHistoryPanel({ customerId, visitCount, phone, name, visitId }: { customerId: string; visitCount: number; phone?: string; name?: string; visitId?: string }) {
   const [open, setOpen] = useState(true);
   return (
     <section className="mt-5 rounded-xl border border-[#e9e2d8] bg-white" aria-label="Past visit history">
@@ -692,7 +713,7 @@ function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visi
         className="flex min-h-[52px] w-full flex-wrap items-center justify-between gap-2 px-5 py-3 text-left"
       >
         <span>
-          <span className="block text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">Past visits</span>
+          <span className="block text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">Past visits + WhatsApp</span>
           <span className="block text-[12.5px] text-[#78716c]">
             Returning customer · {visitCount} previous visit{visitCount > 1 ? "s" : ""} on record
           </span>
@@ -701,7 +722,7 @@ function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visi
       </button>
       {open && (
         <div className="border-t border-[#f1ece4] px-5 pb-4 pt-2">
-          <HistoryLayers customerId={customerId} />
+          <HistoryWithWhatsApp customerId={customerId} phone={phone} name={name} visitId={visitId} />
           <Link
             href={`/customers/${customerId}`}
             className="mt-3 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]"
@@ -710,6 +731,73 @@ function PastHistoryPanel({ customerId, visitCount }: { customerId: string; visi
           </Link>
         </div>
       )}
+    </section>
+  );
+}
+
+/* Per-visit budget field: prefilled from the customer profile, saved onto the
+   visit only. Shown on every open visit with a customer — new or returning —
+   so the FC captures "today's budget" without touching the profile. */
+function VisitBudgetField({ visitId, visitBudget, profileBudget, closed }: { visitId: string; visitBudget: string | null; profileBudget: string | null; closed: boolean }) {
+  const store = useStore();
+  // Keyed by visit + profile budget above, so the initializer re-runs fresh
+  // for every new visit (prefilled from the profile) — no sync effect needed.
+  const [value, setValue] = useState(visitBudget ?? profileBudget ?? CUSTOMER_BUDGETS[1]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<string | null>(visitBudget);
+  const [err, setErr] = useState("");
+
+  if (closed) {
+    return visitBudget ? (
+      <p className="mt-4 text-[13.5px] text-[var(--fp-muted)]">
+        This visit budget: <strong className="font-semibold text-[var(--fp-ink)]">{visitBudget}</strong>
+      </p>
+    ) : null;
+  }
+
+  const dirty = value !== (saved ?? profileBudget ?? CUSTOMER_BUDGETS[1]);
+  const save = async () => {
+    if (saving || !dirty) return;
+    setSaving(true);
+    setErr("");
+    const r = await store.setVisitBudget(visitId, value);
+    setSaving(false);
+    if (!r.ok) {
+      setErr(r.message || "Could not save the budget. Try again.");
+      return;
+    }
+    setSaved(value);
+    store.pushToast("Visit budget saved", value);
+  };
+
+  return (
+    <section className="mt-5 rounded-xl border border-[#e9e2d8] bg-white px-5 py-4" aria-label="This visit's budget">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">This visit budget</p>
+          <p className="mt-0.5 text-[12.5px] text-[#78716c]">
+            Separate for every visit{profileBudget ? ` · profile default ${profileBudget}` : " · no profile default yet"}
+            {saved ? ` · saved ${saved}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="sr-only" htmlFor={`visit-budget-${visitId}`}>This visit budget</label>
+        <select
+          id={`visit-budget-${visitId}`}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="min-h-[44px] flex-1 rounded-lg border border-[#d6c9bb] bg-white px-3 text-[14px] font-medium text-[#1c1917]"
+        >
+          {CUSTOMER_BUDGETS.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+        <Btn tone="brand" disabled={!dirty || saving} onClick={() => void save()} className="sm:min-w-[140px]">
+          {saving ? "Saving…" : saved ? "Update budget" : "Save budget"}
+        </Btn>
+      </div>
+      {err && <p role="alert" className="mt-2 text-[13px] font-medium text-[var(--fp-drop)]">{err}</p>}
     </section>
   );
 }

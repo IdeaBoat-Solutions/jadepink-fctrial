@@ -17,6 +17,8 @@ export interface VisitLive {
   assignedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** Per-visit budget (migration 230) — separate from the customer profile. */
+  budget?: string | null;
   /** Fitting suite (SUITE_01/02/03, SALON_VIP) — null until assigned. */
   suite?: string | null;
   /** Resolved server-side so the UI never needs a client cache to show a name. */
@@ -87,8 +89,11 @@ export const createWalkIn = (storeId: string) =>
 export const listActiveVisits = (storeId: string) =>
   call<VisitLive[]>(`/api/visits?storeId=${encodeURIComponent(storeId)}`);
 
-export const attachCustomer = (visitId: string, customerId: string) =>
-  call<VisitLive>(`/api/visits/${visitId}/attach`, { method: "POST", body: JSON.stringify({ customerId }) });
+export const attachCustomer = (visitId: string, customerId: string, budget?: string) =>
+  call<VisitLive>(`/api/visits/${visitId}/attach`, { method: "POST", body: JSON.stringify({ customerId, budget: budget || undefined }) });
+
+export const setVisitBudget = (visitId: string, budget: string) =>
+  call<VisitLive>(`/api/visits/${visitId}/budget`, { method: "POST", body: JSON.stringify({ budget }) });
 
 export const assignFC = (visitId: string, salespersonId: string) =>
   call<VisitLive>(`/api/visits/${visitId}/assign`, { method: "POST", body: JSON.stringify({ salespersonId }) });
@@ -164,6 +169,7 @@ export interface PastVisitHistoryLive {
   arrivedAt: string;
   status: string;
   fcName: string;
+  budget?: string | null;
   trialled: number;
   liked: number;
   purchased: number;
@@ -182,6 +188,43 @@ export const getCustomerHistory = (id: string, limit = 20) =>
   call<PastVisitHistoryLive[]>(
     `/api/customers/${encodeURIComponent(id)}/history?limit=${encodeURIComponent(String(limit))}`,
   );
+
+/* ---------- WhatsApp follow-up log (manual, migration 230) ---------- */
+
+export interface WhatsAppLogLive {
+  id: string;
+  customerId: string;
+  visitId: string | null;
+  direction: "outgoing" | "incoming" | "note";
+  body: string;
+  createdAt: string;
+}
+
+export const getWhatsAppLogs = (id: string, limit = 20) =>
+  call<WhatsAppLogLive[]>(
+    `/api/customers/${encodeURIComponent(id)}/whatsapp?limit=${encodeURIComponent(String(limit))}`,
+  );
+
+export const addWhatsAppLog = (id: string, input: { body: string; direction?: WhatsAppLogLive["direction"]; visitId?: string | null }) =>
+  call<WhatsAppLogLive>(`/api/customers/${encodeURIComponent(id)}/whatsapp`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/* wa.me deep-link helpers — used by the history contact icons. */
+export function whatsAppDigits(phone: string): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 12 && digits.startsWith("91")) return digits;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  return digits;
+}
+
+export function whatsAppLink(phone: string, text?: string): string {
+  const digits = whatsAppDigits(phone);
+  const base = `https://wa.me/${digits}`;
+  return text ? `${base}?text=${encodeURIComponent(text)}` : base;
+}
 
 export interface FunnelMetricsLive {
   footfall: number;
