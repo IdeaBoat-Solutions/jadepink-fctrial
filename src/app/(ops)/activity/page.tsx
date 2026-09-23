@@ -134,7 +134,7 @@ export default function ActivityPage() {
 
       <section className="mt-8" aria-label="Floor work">
         <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">On the floor now</h2>
-        <dl className="mt-3 grid grid-cols-3 divide-x divide-[var(--fp-line)] border-y border-[var(--fp-line)]">
+        <dl className="mt-3 grid grid-cols-1 divide-y divide-[var(--fp-line)] border-y border-[var(--fp-line)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Metric value={totals.trials} label="Trials open" />
           <Metric value={totals.liked} label="Liked" />
           <Metric value={totals.dropped} label="Dropped" />

@@ -59,8 +59,8 @@ export function Metric({ value, label, warn }: { value: number | string; label: 
   /* Renders as dt/dd so it is valid inside the <dl> stat strips that use it
      (a div/p inside a description list is invalid HTML and confuses AT). */
   return (
-    <div className="min-w-0 px-4 py-3">
-      <dd className={cn("fp-num text-[26px] font-semibold leading-none tracking-tight", warn ? "text-[var(--fp-wait)]" : "text-[var(--fp-ink)]")}>{value}</dd>
+    <div className="min-w-0 px-3 py-3 sm:px-4">
+      <dd className={cn("fp-num truncate text-[24px] font-semibold leading-none tracking-tight sm:text-[26px]", warn ? "text-[var(--fp-wait)]" : "text-[var(--fp-ink)]")}>{value}</dd>
       <dt className="mt-1.5 text-[12.5px] font-medium text-[var(--fp-muted)]">{label}</dt>
     </div>
   );
@@ -109,7 +109,7 @@ export function Field({
 }
 
 export const inputClass =
-  "min-h-11 w-full rounded-lg border border-[var(--fp-line-strong)] bg-[var(--fp-surface)] px-3.5 text-[15px] text-[var(--fp-ink)] placeholder:text-[var(--fp-faint)] focus:border-[var(--fp-ink)] focus:outline-none";
+  "min-h-11 w-full rounded-lg border border-[var(--fp-line-strong)] bg-[var(--fp-surface)] px-3.5 text-[16px] text-[var(--fp-ink)] placeholder:text-[var(--fp-faint)] focus:border-[var(--fp-ink)] focus:outline-none sm:text-[15px]";
 
 export function EmptyNote({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
   return (
@@ -239,9 +239,9 @@ export function Drawer({
         aria-labelledby={titleId}
         tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
-        className="fp-rise flex h-full w-full max-w-[420px] flex-col bg-[var(--fp-surface)] shadow-[var(--fp-shadow)] outline-none"
+        className="fp-rise flex h-dvh w-full max-w-[420px] flex-col bg-[var(--fp-surface)] shadow-[var(--fp-shadow)] outline-none"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--fp-line)] px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--fp-line)] px-4 py-4 sm:px-5">
           <div className="min-w-0">
             {kicker && <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">{kicker}</p>}
             <h2 id={titleId} className="mt-0.5 text-[18px] font-semibold tracking-tight">{title}</h2>
@@ -250,8 +250,8 @@ export function Drawer({
             Close
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="border-t border-[var(--fp-line)] px-5 py-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        {footer && <div className="border-t border-[var(--fp-line)] px-4 py-4 sm:px-5">{footer}</div>}
       </div>
     </div>
   );

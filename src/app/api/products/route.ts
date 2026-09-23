@@ -7,7 +7,7 @@ import { parsePage, parsePageSize } from "@/lib/pagination";
 
 const STOCK_VALUES: StockStatus[] = ["in-stock", "low-stock", "out-of-stock"];
 
-/* GET /api/products?q=&category=&stock=&page=&pageSize=
+/* GET /api/products?q=&category=&stock=&supplier=&brand=&minPrice=&maxPrice=&sort=&page=&pageSize=
    Real catalogue only, filtered in SQL: the client catalogue is ~900 rows and
    grows with every export, so it is never fetched whole. Search deliberately
    covers barcode / company_barcode / brand_name / design_no, because that is
@@ -18,15 +18,26 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const rawStock = searchParams.get("stock");
+  const rawSort = searchParams.get("sort");
   const page = parsePage(searchParams.get("page"));
+  const num = (v: string | null) => {
+    if (v == null || v.trim() === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
 
   try {
     const result = await listProducts({
       q: searchParams.get("q") ?? "",
       categoryId: searchParams.get("category") ?? "all",
       stockStatus: rawStock && (STOCK_VALUES as string[]).includes(rawStock) ? (rawStock as StockStatus) : undefined,
+      supplierId: searchParams.get("supplier") ?? "all",
+      brand: searchParams.get("brand") ?? "all",
+      minPrice: num(searchParams.get("minPrice")),
+      maxPrice: num(searchParams.get("maxPrice")),
+      sort: rawSort === "price-asc" || rawSort === "price-desc" || rawSort === "stock-desc" || rawSort === "name" ? rawSort : "newest",
       page,
-      pageSize: parsePageSize(searchParams.get("pageSize"), 20, 1000),
+      pageSize: parsePageSize(searchParams.get("pageSize"), 20, 100),
     });
     return NextResponse.json({ source: "db", data: result.items, ...result });
   } catch (e) {

@@ -6,6 +6,7 @@ import type { CustomerSnapshotLive, PastVisitHistoryLive } from "@/lib/api";
 import { getCustomerHistory } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
 
 /* Shared Stage 2 components over the LIVE visit model (VisitLive /
@@ -107,19 +108,19 @@ export function HistoryLayers({ customerId }: { customerId: string }) {
               aria-expanded={expanded}
               className="flex min-h-[52px] w-full items-center justify-between gap-3 px-4 text-left hover:bg-[#faf8f6]"
             >
-              <span>
-                <span className="block text-[14px] font-semibold text-[#1c1917]">{h.dateLabel} <span className="font-normal text-[#78716c]">· FC: {h.fcName}</span></span>
+              <span className="min-w-0">
+                <span className="block truncate text-[14px] font-semibold text-[#1c1917]">{h.dateLabel} <span className="font-normal text-[#78716c]">· FC: {h.fcName}</span></span>
                 <span className="tnum block text-[12.5px] text-[#57534e]">Trialled {h.trialled} · Liked {h.liked} · Purchased {h.purchased}</span>
               </span>
-              <span aria-hidden className={cn("text-[#78716c] transition-transform", expanded && "rotate-180")}>▾</span>
+              <span aria-hidden className={cn("shrink-0 text-[#78716c] transition-transform", expanded && "rotate-180")}>▾</span>
             </button>
             {expanded && (
               <div className="ui-fade border-t border-[#e8dfd6] bg-[#faf8f6] px-4 py-3">
                 {h.items.length > 0 ? (
                   <ul className="flex flex-col gap-1.5">
                     {h.items.map((it, i) => (
-                      <li key={i} className="flex items-center justify-between gap-3 text-[13.5px]">
-                        <span>{it.name} <span className="text-[#78716c]">· {it.size}{it.colour ? ` · ${it.colour}` : ""}</span></span>
+                      <li key={i} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-[13.5px]">
+                        <span className="min-w-0 flex-1 basis-32">{it.name} <span className="text-[#78716c]">· {it.size}{it.colour ? ` · ${it.colour}` : ""}</span></span>
                         <StatusBadge value={it.verdict === "rejected" ? "offline" : it.verdict === "purchased" ? "ACTIVE" : "IDENTIFYING"} label={it.verdict} />
                       </li>
                     ))}
@@ -162,9 +163,6 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
       load.set(v.assignedSalespersonId, (load.get(v.assignedSalespersonId) ?? 0) + 1);
     }
   }
-  const assigned = salespeople.find((s) => s.id === currentSpId);
-
-  // Selecting a name assigns straight away — no separate confirm tap.
   const pick = async (spId: string) => {
     if (!spId || saving || spId === currentSpId) return;
     setSaving(true);
@@ -179,32 +177,27 @@ export function FCQuickAssign({ visitId, currentSpId, onAssign }: { visitId: str
     setSaving(false);
   };
 
-  /* Native <select>: the previous Radix dropdown portals its list to
-     document.body and applies aria-hidden to the whole page while open. The
-     trigger keeps DOM focus inside that hidden ancestor for a frame, which
-     Chrome reports as "Blocked aria-hidden ... descendant retained focus".
-     A native picker never hides its ancestors, keeps focus valid, and is a
-     better touch/screen-reader control for a short FC roster. */
+  /* shadcn Select: once an FC is assigned the trigger shows their name and
+     the menu lists only FCs — no "Pick FC…" placeholder row to mis-tap. */
   return (
-    <select
-      value={currentSpId ?? ""}
-      onChange={(e) => void pick(e.target.value)}
-      disabled={saving}
-      aria-label="Assign FC"
-      className="min-h-[44px] w-full rounded-lg border border-[#d6c9bb] bg-white px-3 text-[14px] font-medium text-[#1c1917] disabled:cursor-not-allowed disabled:opacity-60"
-    >
-      <option value="" disabled={!!currentSpId}>
-        {saving ? "Assigning…" : assigned ? `${assigned.name}${user.id === assigned.id ? " (you)" : ""}` : "Pick FC…"}
-      </option>
-      {salespeople.map((sp) => {
-        const n = load.get(sp.id) ?? 0;
-        return (
-          <option key={sp.id} value={sp.id}>
-            {sp.name}{user.id === sp.id ? " (you)" : ""} · {n === 0 ? "Available" : `${n} active`}
-          </option>
-        );
-      })}
-    </select>
+    <Select value={currentSpId ?? undefined} onValueChange={(spId) => void pick(spId)} disabled={saving}>
+      <SelectTrigger
+        aria-label="Assign FC"
+        className="h-auto min-h-[44px] w-full rounded-lg border-[#d6c9bb] bg-white px-3 py-2 text-[16px] font-medium text-[#1c1917] sm:text-[14px]"
+      >
+        <SelectValue placeholder={saving ? "Assigning…" : "Pick FC…"} />
+      </SelectTrigger>
+      <SelectContent>
+        {salespeople.map((sp) => {
+          const n = load.get(sp.id) ?? 0;
+          return (
+            <SelectItem key={sp.id} value={sp.id} disabled={!sp.active}>
+              {sp.name}{user.id === sp.id ? " (you)" : ""} · {n === 0 ? "Available" : `${n} active`}
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </Select>
   );
 }
 

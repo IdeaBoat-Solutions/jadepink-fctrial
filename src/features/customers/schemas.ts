@@ -44,6 +44,13 @@ export const searchCustomerSchema = z.object({
   phone: z.string().trim().min(3).max(20),
 });
 
+/* One vocabulary for "how they found us" + budget, shared by every create
+   surface (visit identify form, customers directory). New labels are added
+   here once — never hardcoded into a second dropdown that can drift. */
+export const CUSTOMER_SOURCES = ["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Friend", "Other"] as const;
+
+export const CUSTOMER_BUDGETS = ["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"] as const;
+
 export const updateCustomerSchema = z.object({
   name: z
     .string()

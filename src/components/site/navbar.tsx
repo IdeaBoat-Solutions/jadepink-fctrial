@@ -1,21 +1,19 @@
-/* Floating glass pill nav — auth-aware (client island).
-   Signed out: boutique anchors + Sign in + Shop now.
-   Signed in:  role-based app pages (FC: Today/Floor/Customers,
-   manager+: Today/Floor/Dashboard) + name chip + Sign out. */
+/* JadePink masthead — Ogaan/Le Mill pattern.
+   Announcement micro-bar + centered wordmark row + uppercase nav row.
+   Flat white, hairlines, no pill, no glass, no blur. */
 
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
 
 const PUBLIC_LINKS = [
   { href: "#collections", label: "Collections" },
-  { href: "#new", label: "New in" },
+  { href: "#new", label: "Just in" },
   { href: "#designers", label: "Designers" },
-  { href: "#lifestyle", label: "Lifestyle" },
-  { href: "#contact", label: "Visit" },
+  { href: "#journal", label: "Journal" },
+  { href: "#visit", label: "Our store" },
 ];
 
 const FC_LINKS = [
@@ -36,129 +34,90 @@ export function Navbar() {
   const signedIn = !!user;
   const isManager = user?.role === "manager";
   const links = isManager ? MANAGER_LINKS : FC_LINKS;
+  const navLinks = signedIn ? links : !loadingSession ? PUBLIC_LINKS : [];
 
   const onSignOut = () => {
     void Promise.resolve(signOut()).then(() => router.push("/"));
   };
 
   return (
-    <header className="sticky top-0 z-30 px-4 pt-4 sm:px-8 sm:pt-5">
-      <div className="mx-auto max-w-6xl">
-        <div className="glass-panel-strong reveal grid grid-cols-[1fr_auto_1fr] items-center gap-4 rounded-full px-4 py-2.5 ring-1 ring-shadow backdrop-blur-lg sm:px-5">
+    <header className="sticky top-0 z-30 bg-white">
+      <div className="bg-[#101010] text-white">
+        <p className="mx-auto max-w-[1400px] truncate px-4 py-2 text-center text-[11px] font-medium tracking-[0.22em] uppercase sm:px-8">
+          Thaltej, Ahmedabad · Open daily 10:30 AM – 8:00 PM · +91 90812 88988
+        </p>
+      </div>
+
+      <div className="border-b border-black/10">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-4 sm:px-8">
+          <div className="hidden text-[12px] tracking-[0.08em] text-black/60 md:block">
+            {signedIn ? (
+              <span className="truncate">{profile?.name ?? user.name}</span>
+            ) : (
+              <a href="https://www.instagram.com/jadepink_studio/" target="_blank" rel="noreferrer" className="hover:text-black">
+                Instagram →
+              </a>
+            )}
+          </div>
           <a
             href={signedIn ? "/today" : "#top"}
-            className="group flex shrink-0 items-center gap-2.5 justify-self-start rounded-full"
             aria-label="JadePink home"
+            className="justify-self-center text-center"
           >
-            <img
-              src="/logo.jpeg"
-              alt="JadePink logo"
-              className="h-8 w-auto shrink-0 object-contain rounded-full"
-            />
-            <span className="font-display text-xl leading-none font-medium tracking-[-0.01em] text-ink">
+            <span className="block font-display text-[30px] leading-none font-semibold tracking-[0.08em] text-black uppercase">
               JadePink
             </span>
+            <span className="mt-1 block text-[10px] font-medium tracking-[0.34em] text-black/55 uppercase">
+              Multi-designer store
+            </span>
           </a>
-
-          <nav
-            className="hidden items-center justify-self-center gap-6 text-[0.9375rem] leading-none text-ink/65 md:flex lg:gap-8"
-            aria-label="Main navigation"
-          >
-            {/* While the session loads, render nothing here so signed-in staff
-                never see a flash of the public links. */}
-            {(signedIn ? links : !loadingSession ? PUBLIC_LINKS : []).map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="link-line py-1 transition-colors duration-200 hover:text-brand"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-
-          <div className="flex shrink-0 items-center justify-self-end gap-4 sm:gap-5">
+          <div className="flex items-center justify-end gap-5 text-[12px] font-medium tracking-[0.14em] uppercase">
             {signedIn ? (
               <>
-                <span className="hidden max-w-[140px] truncate text-[0.9375rem] leading-none text-ink/65 min-[400px]:inline">
-                  {profile?.name ?? user.name}
-                </span>
-                <button
-                  onClick={onSignOut}
-                  className="link-line hidden py-1 text-[0.9375rem] leading-none text-ink/65 transition-colors duration-200 hover:text-brand min-[400px]:inline"
-                >
+                <button onClick={onSignOut} className="hidden text-black/60 hover:text-black sm:inline">
                   Sign out
                 </button>
-                <Button asChild variant="boutique" size="boutique" className="nudge shrink-0">
-                  <Link href={isManager ? "/dashboard" : "/today"}>
-                    {isManager ? "Dashboard" : "Today"}
-                    <span className="nudge-target text-base leading-none" aria-hidden="true">
-                      →
-                    </span>
-                  </Link>
-                </Button>
+                <Link href={isManager ? "/dashboard" : "/today"} className="bg-[#651E2A] px-4 py-2.5 text-white hover:bg-black">
+                  {isManager ? "Dashboard" : "Today"}
+                </Link>
               </>
             ) : (
               <>
-                <Link
-                  href="/login"
-                  className="link-line hidden py-1 text-[0.9375rem] leading-none text-ink/65 transition-colors duration-200 hover:text-brand min-[400px]:inline"
-                >
+                <Link href="/login" className="hidden text-black/60 hover:text-black sm:inline">
                   Sign in
                 </Link>
-                <Button asChild variant="boutique" size="boutique" className="nudge shrink-0">
-                  <a href="#collections">
-                    Shop now
-                    <span className="nudge-target text-base leading-none" aria-hidden="true">
-                      →
-                    </span>
-                  </a>
-                </Button>
+                <a href="#visit" className="bg-black px-4 py-2.5 text-white hover:bg-[#651E2A]">
+                  Visit
+                </a>
               </>
             )}
           </div>
         </div>
+      </div>
 
-        {/* Mobile anchor row: single line, horizontally scrollable */}
-        <nav aria-label="Sections" className="mt-2 md:hidden">
-          <div className="glass-panel flex gap-6 overflow-x-auto rounded-full px-5 py-2.5 ring-1 ring-shadow [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {(signedIn ? links : PUBLIC_LINKS).map((l) =>
-              l.href.startsWith("#") ? (
-                <a
-                  key={l.label}
-                  href={l.href}
-                  className="shrink-0 text-[12px] font-medium tracking-[0.12em] text-ink/65 uppercase hover:text-brand"
-                >
-                  {l.label}
-                </a>
-              ) : (
-                <Link
-                  key={l.label}
-                  href={l.href}
-                  className="shrink-0 text-[12px] font-medium tracking-[0.12em] text-ink/65 uppercase hover:text-brand"
-                >
-                  {l.label}
-                </Link>
-              ),
-            )}
-            {signedIn ? (
-              <button
-                onClick={onSignOut}
-                className="shrink-0 text-[12px] font-medium tracking-[0.12em] text-brand uppercase"
+      <nav aria-label="Main navigation" className="border-b border-black/10">
+        <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-8 overflow-x-auto px-4 [scrollbar-width:none] sm:px-8 [&::-webkit-scrollbar]:hidden">
+          {navLinks.map((l) =>
+            l.href.startsWith("#") ? (
+              <a
+                key={l.label}
+                href={l.href}
+                className="flex min-h-[44px] shrink-0 items-center text-[12px] font-medium tracking-[0.2em] text-black/70 uppercase hover:text-black hover:underline hover:underline-offset-8"
               >
-                Sign out
-              </button>
+                {l.label}
+              </a>
             ) : (
               <Link
-                href="/login"
-                className="shrink-0 text-[12px] font-medium tracking-[0.12em] text-brand uppercase"
+                key={l.label}
+                href={l.href}
+                className="flex min-h-[44px] shrink-0 items-center text-[12px] font-medium tracking-[0.2em] text-black/70 uppercase hover:text-black hover:underline hover:underline-offset-8"
               >
-                Sign in
+                {l.label}
               </Link>
-            )}
-          </div>
-        </nav>
-      </div>
+            ),
+          )}
+        </div>
+      </nav>
     </header>
   );
 }

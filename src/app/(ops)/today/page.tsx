@@ -81,7 +81,7 @@ export default function TodayPage() {
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {v.customerId ? (
-                    <div className="min-w-[220px]"><FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} /></div>
+                    <div className="w-full min-w-0 sm:w-auto sm:min-w-[220px]"><FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} /></div>
                   ) : (
                     <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-brand)] px-4 text-[14px] font-semibold text-white">Identify</Link>
                   )}
@@ -232,17 +232,17 @@ function HeroNext({ v, nameOf }: { v: VisitLive; nameOf: (v: VisitLive) => strin
   const active = v.status === "ACTIVE";
   const theirs = !v.assignedSalespersonId;
   return (
-    <section aria-label="Next step" className="rounded-2xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-6 shadow-[var(--fp-shadow)] sm:p-7">
-      <div className="flex items-center justify-between gap-3">
+    <section aria-label="Next step" className="rounded-2xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-4 shadow-[var(--fp-shadow)] sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-brand-deep)]">{s.kicker}</p>
         <StatusMark value={s.mark} label={s.label} />
       </div>
-      <div className="mt-4 flex items-center gap-4">
-        <span aria-hidden className="fp-num grid size-14 shrink-0 place-items-center rounded-full bg-[var(--fp-brand-soft)] text-[20px] font-semibold text-[var(--fp-brand-deep)]">
+      <div className="mt-4 flex items-center gap-3 sm:gap-4">
+        <span aria-hidden className="fp-num grid size-12 shrink-0 place-items-center rounded-full bg-[var(--fp-brand-soft)] text-[18px] font-semibold text-[var(--fp-brand-deep)] sm:size-14 sm:text-[20px]">
           {monogram(nameOf(v))}
         </span>
         <div className="min-w-0">
-          <h2 className="fp-name text-[32px] leading-none">{nameOf(v)}</h2>
+          <h2 className="fp-name break-words text-[26px] leading-tight sm:text-[32px] sm:leading-none">{nameOf(v)}</h2>
           <p className="fp-num mt-2 text-[13.5px] text-[var(--fp-muted)]">
             {active
               ? `On the floor · ${timeAgo(v.startedAt || v.arrivedAt)}`
@@ -273,7 +273,7 @@ function HeroNext({ v, nameOf }: { v: VisitLive; nameOf: (v: VisitLive) => strin
 /* Nothing needs action: calm, not broken. Point at the two ways work starts. */
 function HeroEmpty({ creating, onWalkIn }: { creating: boolean; onWalkIn: () => void }) {
   return (
-    <section aria-label="Floor clear" className="rounded-2xl border border-dashed border-[var(--fp-line-strong)] bg-[var(--fp-surface)] p-7">
+    <section aria-label="Floor clear" className="rounded-2xl border border-dashed border-[var(--fp-line-strong)] bg-[var(--fp-surface)] p-5 sm:p-7">
       <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">All clear</p>
       <h2 className="fp-name mt-2 text-[28px] leading-none">The floor is quiet.</h2>
       <p className="mt-2 max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--fp-muted)]">

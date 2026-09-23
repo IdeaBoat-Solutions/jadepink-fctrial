@@ -1,88 +1,84 @@
-/* Boutique sections — cloned from jadepink-flow, rebranded to JadePink.
-   Six drawers, week's favourites, designers, review,
-   newsletter + visit cards, glass footer. Server components. */
+/* JadePink sections — Ogaan / Le Mill grammar.
+   White ground, black grotesk, sharp rectangles, thin rules, big air.
+   No cream wash, no glass, no dark cards. Server components. */
 
 import { BoutiqueImage } from "@/components/site/boutique-image";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { NewsletterForm } from "@/components/site/newsletter-form";
 
-/* ---------- Section heading ---------- */
-
-function SectionHeading({
+function RowHeading({
+  index,
   title,
   body,
   linkLabel,
   href,
 }: {
+  index: string;
   title: string;
   body: string;
   linkLabel?: string;
   href?: string;
 }) {
   return (
-    <div className="reveal mb-8 flex items-center justify-between gap-6">
-      <div>
-        <h2 className="font-display text-3xl leading-tight font-light tracking-[-0.02em] text-ink sm:text-4xl">
+    <div className="reveal mx-auto mb-10 max-w-2xl text-center">
+      <div className="max-w-2xl">
+        <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">{index}</p>
+        <h2 className="mt-3 font-display text-4xl leading-[1.04] font-semibold tracking-[-0.01em] text-balance text-black sm:text-5xl">
           {title}
         </h2>
-        <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-ink/65">{body}</p>
+        <p className="mx-auto mt-3 max-w-[56ch] text-[15px] leading-relaxed text-black/60">{body}</p>
       </div>
       {linkLabel && href ? (
         <a
           href={href}
-          className="nudge hidden shrink-0 items-center gap-1.5 pb-1 text-sm text-brand transition-colors duration-200 hover:text-ink sm:inline-flex"
+          className="mt-4 inline-block shrink-0 border-b border-black pb-1 text-[12px] font-semibold tracking-[0.2em] text-black uppercase hover:border-[#651E2A] hover:text-[#651E2A]"
         >
           {linkLabel}
-          <span className="nudge-target text-base leading-none" aria-hidden="true">
-            →
-          </span>
         </a>
       ) : null}
     </div>
   );
 }
 
-/* ---------- Drawers / categories ---------- */
+/* ---------- 01 · Shop by category: flat image strip ---------- */
 
-const DRAWERS = [
-  { name: "Dresses", src: "/boutique/category-dresses.jpg", alt: "Blush pink tiered dress on a wooden hanger against a cream wall" },
-  { name: "Co-ord sets", src: "/boutique/category-coord-sets.jpg", alt: "Folded ivory top and blush pink shorts co-ord set on linen" },
-  { name: "Kurtis & tops", src: "/boutique/category-kurtis.jpg", alt: "Stack of folded cotton kurtis in mint, blush and cream" },
-  { name: "Jewellery", src: "/boutique/category-necklaces.jpg", alt: "Gold necklaces on a pale display stand" },
-  { name: "Hair & silk", src: "/boutique/category-hair-silk.jpg", alt: "Blush silk scrunchies and gold hair clips on linen" },
-  { name: "Home & scent", src: "/boutique/category-home-scent.jpg", alt: "Scented candle and wrapped soap on soft linen" },
+const CATS = [
+  { name: "Dresses", fabric: "Cotton · Silk", src: "/boutique/category-dresses.jpg", alt: "Blush pink tiered dress on a wooden hanger" },
+  { name: "Co-ord sets", fabric: "Ivory · Blush", src: "/boutique/category-coord-sets.jpg", alt: "Folded ivory top and blush shorts co-ord set" },
+  { name: "Kurtis", fabric: "Mint · Cream", src: "/boutique/category-kurtis.jpg", alt: "Stack of folded cotton kurtis" },
+  { name: "Jewellery", fabric: "Gold · Silver", src: "/boutique/category-necklaces.jpg", alt: "Gold necklaces on a display stand" },
+  { name: "Hair & silk", fabric: "Ribbons · Clips", src: "/boutique/category-hair-silk.jpg", alt: "Silk scrunchies and gold hair clips" },
+  { name: "Home & scent", fabric: "Candles · Gifts", src: "/boutique/category-home-scent.jpg", alt: "Scented candle and wrapped soap" },
 ];
 
 export function Categories() {
   return (
-    <section id="collections" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-8 sm:py-16">
-      <SectionHeading
-        title="Shop the drawers"
-        body="Dresses, kurtis, jewels and little extras — six little worlds."
-        linkLabel="See the favourites"
+    <section id="collections" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 pt-16 pb-4 sm:px-8 sm:pt-24">
+      <RowHeading
+        index="01 — Shop by category"
+        title="Six tight edits. No endless aisles."
+        body="If a rail is empty, it sold through. Ask what arrived Friday — the floor turns over every week."
+        linkLabel="View just in"
         href="#new"
       />
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {DRAWERS.map((category, index) => (
-          <a
-            href="#new"
-            key={category.name}
-            className="glass-panel lift zoom-frame reveal group rounded-[1.25rem] p-2.5 ring-1 ring-shadow backdrop-blur-md"
-            style={{ "--d": `${index * 60}ms` } as React.CSSProperties}
-          >
-            <BoutiqueImage
-              src={category.src}
-              alt={category.alt}
-              width={768}
-              height={896}
-              loading="lazy"
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
-              className="aspect-[3/4] w-full rounded-[0.85rem] object-cover outline-1 -outline-offset-1 outline-shadow"
-            />
-            <p className="px-1 pt-3 pb-1 text-sm font-medium tracking-[0.01em] text-ink transition-colors duration-200 group-hover:text-brand">
-              {category.name}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:grid-cols-3 lg:grid-cols-6">
+        {CATS.map((c, i) => (
+          <a key={c.name} href="#new" className="reveal group" style={{ "--d": `${i * 50}ms` } as React.CSSProperties}>
+            <div className="overflow-hidden bg-[#F4F2ED]">
+              <BoutiqueImage
+                src={c.src}
+                alt={c.alt}
+                width={600}
+                height={760}
+                loading="lazy"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                className="aspect-[3/4] w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+              />
+            </div>
+            <p className="mt-3 text-[14px] font-semibold text-black group-hover:underline group-hover:underline-offset-4">
+              {c.name}
             </p>
+            <p className="mt-0.5 text-[12.5px] tracking-[0.04em] text-black/50">{c.fabric}</p>
           </a>
         ))}
       </div>
@@ -90,67 +86,42 @@ export function Categories() {
   );
 }
 
-/* ---------- Week's favourites ---------- */
+/* ---------- 02 · Just in: flat 4-up product grid ---------- */
 
 const FAVOURITES = [
-  {
-    name: "Blush tiered dress",
-    detail: "Soft cotton · ₹12,450",
-    src: "/boutique/product-blush-dress.jpg",
-    alt: "Blush pink tiered cotton dress hanging on a wooden hanger",
-  },
-  {
-    name: "Aurora chain",
-    detail: "18k gold · ₹10,800",
-    src: "/boutique/product-aurora-chain.jpg",
-    alt: "Thin gold chain necklace with a small moon pendant on pale silk",
-  },
-  {
-    name: "Rose silk duo",
-    detail: "Scrunchie + clip · ₹2,900",
-    src: "/boutique/product-rose-silk-duo.jpg",
-    alt: "Blush silk scrunchie with gold hair clips on linen",
-  },
+  { designer: "Studio rail", name: "Blush tiered dress", price: "₹12,450", src: "/boutique/product-blush-dress.jpg", alt: "Blush pink tiered cotton dress" },
+  { designer: "Brashbug", name: "Aurora chain", price: "₹10,800", src: "/boutique/product-aurora-chain.jpg", alt: "Thin gold chain with moon pendant" },
+  { designer: "Studio rail", name: "Rose silk duo", price: "₹2,900", src: "/boutique/product-rose-silk-duo.jpg", alt: "Blush silk scrunchie with gold clips" },
+  { designer: "Diosaparis", name: "Stackable rings", price: "₹8,400", src: "/boutique/boutique-aurora-chain.jpg", alt: "Close crop of a delicate gold chain bracelet" },
 ];
 
 export function Favourites() {
   return (
-    <section id="new" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-8 sm:py-16">
-      <SectionHeading
-        title="This week's favourites"
-        body="Fresh from the rail and the jewellery box."
+    <section id="new" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 py-16 sm:px-8 sm:py-24">
+      <RowHeading
+        index="02 — Just in"
+        title="This week on the rail."
+        body="Pulled Friday. When a size goes, it goes — call the counter and we hold it till 8 PM."
+        linkLabel="Ask in store"
+        href="#visit"
       />
-      <div className="grid gap-5 sm:grid-cols-3">
-        {FAVOURITES.map((product, index) => (
-          <a
-            href="#contact"
-            key={product.name}
-            className="glass-panel lift zoom-frame nudge reveal group rounded-[1.25rem] p-3 ring-1 ring-shadow backdrop-blur-md"
-            style={{ "--d": `${index * 80}ms` } as React.CSSProperties}
-          >
-            <BoutiqueImage
-              src={product.src}
-              alt={product.alt}
-              width={816}
-              height={816}
-              loading="lazy"
-              sizes="(max-width: 640px) 100vw, 33vw"
-              className="aspect-square w-full rounded-[1rem] object-cover outline-1 -outline-offset-1 outline-shadow"
-            />
-            <div className="flex items-start justify-between gap-3 px-1 pt-4 pb-1">
-              <div>
-                <p className="font-medium tracking-[0.01em] text-ink transition-colors duration-200 group-hover:text-brand">
-                  {product.name}
-                </p>
-                <p className="tabular mt-1 text-sm text-ink/65">{product.detail}</p>
-              </div>
-              <span
-                className="nudge-target mt-0.5 shrink-0 text-lg text-ink/25 transition-colors duration-200 group-hover:text-brand"
-                aria-hidden="true"
-              >
-                →
-              </span>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-10 lg:grid-cols-4">
+        {FAVOURITES.map((p, i) => (
+          <a key={p.name} href="#visit" className="reveal group" style={{ "--d": `${i * 60}ms` } as React.CSSProperties}>
+            <div className="overflow-hidden bg-[#F4F2ED]">
+              <BoutiqueImage
+                src={p.src}
+                alt={p.alt}
+                width={800}
+                height={1000}
+                loading="lazy"
+                sizes="(max-width: 640px) 50vw, 25vw"
+                className="aspect-[3/4] w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+              />
             </div>
+            <p className="mt-3 text-[11px] font-semibold tracking-[0.2em] text-black/50 uppercase">{p.designer}</p>
+            <p className="mt-1 text-[15px] font-medium text-black">{p.name}</p>
+            <p className="mt-0.5 text-[14px] text-black tabular-nums">{p.price}</p>
           </a>
         ))}
       </div>
@@ -158,143 +129,174 @@ export function Favourites() {
   );
 }
 
-/* ---------- Designers (JadePink truth, boutique skin) ---------- */
+/* ---------- 03 · Designers: A–Z index table, Le Mill style ---------- */
 
 const DESIGNER_GROUPS = [
-  {
-    craft: "For Clothing",
-    names: ["Diya Mehta", "Meghna Panchmatia", "Avadh", "Naina Seth", "Kaveri", "Zeel Doshi Thakkar"],
-  },
-  {
-    craft: "For Footwear",
-    names: ["Vareli Bafna", "Preet Kaur", "Jutte"],
-  },
-  {
-    craft: "For Jewellery",
-    names: ["Brashbug", "Diosaparis", "Silver Shine", "Geet Jewels", "Just Shraddha's", "Aadikara"],
-  },
+  { craft: "Clothing", names: ["Anuj Bhutani", "Avadh", "Chambray & Co", "Diya Mehta", "Kaveri", "Meghna Panchmatia", "Naina Seth", "Rishi Vibhuti", "Zeel Doshi Thakkar"] },
+  { craft: "Footwear", names: ["Jutte", "Preet Kaur", "Vareli Bafna"] },
+  { craft: "Jewellery", names: ["Aadikara", "Brashbug", "Diosaparis", "Geet Jewels", "Just Shraddha's", "Silver Shine"] },
 ];
 
 export function Designers() {
   return (
-    <section id="designers" aria-label="JadePink designers" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-8 sm:py-16">
-      <SectionHeading
-        title="Heritage, luxury & young experiments"
-        body="A multi-designer boutique — labels you love, plus new names every season."
-        linkLabel="Meet them in store"
-        href="#contact"
-      />
-      <div className="grid gap-4 sm:grid-cols-3">
-        {DESIGNER_GROUPS.map((g, i) => (
-          <div
-            key={g.craft}
-            className="glass-panel reveal rounded-[1.25rem] p-6 ring-1 ring-shadow backdrop-blur-md"
-            style={{ "--d": `${i * 70}ms` } as React.CSSProperties}
-          >
-            <p className="text-xs font-medium tracking-[0.22em] uppercase text-brand">{g.craft}</p>
-            <ul className="mt-4 space-y-2.5">
-              {g.names.map((n) => (
-                <li key={n} className="flex items-baseline gap-2.5 text-sm text-ink">
-                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-gold" />
-                  {n}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+    <section id="designers" aria-label="Designers" className="border-y border-black/10 bg-[#FAFAF8] scroll-mt-32">
+      <div className="mx-auto max-w-[1400px] px-4 py-16 sm:px-8 sm:py-24">
+        <RowHeading
+          index="03 — Designers A–Z"
+          title="Heritage names. First-season experiments."
+          body="Established labels beside young designers, hung side by side. New names land every season."
+          linkLabel="Meet them in store"
+          href="#visit"
+        />
+        <div className="grid gap-10 md:grid-cols-3 md:gap-8">
+          {DESIGNER_GROUPS.map((g) => (
+            <div key={g.craft} className="reveal border-t-2 border-black pt-5">
+              <p className="text-[11px] font-semibold tracking-[0.28em] text-black uppercase">{g.craft}</p>
+              <ul className="mt-2 divide-y divide-black/10">
+                {g.names.map((n) => (
+                  <li key={n} className="flex items-baseline justify-between gap-4 py-2.5 text-[15px] text-black">
+                    {n}
+                    <span aria-hidden className="text-[12px] text-black/30">↗</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
-      <p className="reveal mt-6 text-center text-[13px] tracking-[0.02em] text-ink/65">
-        Plus Anuj Bhutani, Rishi Vibhuti, Chambray &amp; Co, BhuSattva, Pinki Sinha — and more every season.
-      </p>
     </section>
   );
 }
 
-/* ---------- Review ---------- */
+/* ---------- 04 · Journal / editorial split tiles ---------- */
 
 export function Reviews() {
   return (
-    <section aria-label="Customer review" className="mx-auto max-w-6xl px-4 py-12 sm:px-8 sm:py-16">
-      <figure className="glass-panel reveal mx-auto max-w-3xl rounded-[1.75rem] p-8 text-center ring-1 ring-shadow backdrop-blur-lg sm:p-12">
-        <div className="flex items-center justify-center gap-1.5 text-gold" aria-label="Rated five out of five">
-          {[0, 1, 2, 3, 4].map((star) => (
-            <span key={star} className="text-base leading-none" aria-hidden="true">
-              ★
-            </span>
-          ))}
-        </div>
-        <blockquote className="mx-auto mt-6 max-w-[38ch] font-display text-2xl leading-[1.35] font-light tracking-[-0.01em] text-balance text-ink sm:text-[1.75rem]">
-          “Bridal to brunch — everything fits like it was made for me. I don&apos;t
-          shop anywhere else in Ahmedabad now.”
-        </blockquote>
-        <figcaption className="mt-8 flex items-center justify-center gap-3">
-          <BoutiqueImage
-            src="/boutique/customer-priya.jpg"
-            alt="Portrait of Priya, a verified boutique customer"
-            width={96}
-            height={96}
-            loading="lazy"
-            className="size-11 rounded-full object-cover outline-1 -outline-offset-1 outline-shadow"
-          />
-          <div className="text-left">
-            <p className="text-sm font-medium text-ink">Nirali P.</p>
-            <p className="mt-0.5 text-sm text-ink/65">Verified customer · Ahmedabad</p>
+    <section id="journal" aria-label="From the floor" className="mx-auto max-w-[1400px] scroll-mt-32 px-4 py-16 sm:px-8 sm:py-24">
+      <RowHeading
+        index="04 — From the floor"
+        title="Notes, not campaigns."
+        body="What the stylists actually say to walk-ins — bridal timelines, what fits petite frames, what restocks."
+      />
+      <div className="grid gap-4 md:grid-cols-2">
+        <figure className="reveal grid sm:grid-cols-2 border border-black/10">
+          <div className="overflow-hidden bg-[#F4F2ED]">
+            <BoutiqueImage
+              src="/boutique/boutique-aurora-chain.jpg"
+              alt="Gold chain detail at the bridal counter"
+              width={800}
+              height={800}
+              loading="lazy"
+              className="aspect-square h-full w-full object-cover"
+            />
           </div>
-        </figcaption>
-      </figure>
+          <blockquote className="flex flex-col justify-between gap-6 p-7">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-[#651E2A] uppercase">Bridal · 6 weeks out</p>
+              <p className="mt-3 font-display text-[22px] leading-snug font-medium text-black">
+                “Bridal to brunch — everything fits like it was made for me.”
+              </p>
+            </div>
+            <figcaption className="text-[13px] text-black/55">Nirali P. · Verified · 4.9 across 2,300+ reviews</figcaption>
+          </blockquote>
+        </figure>
+        <div className="reveal grid sm:grid-cols-2 border border-black/10 bg-black text-white">
+          <div className="flex flex-col justify-between gap-6 p-7">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-white/60 uppercase">Stylist note</p>
+              <p className="mt-3 font-display text-[22px] leading-snug font-medium">
+                Come at 11 AM on weekdays. The trial room is yours.
+              </p>
+              <p className="mt-3 text-[14px] leading-relaxed text-white/65">
+                Evenings run bridal-heavy. Mornings mean unhurried drapes and honest opinions.
+              </p>
+            </div>
+            <a href="#visit" className="text-[12px] font-semibold tracking-[0.2em] uppercase underline underline-offset-8 hover:text-white/70">
+              Plan a visit
+            </a>
+          </div>
+          <div className="overflow-hidden">
+            <BoutiqueImage
+              src="/boutique/category-dresses.jpg"
+              alt="Dresses on the morning rail"
+              width={800}
+              height={800}
+              loading="lazy"
+              className="aspect-square h-full w-full object-cover"
+            />
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
 
-/* ---------- Newsletter + visit ---------- */
+/* ---------- 05 · Store + newsletter ---------- */
 
 export function Lifestyle() {
   return (
-    <section id="lifestyle" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-12 sm:px-8 sm:py-16">
-      <div className="grid gap-5 md:grid-cols-2 md:gap-8">
-        <div className="glass-panel reveal flex flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8">
-          <h2 className="font-display text-2xl leading-tight font-light tracking-[-0.01em] text-ink sm:text-3xl">
-            Stay in the drawer
+    <section id="lifestyle" className="border-t border-black/10 scroll-mt-32">
+      <div className="mx-auto grid max-w-[1400px] md:grid-cols-[1.1fr_0.9fr]">
+        <div id="visit" className="reveal border-b border-black/10 px-4 py-14 sm:px-8 md:border-r md:border-b-0 sm:py-20 scroll-mt-32">
+          <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">05 — Our store</p>
+          <h2 className="mt-3 font-display text-4xl leading-[1.04] font-semibold text-black sm:text-5xl">
+            Thaltej, not a mall.
           </h2>
-          <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-pretty text-ink/65">
-            New dresses, quiet restocks and styling notes, once a fortnight. No noise.
-          </p>
-          <NewsletterForm />
-        </div>
-
-        <div
-          id="contact"
-          className="glass-panel reveal flex scroll-mt-24 flex-col rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8"
-          style={{ "--d": "100ms" } as React.CSSProperties}
-        >
-          <h2 className="font-display text-2xl leading-tight font-light tracking-[-0.01em] text-ink sm:text-3xl">
-            Come find us
-          </h2>
-          <p className="mt-3 max-w-[42ch] text-sm leading-relaxed text-pretty text-ink/65">
-            G-8 Harmony Icon, Hebatpur Road, Thaltej, Ahmedabad — open every day,
-            10:30 AM to 8 PM. Call{" "}
-            <a href="tel:+919081288988" className="link-line text-brand">
-              +91 90812 88988
-            </a>{" "}
-            or write to{" "}
-            <a href="mailto:shivankari@jadepink.com" className="link-line text-brand">
+          <address className="mt-5 text-[15px] leading-relaxed text-black/70 not-italic">
+            G-8 Harmony Icon, Hebatpur Road, near Baghban Party Plot,
+            <br />
+            Thaltej, Ahmedabad 380054
+          </address>
+          <div className="mt-7 grid grid-cols-3 divide-x divide-black/10 border-y border-black/10 text-center">
+            <div className="py-4">
+              <p className="text-[10.5px] font-semibold tracking-[0.2em] text-black/50 uppercase">Hours</p>
+              <p className="mt-1 text-[13.5px] font-medium text-black tabular-nums">10:30–20:00</p>
+            </div>
+            <div className="py-4">
+              <p className="text-[10.5px] font-semibold tracking-[0.2em] text-black/50 uppercase">Days</p>
+              <p className="mt-1 text-[13.5px] font-medium text-black">All 7</p>
+            </div>
+            <div className="py-4">
+              <p className="text-[10.5px] font-semibold tracking-[0.2em] text-black/50 uppercase">Trial</p>
+              <p className="mt-1 text-[13.5px] font-medium text-black">With stylist</p>
+            </div>
+          </div>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <a
+              href="tel:+919081288988"
+              className="inline-flex min-h-[48px] items-center bg-black px-7 text-[12px] font-semibold tracking-[0.2em] text-white uppercase hover:bg-[#651E2A]"
+            >
+              Call the store
+            </a>
+            <a
+              href="https://www.instagram.com/jadepink_studio/"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-[48px] items-center border border-black/25 px-7 text-[12px] font-semibold tracking-[0.2em] text-black uppercase hover:border-black"
+            >
+              Instagram
+            </a>
+          </div>
+          <p className="mt-5 text-[13.5px] text-black/55">
+            <a href="mailto:shivankari@jadepink.com" className="underline underline-offset-4 hover:text-black">
               shivankari@jadepink.com
             </a>
-            .
+            {" · "}
+            <a href="tel:+919081288988" className="underline underline-offset-4 hover:text-black">
+              +91 90812 88988
+            </a>
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild variant="boutique" size="boutique" className="nudge">
-              <a href="https://www.instagram.com/jadepink_studio/" target="_blank" rel="noreferrer">
-                Order &amp; contact
-                <span className="nudge-target text-base leading-none" aria-hidden="true">
-                  →
-                </span>
-              </a>
-            </Button>
-            <Button asChild variant="glass" size="boutique">
-              <a href="tel:+919081288988">Call the store</a>
-            </Button>
-          </div>
+        </div>
+
+        <div className="reveal bg-[#F4F2ED] px-4 py-14 sm:px-8 sm:py-20">
+          <p className="text-[11px] font-semibold tracking-[0.28em] text-black/50 uppercase">The list</p>
+          <h2 className="mt-3 font-display text-3xl leading-tight font-semibold text-black sm:text-4xl">
+            Restocks, once a fortnight.
+          </h2>
+          <p className="mt-3 max-w-[40ch] text-[14.5px] leading-relaxed text-black/60">
+            New rails and quiet restocks. One email, every two weeks. No daily noise.
+          </p>
+          <NewsletterForm />
         </div>
       </div>
     </section>
@@ -305,38 +307,52 @@ export function Lifestyle() {
 
 export function Footer() {
   return (
-    <footer className="mx-auto max-w-6xl px-4 pt-8 pb-10 sm:px-8 sm:pt-12 sm:pb-12">
-      <div className="glass-panel rounded-[1.5rem] p-6 ring-1 ring-shadow backdrop-blur-md sm:p-8">
-        <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between">
+    <footer className="bg-black text-white">
+      <div className="mx-auto max-w-[1400px] px-4 py-14 sm:px-8">
+        <div className="grid gap-10 md:grid-cols-[1.2fr_2fr]">
           <div>
-            <p className="font-display text-xl font-medium tracking-[-0.01em] text-ink">
-              JadePink
-            </p>
-            <p className="mt-2 max-w-[38ch] text-sm leading-relaxed text-ink/65">
-              A multi-designer boutique — heritage and luxury labels, young
-              experimental designers, all under one roof in Thaltej, Ahmedabad.
+            <p className="font-display text-2xl font-semibold tracking-[0.08em] uppercase">JadePink</p>
+            <p className="mt-1 text-[11px] tracking-[0.28em] text-white/50 uppercase">SJ Fashion · Thaltej</p>
+            <p className="mt-4 max-w-[36ch] text-[13.5px] leading-relaxed text-white/60">
+              A multi-designer boutique — heritage labels beside young experimental
+              designers, under one roof in Ahmedabad.
             </p>
           </div>
-          <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-ink/70" aria-label="Footer links">
-            <a href="#collections" className="link-line transition-colors duration-200 hover:text-brand">
-              Collections
-            </a>
-            <a href="#designers" className="link-line transition-colors duration-200 hover:text-brand">
-              Designers
-            </a>
-            <a href="#new" className="link-line transition-colors duration-200 hover:text-brand">
-              Jewellery
-            </a>
-            <a href="#contact" className="link-line transition-colors duration-200 hover:text-brand">
-              Contact
-            </a>
-            <Link href="/login" className="link-line transition-colors duration-200 hover:text-brand">
-              Staff sign in
-            </Link>
+          <nav className="grid grid-cols-2 gap-8 text-[13.5px] sm:grid-cols-4" aria-label="Footer links">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-white/45 uppercase">Shop</p>
+              <ul className="mt-3 space-y-2.5 text-white/75">
+                <li><a href="#collections" className="hover:text-white hover:underline hover:underline-offset-4">Collections</a></li>
+                <li><a href="#new" className="hover:text-white hover:underline hover:underline-offset-4">Just in</a></li>
+                <li><a href="#designers" className="hover:text-white hover:underline hover:underline-offset-4">Designers</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-white/45 uppercase">Store</p>
+              <ul className="mt-3 space-y-2.5 text-white/75">
+                <li><a href="#visit" className="hover:text-white hover:underline hover:underline-offset-4">Visit</a></li>
+                <li><a href="#journal" className="hover:text-white hover:underline hover:underline-offset-4">Journal</a></li>
+                <li><a href="tel:+919081288988" className="hover:text-white hover:underline hover:underline-offset-4">+91 90812 88988</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-white/45 uppercase">Online</p>
+              <ul className="mt-3 space-y-2.5 text-white/75">
+                <li><a href="https://www.instagram.com/jadepink_studio/" target="_blank" rel="noreferrer" className="hover:text-white hover:underline hover:underline-offset-4">Instagram</a></li>
+                <li><a href="mailto:shivankari@jadepink.com" className="hover:text-white hover:underline hover:underline-offset-4">Email</a></li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.24em] text-white/45 uppercase">Staff</p>
+              <ul className="mt-3 space-y-2.5 text-white/75">
+                <li><Link href="/login" className="hover:text-white hover:underline hover:underline-offset-4">Sign in</Link></li>
+              </ul>
+            </div>
           </nav>
         </div>
-        <div className="mt-8 border-t border-ink/10 pt-5 text-xs tracking-[0.02em] text-ink/65">
-          © 2026 JadePink · SJ Fashion — Made for delicate gifting
+        <div className="mt-12 flex flex-col gap-2 border-t border-white/15 pt-5 text-[12px] tracking-[0.06em] text-white/50 sm:flex-row sm:justify-between">
+          <p>© 2026 JadePink · SJ Fashion, Ahmedabad</p>
+          <p>Open daily 10:30 AM – 8:00 PM</p>
         </div>
       </div>
     </footer>

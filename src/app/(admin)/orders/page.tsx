@@ -2,7 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { ChevronDown, Minus, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,8 +35,8 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
    floor billing writes its own orders through the record_sale RPC, so this
    form covers the channels that never touch the floor. */
 
-const VARIANT: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "secondary", confirmed: "default", shipped: "default", delivered: "outline", cancelled: "destructive",
+const VARIANT: Record<OrderStatus, "outline" | "secondary" | "default" | "success" | "destructive"> = {
+  pending: "outline", confirmed: "secondary", shipped: "default", delivered: "success", cancelled: "destructive",
 };
 
 const STATUSES: Array<OrderStatus | "all"> = ["all", "pending", "confirmed", "shipped", "delivered", "cancelled"];
@@ -42,7 +44,13 @@ const STATUSES: Array<OrderStatus | "all"> = ["all", "pending", "confirmed", "sh
 type Line = { productId: string; name: string; price: number; qty: number };
 
 function OrdersInner() {
-  const [status, setStatus] = useState<OrderStatus | "all">("all");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [status, setStatus] = useState<OrderStatus | "all">(() => {
+    const s = searchParams.get("status");
+    return (STATUSES as string[]).includes(s ?? "") ? (s as OrderStatus | "all") : "all";
+  });
   const { page, setPage } = usePageParam(status);
   const { data: paged, loading, error, reload } = useApi(
     `orders|${page}|${status}`,
@@ -54,6 +62,18 @@ function OrdersInner() {
   const totalPages = paged?.totalPages ?? 1;
   const start = paged?.start ?? 0;
   const end = paged?.end ?? 0;
+
+  /* Status in URL (?status=) — refresh/back/share keeps the filtered book. */
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (status === "all") params.delete("status");
+    else params.set("status", status);
+    const cur = searchParams.get("status") ?? "all";
+    if (cur === status) return;
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   /* ---------- Manual order form ---------- */
   const [open, setOpen] = useState(false);
@@ -183,13 +203,13 @@ function OrdersInner() {
                   {lines.length > 0 && (
                     <ul className="flex flex-col gap-2 rounded-xl border p-2">
                       {lines.map((l) => (
-                        <li key={l.productId} className="flex items-center justify-between gap-2 text-[14px]">
-                          <span className="min-w-0 truncate">{l.name}</span>
+                        <li key={l.productId} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 text-[14px]">
+                          <span className="min-w-0 flex-1 basis-32 truncate">{l.name}</span>
                           <span className="flex shrink-0 items-center gap-1.5">
                             <span className="tnum text-[13px] text-muted-foreground">{formatINR(l.price)}</span>
-                            <button type="button" aria-label={`Decrease quantity of ${l.name}`} onClick={() => setQty(l.productId, l.qty - 1)} className="grid size-8 place-items-center rounded-lg border font-bold">−</button>
+                            <button type="button" aria-label={`Decrease quantity of ${l.name}`} onClick={() => setQty(l.productId, l.qty - 1)} className="grid min-h-[44px] min-w-[44px] place-items-center rounded-lg border transition-colors hover:border-foreground"><Minus className="size-4" /></button>
                             <span className="tnum w-6 text-center font-semibold">{l.qty}</span>
-                            <button type="button" aria-label={`Increase quantity of ${l.name}`} onClick={() => setQty(l.productId, l.qty + 1)} className="grid size-8 place-items-center rounded-lg border font-bold">+</button>
+                            <button type="button" aria-label={`Increase quantity of ${l.name}`} onClick={() => setQty(l.productId, l.qty + 1)} className="grid min-h-[44px] min-w-[44px] place-items-center rounded-lg border transition-colors hover:border-foreground"><Plus className="size-4" /></button>
                           </span>
                         </li>
                       ))}
@@ -200,7 +220,7 @@ function OrdersInner() {
                     </ul>
                   )}
                   {formErr && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13.5px] font-medium text-destructive">{formErr}</p>}
-                  <DialogFooter className="gap-2 sm:justify-end">
+                  <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
                     <Button type="button" variant="outline" className="min-h-[44px]" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
                     <Button type="submit" disabled={busy} className="min-h-[44px] bg-[var(--staff-brand)] text-white hover:bg-[var(--staff-brand-deep)]">{busy ? "Saving…" : "Create order"}</Button>
                   </DialogFooter>
@@ -222,10 +242,10 @@ function OrdersInner() {
             type="button"
             aria-pressed={status === s}
             onClick={() => { setStatus(s); setPage(1); }}
-            className={`min-h-[40px] rounded-lg border px-3.5 text-[13px] font-semibold capitalize transition-colors ${
+            className={`min-h-[44px] rounded-lg border px-3.5 text-[13px] font-semibold capitalize transition-colors ${
               status === s
-                ? "border-[#1c1917] bg-[#1c1917] text-white"
-                : "border-[#d6c9bb] bg-white text-[#57534e] hover:border-[#1c1917]"
+                ? "border-foreground bg-foreground text-background"
+                : "border-stone-400 bg-white text-muted-foreground hover:border-foreground hover:text-foreground"
             }`}
           >
             {s}
@@ -234,10 +254,10 @@ function OrdersInner() {
       </div>
 
       {error && !paged && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#f0b6b9] bg-[#fdecec] px-4 py-3.5">
+        <div role="alert" className="staff-banner-error flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3.5">
           <div>
-            <p className="text-[14px] font-semibold text-[#7d1a1f]">Couldn&apos;t load orders.</p>
-            <p className="mt-0.5 text-[13.5px] text-[#7d1a1f]/90">{error}</p>
+            <p className="text-[14px] font-semibold">Couldn&apos;t load orders.</p>
+            <p className="mt-0.5 text-[13.5px] opacity-90">{error}</p>
           </div>
           <Button variant="outline" size="sm" className="min-h-[40px]" onClick={reload}>Try again</Button>
         </div>
@@ -275,8 +295,11 @@ function OrdersInner() {
                       </div>
                       <p className="tnum shrink-0 text-[16px] font-semibold tracking-tight">{formatINR(o.total)}</p>
                     </div>
-                    <details className="mt-2.5 rounded-xl border border-dashed bg-muted/30 px-3 py-2">
-                      <summary className="cursor-pointer text-[13px] font-semibold">Items purchased ({pcs})</summary>
+                    <details className="group/details mt-2.5 rounded-xl border border-dashed bg-muted/30 px-3 py-2">
+                      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">
+                        Items purchased ({pcs})
+                        <ChevronDown aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/details:rotate-180" />
+                      </summary>
                       <ul className="mt-2 flex flex-col divide-y divide-dashed">
                         {o.items.map((it, idx) => (
                           <li key={`${it.productId}-${idx}`} className="flex items-center justify-between gap-3 py-1.5 text-[13px]">
@@ -330,7 +353,14 @@ function OrdersInner() {
                     </TableRow>
                   ))}
                   {!total && (
-                    <TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">No orders yet.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="py-12 text-center">
+                      <span aria-hidden className="empty-plate mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 7h15l-1.5 9h-12z" /><path d="M6 7 5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="17" cy="20" r="1.5" /></svg></span>
+                      <p className="mt-2 text-[15px] font-semibold">No orders{status !== "all" ? ` with status “${status}”` : " yet"}.</p>
+                      <p className="mt-0.5 text-[13.5px] text-muted-foreground">Walk-in sales land here the moment they close.</p>
+                      {status !== "all" && (
+                        <button onClick={() => { setStatus("all"); setPage(1); }} className="mt-2 inline-flex min-h-[44px] items-center rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground">Show all</button>
+                      )}
+                    </TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

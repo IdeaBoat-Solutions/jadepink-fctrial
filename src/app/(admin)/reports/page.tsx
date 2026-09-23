@@ -1,14 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/page-header";
-import { getStockSummary, listOrders } from "@/features/catalogue/repository";
-import { formatINR } from "@/lib/utils";
+import { getStockSummary, listOrders, listRecentBilledItems } from "@/features/catalogue/repository";
+import { formatINR, formatDateIN } from "@/lib/utils";
 
 /* Reports aggregate real orders + stock. All queries degrade to empty rather
    than throwing, so the page renders its empty states when nothing is imported. */
 export default async function ReportsPage() {
-  const [stock, orders] = await Promise.all([
+  const [stock, orders, billed] = await Promise.all([
     getStockSummary().catch(() => null),
     listOrders({ page: 1, pageSize: 1000 }).catch(() => null),
+    listRecentBilledItems(20).catch(() => []),
   ]);
 
   const live = (orders?.items ?? []).filter((o) => o.status !== "cancelled");
@@ -30,8 +31,8 @@ export default async function ReportsPage() {
           { label: "Stock value (cost)", value: formatINR(stockValue), note: `${units} units on hand` },
           { label: "Avg order value", value: formatINR(Math.round(revenue / Math.max(1, live.length))), note: `${orderCount} orders` },
         ].map((c) => (
-          <Card key={c.label} className="group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-16px_rgba(28,25,23,0.3)]">
-            <CardHeader><CardTitle className="text-[13px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{c.label}</CardTitle></CardHeader>
+          <Card key={c.label}>
+            <CardHeader><CardTitle className="text-[13px] font-medium text-muted-foreground">{c.label}</CardTitle></CardHeader>
             <CardContent><p className="tnum text-[26px] font-semibold tracking-tight">{c.value}</p><p className="mt-0.5 text-[13px] text-muted-foreground">{c.note}</p></CardContent>
           </Card>
         ))}
@@ -40,24 +41,50 @@ export default async function ReportsPage() {
         <CardHeader><CardTitle>Orders by channel</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           {!byChannel.size && (
-            <p className="px-1 py-6 text-center text-[13.5px] text-muted-foreground">
-              No orders recorded yet. Channel mix fills in as walk-in sales close.
-            </p>
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <span aria-hidden className="empty-plate"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></svg></span>
+              <p className="mt-2 text-[14px] font-semibold">No orders yet.</p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">Channel mix fills in as walk-in sales close.</p>
+            </div>
           )}
           {[...byChannel.entries()].map(([ch, list]) => {
             const total = list.reduce((s, o) => s + o.total, 0);
             return (
-              <div key={ch} className="group rounded-xl border px-3.5 py-3 transition-all duration-150 hover:-translate-y-px hover:border-foreground/40 hover:shadow-[0_8px_18px_-12px_rgba(28,25,23,0.4)]">
+              <div key={ch} className="rounded-xl border px-3.5 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-1">
                   <span className="text-[14px] font-semibold capitalize tracking-tight">{ch}</span>
                   <span className="tnum text-[13px] text-muted-foreground">{list.length} orders · {formatINR(total)}</span>
                 </div>
-                <div aria-hidden className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-[var(--staff-brand)] transition-[width] duration-500" style={{ width: `${Math.max(6, Math.round((total / Math.max(1, maxChannel)) * 100))}%` }} />
+                <div aria-hidden className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-[var(--staff-brand)]" style={{ width: `${Math.max(6, Math.round((total / Math.max(1, maxChannel)) * 100))}%` }} />
                 </div>
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Recently billed items</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {!billed.length ? (
+            <p className="px-4 py-6 text-center text-[13.5px] text-muted-foreground">
+              Nothing billed yet. Pieces marked billed on the floor land here with their bill, customer and FC.
+            </p>
+          ) : (
+            <ul className="flex flex-col divide-y">
+              {billed.map((b, i) => (
+                <li key={`${b.orderId}-${i}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13.5px] transition-colors hover:bg-muted/40">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold tracking-tight">{b.productName}</span>
+                    <span className="tnum block truncate text-[12px] text-muted-foreground">
+                      {b.orderCode} · {b.customerName}{b.fcName ? ` · FC ${b.fcName}` : ""} · {formatDateIN(b.orderedAt)}
+                    </span>
+                  </span>
+                  <span className="tnum shrink-0 font-semibold">{b.qty} × {formatINR(b.price)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>

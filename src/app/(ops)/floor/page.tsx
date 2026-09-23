@@ -13,10 +13,24 @@ import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { canViewLiveFloor } from "@/lib/policy";
 
 export default function FloorPage() {
-  const { salespeople, profile, user, activeVisits, awaitingAssignment } = useStore();
+  const { salespeople, profile, user, activeVisits, awaitingAssignment, createWalkIn, pushToast } = useStore();
   const router = useRouter();
   const [summaries, setSummaries] = useState<Map<string, FloorSummary>>(new Map());
+  const [creating, setCreating] = useState(false);
   const storeId = profile?.storeId ?? null;
+
+  const newWalkIn = async () => {
+    if (creating) return;
+    setCreating(true);
+    const v = await createWalkIn();
+    setCreating(false);
+    if (!v) {
+      pushToast("Could not record the walk-in", "Check your connection and try again.");
+      return;
+    }
+    pushToast("Walk-in recorded", "Identify the customer next.");
+    router.push(`/visits/${v.id}`);
+  };
 
   const refresh = useCallback(async () => {
     if (!storeId) return;
@@ -76,6 +90,11 @@ export default function FloorPage() {
 
   return (
     <div>
+      <nav aria-label="Breadcrumb" className="mb-2 text-[13px] text-[var(--fp-muted)]">
+        <Link href="/today" className="font-semibold text-[var(--fp-brand)]">Today</Link>
+        <span aria-hidden className="mx-1.5">/</span>
+        <span aria-current="page" className="text-[var(--fp-ink)]">Live floor</span>
+      </nav>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[26px] font-semibold tracking-tight">Live floor</h1>
@@ -84,7 +103,11 @@ export default function FloorPage() {
             <span className="mx-2 text-[var(--fp-line-strong)]">·</span>
             <span className="fp-num font-semibold text-[var(--fp-ink)]">{waiting.length}</span> waiting for assignment
           </p>
+          <p className="mt-1 text-[13px] text-[var(--fp-muted)]">Assign waiting customers, then open the visit — no need to remember who is where.</p>
         </div>
+        <Btn tone="brand" onClick={() => void newWalkIn()} disabled={creating}>
+          {creating ? "Recording…" : "+ New walk-in"}
+        </Btn>
       </div>
 
       {waiting.length > 0 && (
@@ -99,7 +122,7 @@ export default function FloorPage() {
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {v.customerId ? (
-                    <div className="min-w-[220px]"><FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} /></div>
+                    <div className="w-full min-w-0 sm:w-auto sm:min-w-[220px]"><FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} /></div>
                   ) : (
                     <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 items-center rounded-lg bg-[var(--fp-brand)] px-4 text-[14px] font-semibold text-white">Identify</Link>
                   )}

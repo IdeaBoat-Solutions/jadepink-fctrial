@@ -15,7 +15,8 @@ export function isManagerRole(role: StaffRole | ClientRole | undefined | null): 
   return (MANAGING as string[]).includes(role);
 }
 
-/** Back-office (dashboard, inventory, orders, reports, suppliers, settings). */
+/** Back-office (dashboard, inventory, orders, reports, suppliers).
+    Settings is a shared ops route (/settings) so FCs reach it too. */
 export function canAccessAdmin(role: StaffRole | ClientRole | undefined | null): boolean {
   return isManagerRole(role);
 }

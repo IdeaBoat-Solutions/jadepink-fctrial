@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,19 +11,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/layout/page-header";
 import { useStore } from "@/lib/store";
-import { listCategories, listProducts } from "@/lib/api";
+import { listBrands, listCategories, listProducts } from "@/lib/api";
 import { stockStatus } from "@/lib/inventory";
 import type { Category, Product } from "@/lib/inventory";
 import { formatINR } from "@/lib/utils";
 import { PaginationControls, usePageParam } from "@/components/pagination";
 
-/* Products catalogue — every product with ALL its details (image, SKU,
-   barcode, brand, design, category, supplier, price/MRP, stock, sizes,
-   colours, HSN), server search plus client filters. Reads the same live
-   catalogue as Inventory (/api/products); detail lives on /inventory/[id]. */
+/* Products catalogue — server search + server paging over the live catalogue
+   (/api/products). Every filter lives in the URL so refresh, back and share
+   keep the exact grid. Detail lives on /inventory/[id] for managers,
+   /products/[id] for FCs. */
 
-const FETCH_SIZE = 1000;
-const GRID_SIZE = 24;
+const PAGE_SIZE = 24;
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "stock-desc" | "name";
 
@@ -34,31 +34,35 @@ const SORT_LABEL: Record<SortKey, string> = {
   name: "Name A–Z",
 };
 
-function distinct(values: Array<string | null | undefined>): string[] {
-  return [...new Set(values.map((v) => (v ?? "").trim()).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, "en-IN"),
-  );
-}
+const SORTS: SortKey[] = ["newest", "price-asc", "price-desc", "stock-desc", "name"];
 
 function ProductsInner() {
   const { user } = useStore();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   /* Detail lives on /inventory/[id] for managers, /products/[id] for FCs. */
   const isManager = user?.role === "manager";
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [cat, setCat] = useState("all");
-  const [stock, setStock] = useState("all");
-  const [supplier, setSupplier] = useState("all");
-  const [brand, setBrand] = useState("all");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [sort, setSort] = useState<SortKey>("newest");
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
+  const [debouncedQ, setDebouncedQ] = useState(() => (searchParams.get("q") ?? "").trim());
+  const [cat, setCat] = useState(() => searchParams.get("category") ?? "all");
+  const [stock, setStock] = useState(() => searchParams.get("stock") ?? "all");
+  const [brand, setBrand] = useState(() => searchParams.get("brand") ?? "all");
+  const [sort, setSort] = useState<SortKey>(() => {
+    const s = searchParams.get("sort");
+    return (SORTS as string[]).includes(s ?? "") ? (s as SortKey) : "newest";
+  });
   const [cats, setCats] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
   const [rows, setRows] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [start, setStart] = useState(0);
+  const [end, setEnd] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const resetKey = `${debouncedQ}|${cat}|${stock}|${supplier}|${brand}|${minPrice}|${maxPrice}|${sort}`;
+  const resetKey = `${debouncedQ}|${cat}|${stock}|${brand}|${sort}`;
   const { page, setPage } = usePageParam(resetKey);
 
   useEffect(() => {
@@ -69,8 +73,10 @@ function ProductsInner() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const r = await listCategories();
-      if (!cancelled && r.ok && Array.isArray(r.data.data)) setCats(r.data.data);
+      const [c, b] = await Promise.all([listCategories(), listBrands()]);
+      if (cancelled) return;
+      if (c.ok && Array.isArray(c.data.data)) setCats(c.data.data);
+      if (b.ok && Array.isArray(b.data.data)) setBrands(b.data.data);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -81,10 +87,22 @@ function ProductsInner() {
       setLoading(true);
       setErr("");
       try {
-        const r = await listProducts({ q: debouncedQ, category: cat, stock, page: 1, pageSize: FETCH_SIZE });
+        const r = await listProducts({
+          q: debouncedQ,
+          category: cat,
+          stock,
+          brand,
+          sort,
+          page,
+          pageSize: PAGE_SIZE,
+        });
         if (cancelled) return;
         if (!r.ok) throw new Error(r.message);
         setRows(r.data.data ?? []);
+        setTotal(r.data.total ?? 0);
+        setTotalPages(r.data.totalPages ?? 1);
+        setStart(r.data.start ?? 0);
+        setEnd(r.data.end ?? 0);
       } catch (e) {
         if (!cancelled) {
           setRows([]);
@@ -95,47 +113,59 @@ function ProductsInner() {
       }
     })();
     return () => { cancelled = true; };
-  }, [debouncedQ, cat, stock]);
+  }, [debouncedQ, cat, stock, brand, sort, page]);
 
-  const suppliers = useMemo(() => distinct(rows.map((r) => r.supplierName)), [rows]);
-  const brands = useMemo(() => distinct(rows.map((r) => r.brandName)), [rows]);
-
-  const filtered = useMemo(() => {
-    const lo = minPrice === "" ? -Infinity : Number(minPrice);
-    const hi = maxPrice === "" ? Infinity : Number(maxPrice);
-    const out = rows.filter((r) => {
-      if (supplier !== "all" && r.supplierName !== supplier) return false;
-      if (brand !== "all" && (r.brandName ?? "") !== brand) return false;
-      if (Number.isFinite(lo) && r.price < lo) return false;
-      if (Number.isFinite(hi) && r.price > hi) return false;
-      return true;
-    });
-    switch (sort) {
-      case "price-asc": out.sort((a, b) => a.price - b.price); break;
-      case "price-desc": out.sort((a, b) => b.price - a.price); break;
-      case "stock-desc": out.sort((a, b) => b.stock - a.stock); break;
-      case "name": out.sort((a, b) => a.name.localeCompare(b.name, "en-IN")); break;
-      default: break; // newest — server already orders by updated_at desc
+  /* All filters in the URL — refresh, back and share keep the exact grid. */
+  const syncing = useRef(false);
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    let changed = false;
+    const setOrDelete = (k: string, v: string) => {
+      if (v === "" || v === "all" || (k === "sort" && v === "newest")) {
+        if (params.has(k)) { params.delete(k); changed = true; }
+      } else if (params.get(k) !== v) { params.set(k, v); changed = true; }
+    };
+    setOrDelete("q", debouncedQ);
+    setOrDelete("category", cat);
+    setOrDelete("stock", stock);
+    setOrDelete("brand", brand);
+    setOrDelete("sort", sort);
+    /* Drop retired filters (supplier, min/max price) from legacy shared URLs. */
+    for (const k of ["supplier", "minPrice", "maxPrice"]) {
+      if (params.has(k)) { params.delete(k); changed = true; }
     }
-    return out;
-  }, [rows, supplier, brand, minPrice, maxPrice, sort]);
+    if (!changed) return;
+    syncing.current = true;
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+    window.setTimeout(() => { syncing.current = false; }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, cat, stock, brand, sort]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / GRID_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const start = filtered.length === 0 ? 0 : (safePage - 1) * GRID_SIZE + 1;
-  const end = Math.min(filtered.length, safePage * GRID_SIZE);
-  const visible = filtered.slice((safePage - 1) * GRID_SIZE, safePage * GRID_SIZE);
+  /* Adopt back/forward navigation. */
+  useEffect(() => {
+    if (syncing.current) return;
+    const get = (k: string, fb: string) => searchParams.get(k) ?? fb;
+    const uq = get("q", "");
+    const uc = get("category", "all");
+    const us = get("stock", "all");
+    const ub = get("brand", "all");
+    const uso = get("sort", "newest");
+    if (uq !== q) setQ(uq);
+    if (uc !== cat) setCat(uc);
+    if (us !== stock) setStock(us);
+    if (ub !== brand) setBrand(ub);
+    if (uso !== sort && (SORTS as string[]).includes(uso)) setSort(uso as SortKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const hasFilters =
-    q !== "" || cat !== "all" || stock !== "all" || supplier !== "all" ||
-    brand !== "all" || minPrice !== "" || maxPrice !== "";
+    q !== "" || cat !== "all" || stock !== "all" || brand !== "all";
   const activeFilterCount =
-    (cat !== "all" ? 1 : 0) + (stock !== "all" ? 1 : 0) + (supplier !== "all" ? 1 : 0) +
-    (brand !== "all" ? 1 : 0) + (minPrice !== "" ? 1 : 0) + (maxPrice !== "" ? 1 : 0);
+    (cat !== "all" ? 1 : 0) + (stock !== "all" ? 1 : 0) + (brand !== "all" ? 1 : 0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const clearAll = () => {
-    setQ(""); setCat("all"); setStock("all"); setSupplier("all");
-    setBrand("all"); setMinPrice(""); setMaxPrice(""); setPage(1);
+    setQ(""); setDebouncedQ(""); setCat("all"); setStock("all");
+    setBrand("all"); setSort("newest"); setPage(1);
   };
 
   return (
@@ -143,14 +173,15 @@ function ProductsInner() {
       <PageHeader
         kicker="Catalogue"
         title="Products"
-        sub={`${filtered.length} styles · search, filter, open for full detail.`}
+        sub={`${total} styles · search, filter, open for full detail.`}
+        trail={[{ label: "Products" }]}
         actions={isManager ? <Button className="group min-h-[44px] bg-[var(--fp-brand)] text-white transition-all duration-150 hover:-translate-y-px hover:bg-[var(--fp-brand-deep)] active:translate-y-0" asChild><Link href="/inventory/new"><Plus data-icon="inline-start" className="transition-transform duration-150 group-hover:rotate-90" /> Add product</Link></Button> : undefined}
       />
 
       <Card className="shadow-[0_1px_2px_rgba(28,25,23,0.04)]">
         <CardContent className="flex flex-col gap-2 pt-4">
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search aria-hidden className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1); }}
@@ -159,7 +190,7 @@ function ProductsInner() {
               aria-label="Search products"
             />
             {q && (
-              <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[36px] w-9 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95">✕</button>
+              <button onClick={() => setQ("")} aria-label="Clear search" className="absolute right-2 top-1/2 grid min-h-[44px] w-11 -translate-y-1/2 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95">✕</button>
             )}
           </div>
           <div className="flex items-center gap-2 md:hidden">
@@ -183,19 +214,12 @@ function ProductsInner() {
               </button>
             )}
           </div>
-          <div id="products-filters" className={`${filtersOpen ? "grid" : "hidden"} grid-cols-2 gap-2 md:grid md:grid-cols-3 xl:grid-cols-6`}>
+          <div id="products-filters" className={`${filtersOpen ? "grid" : "hidden"} grid-cols-1 gap-2 sm:grid-cols-2 md:grid md:grid-cols-2 xl:grid-cols-4`}>
             <Select value={cat} onValueChange={(v) => { setCat(v); setPage(1); }}>
               <SelectTrigger className="min-h-[48px] w-full rounded-xl" aria-label="Category"><SelectValue placeholder="Category" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
                 {cats.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} ({c.productCount})</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={supplier} onValueChange={(v) => { setSupplier(v); setPage(1); }}>
-              <SelectTrigger className="min-h-[48px] w-full rounded-xl" aria-label="Supplier"><SelectValue placeholder="Supplier" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All suppliers</SelectItem>
-                {suppliers.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={brand} onValueChange={(v) => { setBrand(v); setPage(1); }}>
@@ -214,30 +238,12 @@ function ProductsInner() {
                 <SelectItem value="out-of-stock">Out of stock</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+            <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setPage(1); }}>
               <SelectTrigger className="min-h-[48px] w-full rounded-xl" aria-label="Sort"><SelectValue placeholder="Sort" /></SelectTrigger>
               <SelectContent>
                 {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => <SelectItem key={k} value={k}>{SORT_LABEL[k]}</SelectItem>)}
               </SelectContent>
             </Select>
-            <div className="flex gap-2">
-              <Input
-                value={minPrice}
-                onChange={(e) => { setMinPrice(e.target.value.replace(/[^0-9]/g, "")); setPage(1); }}
-                placeholder="Min ₹"
-                inputMode="numeric"
-                aria-label="Minimum price"
-                className="tnum min-h-[48px] rounded-xl"
-              />
-              <Input
-                value={maxPrice}
-                onChange={(e) => { setMaxPrice(e.target.value.replace(/[^0-9]/g, "")); setPage(1); }}
-                placeholder="Max ₹"
-                inputMode="numeric"
-                aria-label="Maximum price"
-                className="tnum min-h-[48px] rounded-xl"
-              />
-            </div>
           </div>
           {hasFilters && (
             <button onClick={clearAll} className="hidden min-h-[44px] items-center self-start rounded-xl border px-4 text-[13.5px] font-semibold transition-all hover:-translate-y-px hover:border-foreground md:inline-flex">
@@ -257,7 +263,7 @@ function ProductsInner() {
             <div key={i} className="skeleton-soft h-[280px] rounded-2xl" style={{ animationDelay: `${i * 100}ms` }} />
           ))}
         </div>
-      ) : visible.length === 0 ? (
+      ) : rows.length === 0 ? (
         <Card className="overflow-hidden">
           <CardContent className="flex flex-col items-center gap-1.5 px-6 py-12 text-center">
             <span aria-hidden className="empty-plate"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></span>
@@ -269,7 +275,7 @@ function ProductsInner() {
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((p) => {
+            {rows.map((p) => {
               const s = stockStatus(p);
               const cls = "group overflow-hidden rounded-2xl border bg-card transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(28,25,23,0.35)]";
               const body = (
@@ -297,18 +303,13 @@ function ProductsInner() {
                   </div>
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 border-t bg-muted/30 px-4 py-3 text-[12.5px]">
                     <Detail label="Category" value={p.categoryName} />
-                    <Detail label="Supplier" value={p.supplierName} />
                     <Detail label="Brand" value={p.brandName} />
-                    <Detail label="Design" value={p.designNo} />
-                    <Detail label="Barcode" value={p.barcode} mono />
                     <Detail label="Size · Colour" value={[p.sizes.join(", "), p.colors.join(", ")].filter(Boolean).join(" · ")} />
-                    <Detail label="HSN" value={p.hsnCode} mono />
-                    <Detail label="Cost" value={p.cost > 0 ? formatINR(p.cost) : ""} tnum />
                   </dl>
                 </>
               );
               return isManager ? (
-                <Link key={p.id} href={`/inventory/${p.id}`} className={cls}>
+                <Link key={p.id} href={`/inventory/${p.id}`} className={cls} aria-label={`Open ${p.name} details`}>
                   {body}
                 </Link>
               ) : (
@@ -319,7 +320,7 @@ function ProductsInner() {
             })}
           </div>
           <PaginationControls
-            page={safePage} totalPages={totalPages} total={filtered.length}
+            page={page} totalPages={totalPages} total={total}
             start={start} end={end} onPage={setPage}
           />
         </>

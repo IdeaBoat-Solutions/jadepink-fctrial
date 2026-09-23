@@ -154,7 +154,7 @@ export default function LoginPage() {
                     key={m} type="button" aria-pressed={method === m}
                     onClick={() => { setMethod(m); setError(""); }}
                     className={cn(
-                      "min-h-[40px] rounded-md text-[13.5px] font-semibold transition-colors",
+                      "min-h-[44px] rounded-md text-[13.5px] font-semibold transition-colors",
                       method === m ? "bg-white text-[#1c1917] shadow-sm" : "text-[#57534e] hover:text-[#1c1917]"
                     )}
                   >
@@ -190,7 +190,7 @@ export default function LoginPage() {
                         onClick={() => setShowPassword((v) => !v)}
                         aria-pressed={showPassword}
                         aria-label={showPassword ? "Hide password" : "Show password"}
-                        className="absolute top-1/2 right-2 min-h-[36px] -translate-y-1/2 rounded-lg px-2.5 text-[13px] font-semibold text-[#78716c] transition-colors hover:bg-[#f3eeea] hover:text-[#1c1917] active:scale-95"
+                        className="absolute top-1/2 right-2 flex min-h-[44px] -translate-y-1/2 items-center rounded-lg px-2.5 text-[13px] font-semibold text-[#78716c] transition-colors hover:bg-[#f3eeea] hover:text-[#1c1917] active:scale-95"
                       >
                         {showPassword ? "Hide" : "Show"}
                       </button>
@@ -211,11 +211,11 @@ export default function LoginPage() {
                     <TextInput id="login-code" autoComplete="one-time-code" inputMode="numeric" maxLength={6} placeholder="••••••" value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "").slice(0, 6)); setError(""); }} aria-invalid={!!error} autoFocus />
                   </Field>
                   <PrimaryButton type="submit" disabled={busy}>{busy ? "Verifying…" : "Verify & sign in →"}</PrimaryButton>
-                  <div className="flex items-center justify-between text-[13px]">
-                    <button type="button" onClick={() => { setStep("mobile"); setCode(""); setError(""); }} className="font-semibold text-[var(--staff-brand)] hover:underline">
+                  <div className="flex items-center justify-between gap-2 text-[13px]">
+                    <button type="button" onClick={() => { setStep("mobile"); setCode(""); setError(""); }} className="flex min-h-[44px] items-center font-semibold text-[var(--staff-brand)] hover:underline">
                       ← Use a different number
                     </button>
-                    <button type="button" onClick={sendOtp} disabled={busy} className="font-semibold text-[#57534e] hover:underline disabled:opacity-50">
+                    <button type="button" onClick={sendOtp} disabled={busy} className="flex min-h-[44px] items-center font-semibold text-[#57534e] hover:underline disabled:opacity-50">
                       Resend code
                     </button>
                   </div>

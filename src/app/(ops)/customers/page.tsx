@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { useCustomerSearch } from "@/features/customers/use-customer-search";
 import { createCustomerSchema } from "@/features/customers/schemas";
-import { Btn, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
+import { Btn, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
+import { CustomerCreateForm, type CustomerCreateData } from "@/components/floor/customer-create-form";
 import { formatMobileIN, normalizeMobile } from "@/lib/domain";
 import type { CustomerSnapshotLive } from "@/lib/api";
 
@@ -33,12 +34,7 @@ function CustomersInner() {
   const [startingId, setStartingId] = useState<string | null>(null);
   const [created, setCreated] = useState<CustomerSnapshotLive | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  // Inline create-form fields (replaces the deleted CreateCustomerCard).
-  const [ncName, setNcName] = useState("");
-  const [ncPhone, setNcPhone] = useState("");
-  const [ncSource, setNcSource] = useState("Walk-in");
-  const [ncArea, setNcArea] = useState("");
-  const [ncBudget, setNcBudget] = useState("");
+  // Inline create status (the fields live in the shared CustomerCreateForm).
   const [ncSaving, setNcSaving] = useState(false);
   const [ncErr, setNcErr] = useState("");
   const [ncExisting, setNcExisting] = useState<CustomerSnapshotLive | null>(null);
@@ -60,12 +56,8 @@ function CustomersInner() {
     setNcExisting(null);
   };
 
-  // Prefill the inline form from the searched query at open time.
+  // Prefill comes from the shared form's initials at open time.
   const openCreate = () => {
-    setNcName(/[\p{L}]/u.test(q) ? q.trim() : "");
-    setNcPhone(digits);
-    setNcArea("");
-    setNcBudget("");
     setNcErr("");
     setNcExisting(null);
     setShowCreate(true);
@@ -74,10 +66,10 @@ function CustomersInner() {
   // Inline directory create — same zod schema as the visit identify form, so
   // the rules can never drift apart again. Duplicate resolves the existing
   // record and offers it (never a dead-end error).
-  const submitCreate = async () => {
+  const submitCreate = async (data: CustomerCreateData) => {
     setNcErr("");
     setNcExisting(null);
-    const parsed = createCustomerSchema.safeParse({ name: ncName, phone: ncPhone, source: ncSource, area: ncArea.trim() || undefined, budget: ncBudget || undefined });
+    const parsed = createCustomerSchema.safeParse({ name: data.name, phone: data.phone, source: data.source, area: data.area.trim() || undefined, budget: data.budget || undefined });
     if (!parsed.success) {
       setNcErr(parsed.error.issues[0]?.message ?? "Check the name and number and try again.");
       return;
@@ -184,39 +176,21 @@ function CustomersInner() {
                   </div>
                 </div>
               ) : (
-                <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void submitCreate(); }} aria-label="Create customer record">
-                  <p className="text-[13.5px] font-semibold tracking-tight">New customer</p>
-                  <p className="text-[12.5px] leading-snug text-[#78716c]">Name, mobile and how they found the store — the record is usable the moment it saves.</p>
-                  <Field label="Name" htmlFor="nc-name" required>
-                    <input id="nc-name" value={ncName} onChange={(e) => setNcName(e.target.value)} placeholder="e.g. Priya Shah" autoComplete="off" className={inputClass} />
-                  </Field>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Mobile" htmlFor="nc-mobile" required>
-                      <input id="nc-mobile" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} placeholder="+91 98765 43210" inputMode="tel" autoComplete="off" className={inputClass} />
-                    </Field>
-                    <Field label="How did you hear about us?" htmlFor="nc-source">
-                      <select id="nc-source" value={ncSource} onChange={(e) => setNcSource(e.target.value)} className={inputClass}>
-                        {["Walk-in", "Instagram", "Meta Lead", "Referral", "Google", "Friend", "Other"].map((s) => <option key={s}>{s}</option>)}
-                      </select>
-                    </Field>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Area" htmlFor="nc-area" hint="Neighbourhood — e.g. Satellite, Vastrapur.">
-                      <input id="nc-area" value={ncArea} onChange={(e) => setNcArea(e.target.value)} placeholder="e.g. Satellite" autoComplete="off" className={inputClass} />
-                    </Field>
-                    <Field label="Budget" htmlFor="nc-budget">
-                      <select id="nc-budget" value={ncBudget} onChange={(e) => setNcBudget(e.target.value)} className={inputClass}>
-                        <option value="">Not asked</option>
-                        {["Under ₹5k", "₹5–15k", "₹15–30k", "₹30k+"].map((b) => <option key={b}>{b}</option>)}
-                      </select>
-                    </Field>
-                  </div>
-                  {ncErr && <p role="alert" className="text-[13px] font-medium text-[#b4232a]">{ncErr}</p>}
-                  <div className="flex gap-2">
-                    <Btn tone="brand" disabled={ncSaving} onClick={() => void submitCreate()} className="flex-1">{ncSaving ? "Creating…" : "Create →"}</Btn>
-                    <Btn tone="line" onClick={() => setShowCreate(false)} className="shrink-0">Cancel</Btn>
-                  </div>
-                </form>
+                <CustomerCreateForm
+                  idPrefix="dir-nc"
+                  initialName={/[\p{L}]/u.test(q) ? q.trim() : ""}
+                  initialPhone={digits}
+                  contextLine={
+                    digits.length >= 6
+                      ? `No record for “${formatMobileIN(digits)}”. Just the name and number — the rest can wait.`
+                      : "No name match. Just the name and number — the rest can wait."
+                  }
+                  submitLabel="Create →"
+                  saving={ncSaving}
+                  error={ncErr || null}
+                  onSubmit={(data) => void submitCreate(data)}
+                  onCancel={() => setShowCreate(false)}
+                />
               )}
             </div>
           )}
@@ -291,7 +265,7 @@ function CustomersInner() {
             {known.map((c) => {
               const live = visits.some((v) => v.customerId === c.id && v.status === "ACTIVE");
               return (
-                <li key={c.id} className="flex items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3">
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-[var(--fp-line)] py-3">
                   <Link href={`/customers/${c.id}`} className="min-w-0">
                     <span className="block text-[15.5px] font-semibold">{c.name}</span>
                     <span className="fp-num text-[12.5px] text-[var(--fp-muted)]">{formatMobileIN(c.phone)}</span>

@@ -588,6 +588,19 @@ body {
   color: var(--staff-faint);
 }
 
+/* Banners — one error language, one neutral-note language.
+   Pages must use these instead of hard-coded hex banners. */
+.staff-banner-error {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.staff-banner-note {
+  border: 1px solid var(--staff-line);
+  background: #fff;
+  color: var(--staff-ink);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .staff-page > * { animation: none; }
   .pressable, .btn-sheen::after { transition: none; }
