@@ -6,6 +6,12 @@
 
     { "email": "fc-aakash@jadepink.test", "name": "Aakash More", "role": "FC", "store_id": "store-thaltej" },
     { "email": "fc-zoya@jadepink.test", "name": "Zoya Sheikh", "role": "FC", "store_id": "store-thaltej" },
-    { "email": "fc-rohan@jadepink.test", "name": "Rohan Desai", "role": "FC", "store_id": "store-thaltej" }
+    { "email": "fc-rohan@jadepink.test", "name": "Rohan Desai", "role": "FC", "store_id": "store-thaltej" },
+
+    { "email": "fc-riya@jadepink.test", "name": "Riya Sharma", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "fc-mehul@jadepink.test", "name": "Mehul Joshi", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "fc-aakashverma@jadepink.test", "name": "Aakash Verma", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "fc-nehapatel@jadepink.test", "name": "Neha Patel", "role": "FC", "store_id": "store-thaltej" },
+    { "email": "manager-vikram@jadepink.test", "name": "Vikram Singhania", "role": "STORE_MANAGER", "store_id": "store-thaltej" }
   ]
 }

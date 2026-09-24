@@ -33,10 +33,9 @@
 }
 
 .floor-os .fp-name {
-  font-family: var(--font-lux), "Cormorant Garamond", Georgia, serif;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  font-variant-ligatures: common-ligatures;
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* Display moments — hero names, greetings. Thin, high-contrast, quiet.
