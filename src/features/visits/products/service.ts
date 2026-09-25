@@ -365,7 +365,11 @@ export async function markProductPurchased(
   const { vp, visit } = await loadVisitProduct(auth, visitProductId);
   assertVisitActive(visit);
   if (vp.status === "PURCHASED") {
-    // Idempotent retry — optionally backfill a bill number that was skipped.
+    // Idempotent retry — backfill a bill number that was skipped, and freeze
+    // the price for pieces billed before migration 240 existed.
+    if (vp.price_at_bill == null && vp.product?.price != null) {
+      await patchVisitProduct(vp.id, { price_at_bill: vp.product.price });
+    }
     if (bill && !vp.bill_number) {
       await patchVisitProduct(vp.id, { bill_number: bill });
       await insertVisitEvent({
@@ -393,12 +397,15 @@ export async function markProductPurchased(
     vp.id,
     vp.status,
     "PURCHASED",
-    { purchased_at: nowIso(), bill_number: bill || null },
+    // price_at_bill freezes what the customer paid (migration 240) — a later
+    // catalogue price edit must not rewrite this visit's history.
+    { purchased_at: nowIso(), bill_number: bill || null, price_at_bill: vp.product?.price ?? null },
     "PRODUCT_PURCHASED",
     {
       product_variant_id: vp.product_variant_id,
       sku: vp.product?.sku ?? null,
       bill_number: bill || null,
+      price_at_bill: vp.product?.price ?? null,
     },
   );
   // Ledger write AFTER the state change (same ordering rule as events): if it
@@ -430,6 +437,11 @@ export async function markProductsPurchased(
       visitId = visit.id;
       assertVisitActive(visit);
       if (vp.status === "PURCHASED") {
+        // Heal the price snapshot too — a piece billed before migration 240
+        // (or before the column was applied) freezes on its next billing pass.
+        if (vp.price_at_bill == null && vp.product?.price != null) {
+          await patchVisitProduct(vp.id, { price_at_bill: vp.product.price });
+        }
         if (bill && !vp.bill_number) {
           await patchVisitProduct(vp.id, { bill_number: bill });
         }
@@ -451,12 +463,13 @@ export async function markProductsPurchased(
           vp.id,
           vp.status,
           "PURCHASED",
-          { purchased_at: nowIso(), bill_number: bill || null },
+          { purchased_at: nowIso(), bill_number: bill || null, price_at_bill: vp.product?.price ?? null },
           "PRODUCT_PURCHASED",
           {
             product_variant_id: vp.product_variant_id,
             sku: vp.product?.sku ?? null,
             bill_number: bill || null,
+            price_at_bill: vp.product?.price ?? null,
           },
         ),
       );

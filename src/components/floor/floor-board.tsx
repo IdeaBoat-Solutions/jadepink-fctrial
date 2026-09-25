@@ -9,7 +9,7 @@ import { Btn, Drawer, EmptyNote, ErrorNote, StatusMark } from "@/components/floo
 import { DropReasonModal, type DropModalState } from "@/components/floor/drop-reason-modal";
 import { useStore } from "@/lib/store";
 import { searchTokens } from "@/lib/fuzzy";
-import { requestRunner, setVisitSuite, lookupBarcode } from "@/lib/api";
+import { lookupBarcode } from "@/lib/api";
 import type { ProductCardDTO, VisitWithProductsDTO } from "@/features/visits/products/dto";
 import { useVisitProductsRealtime } from "@/features/visits/products/use-visit-products-realtime";
 import type { ProductVisitStatus } from "@/features/visits/products/types";
@@ -20,25 +20,10 @@ type Filter = "ALL" | "SELECTED" | "TRIAL" | "LIKED" | "DROPPED" | "BILLED";
 type SortKey = "priority" | "price-desc" | "price-asc" | "name";
 
 /* Header buttons (workspace) drive the board without prop-drilling every
-   drawer: each new seq triggers once. Suite changes report up so the
-   workspace header chip stays in sync with the rail assignment. */
+   drawer: each new seq triggers once. */
 export interface BoardExternalAction {
   seq: number;
   kind: "scan" | "search" | "summary";
-}
-
-/* Fitting suites mirror the server allowlist (VISIT_SUITES) — client copy so
-   the server module (Supabase admin reads) never ships to the browser. */
-const SUITES = [
-  { id: "SUITE_01", label: "Suite 01" },
-  { id: "SUITE_02", label: "Suite 02" },
-  { id: "SUITE_03", label: "Suite 03" },
-  { id: "SALON_VIP", label: "Salon VIP" },
-] as const;
-
-export function suiteLabelLocal(suite: string | null | undefined): string | null {
-  if (!suite) return null;
-  return SUITES.find((s) => s.id === suite)?.label ?? suite;
 }
 
 type ScanResult = {
@@ -175,13 +160,11 @@ export function FloorBoard({
   visitId,
   onHandoff,
   externalAction,
-  onSuiteChange,
   readOnly,
 }: {
   visitId: string;
   onHandoff?: () => void;
   externalAction?: BoardExternalAction | null;
-  onSuiteChange?: (suite: string | null) => void;
   /** Closed visit: full record visible, every action hidden. */
   readOnly?: boolean;
 }) {
@@ -192,9 +175,6 @@ export function FloorBoard({
   const [filter, setFilter] = useState<Filter>("ALL");
   const [sort, setSort] = useState<SortKey>("priority");
   const [torchOn, setTorchOn] = useState(false);
-  const [runnerNote, setRunnerNote] = useState("");
-  const [runnerBusy, setRunnerBusy] = useState(false);
-  const [suiteBusy, setSuiteBusy] = useState(false);
   /* Camera lifecycle: permission is requested ONLY on an explicit "Start
      camera" tap — never as a side effect of opening the scanner panel.
      "denied" / "unsupported" render their own recovery UI instead of a
@@ -205,6 +185,7 @@ export function FloorBoard({
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [endingVisit, setEndingVisit] = useState(false);
   const [detail, setDetail] = useState<ProductCardDTO | null>(null);
+  const [hiddenProductIds, setHiddenProductIds] = useState<Set<string>>(() => new Set());
   const [dropModal, setDropModal] = useState<DropModalState | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
   /* Combined bill (Amazon-cart style): liked pieces ticked on the board share
@@ -212,15 +193,12 @@ export function FloorBoard({
   const [billIds, setBillIds] = useState<string[]>([]);
   const [billOpen, setBillOpen] = useState(false);
   const [billNumber, setBillNumber] = useState("");
-  const [identifier, setIdentifier] = useState("");
   const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchCandidate[] | null>(null);
   const [activeIdx, setActiveIdx] = useState(-1);
   const searchReq = useRef(0);
-  const scanRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const camStop = useRef<(() => void) | null>(null);
@@ -276,16 +254,38 @@ export function FloorBoard({
     }
   }, [refresh, pushToast]);
 
-  const lookup = useCallback(async (value: string) => {
+  const rejectProduct = useCallback(async (card: ProductCardDTO) => {
+    if (busy) return;
+    setHiddenProductIds((current) => new Set(current).add(card.id));
+    setDetail((current) => (current?.id === card.id ? null : current));
+    setBillIds((current) => current.filter((id) => id !== card.id));
+    setBusy(`unlike-${card.id}`);
+    setErr(null);
+    try {
+      await callApi(visitId, "unlike", { visitProductId: card.id });
+      await refresh();
+      pushToast("Removed from wishlist", card.product.name);
+    } catch (e) {
+      setHiddenProductIds((current) => {
+        const next = new Set(current);
+        next.delete(card.id);
+        return next;
+      });
+      setErr(friendly(e instanceof ApiError ? e.code : "INTERNAL", e instanceof Error ? e.message : ""));
+    } finally {
+      setBusy(null);
+    }
+  }, [busy, pushToast, refresh, visitId]);
+
+  const lookup = async (value: string) => {
     const code = value.trim();
     if (!code) return;
     setScanning(true);
     setErr(null);
-    setScanResult(null);
     try {
       const data = (await callApi(visitId, "scan", { identifier: code })) as ScanResult;
-      setScanResult(data);
       if (data.alreadyAdded) pushToast("Already on this visit", data.product.product.name);
+      else addVariant(data.product.id, data.product.product.name);
     } catch (e) {
       const apiCode = e instanceof ApiError ? e.code : "INTERNAL";
       if (apiCode === "PRODUCT_NOT_FOUND" && code.length >= 2) {
@@ -325,22 +325,19 @@ export function FloorBoard({
     } finally {
       setScanning(false);
     }
-  }, [pushToast, stopCamera, visitId]);
+  };
 
-  /* Opening the panel must NEVER trigger the permission prompt — it only
-     reveals the viewport and focuses the manual field (handheld USB/Bluetooth
-     scanners type straight into it, no camera needed). */
+  /* Opening product search must never trigger the camera permission prompt. */
   const openScan = () => {
-    setScanResult(null);
-    setIdentifier("");
     setErr(null);
-    window.setTimeout(() => scanRef.current?.focus(), 40);
+    setSearchOpen(true);
+    window.setTimeout(() => searchInputRef.current?.focus(), 40);
   };
 
   /* Camera starts only from the explicit "Start camera" tap, so the browser
      prompt arrives with context. Every failure mode gets a human state:
      denied → how to re-enable; insecure context / no BarcodeDetector →
-     manual entry is the fallback, never a silently dead frame. */
+     SKU search remains available, never leaving a silently dead frame. */
   const startCamera = async () => {
     const Detector = (window as unknown as { BarcodeDetector?: new (o?: { formats?: string[] }) => { detect: (src: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
     if (!Detector || !navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
@@ -370,7 +367,6 @@ export function FloorBoard({
             stream.getTracks().forEach((t) => t.stop());
             camStop.current = null;
             setCamState("off"); // tracks are gone — don't claim "live"
-            setIdentifier(raw);
             void lookup(raw);
             return;
           }
@@ -428,42 +424,18 @@ export function FloorBoard({
     }
   }, [pushToast, torchOn]);
 
-  const assignSuite = useCallback(async (suite: string) => {
-    setSuiteBusy(true);
-    const r = await setVisitSuite(visitId, suite);
-    setSuiteBusy(false);
-    if (!r.ok) {
-      setErr({ title: "Suite not assigned.", body: r.message });
-      return;
-    }
-    onSuiteChange?.(r.data.suite ?? suite);
-    pushToast(`Moved to ${suiteLabelLocal(r.data.suite ?? suite) ?? suite}`, "Runner and billing see the same suite.");
-    void refresh();
-  }, [onSuiteChange, pushToast, refresh, visitId]);
-
-  const callRunner = useCallback(async () => {
-    setRunnerBusy(true);
-    const r = await requestRunner(visitId, runnerNote.trim() || undefined);
-    setRunnerBusy(false);
-    if (!r.ok) {
-      setErr({ title: "Runner not called.", body: r.message });
-      return;
-    }
-    setRunnerNote("");
-    pushToast("Runner called", r.data.note ? `${r.data.note} · ${suiteLabelLocal(r.data.suite) ?? "floor"}` : "They are on their way.");
-  }, [pushToast, runnerNote, visitId]);
-
-  const addVariant = (id: string, name: string) => {
+  function addVariant(id: string, name: string) {
     void run(`add-${id}`, async () => {
       await callApi(visitId, "add", { productVariantId: id });
-      setScanResult(null);
-      setIdentifier("");
-      // Keep the inline search open so the FC can add multiple pieces.
-      // Just mark the added row instead of wiping the typed query.
-      setSearchResults((cur) => (cur ? cur.map((c) => (c.id === id ? { ...c, alreadyAdded: true } : c)) : cur));
+      // The piece is on the visit — collapse the search bar back so the FC
+      // lands on the board, not a stale suggestion list. Fresh query next time.
+      setSearchOpen(false);
+      setSearchQuery("");
+      setSearchResults(null);
+      setActiveIdx(-1);
       closeScan();
     }, { title: "Added to visit", body: name });
-  };
+  }
 
   const doSearch = async (opts?: { quiet?: boolean }) => {
     const q = searchQuery.trim();
@@ -633,7 +605,7 @@ export function FloorBoard({
   const products = state.status === "ready" ? state.data.products : [];
   const summary = state.status === "ready" ? state.data.summary : null;
   const counts = useMemo(() => {
-    const list = state.status === "ready" ? state.data.products : [];
+    const list = (state.status === "ready" ? state.data.products : []).filter((p) => !hiddenProductIds.has(p.id));
     return {
       all: list.length,
       selected: list.filter((p) => p.status === "SELECTED").length,
@@ -642,9 +614,10 @@ export function FloorBoard({
       dropped: list.filter((p) => p.status === "DROPPED").length,
       billed: list.filter((p) => p.status === "PURCHASED").length,
     };
-  }, [state]);
+  }, [hiddenProductIds, state]);
 
   const visible = products.filter((p) => {
+    if (hiddenProductIds.has(p.id)) return false;
     if (filter === "SELECTED") return p.status === "SELECTED";
     if (filter === "TRIAL") return p.status === "TRIAL_IN_PROGRESS" || p.status === "TRIAL_COMPLETED";
     if (filter === "LIKED") return p.status === "LIKED";
@@ -668,19 +641,6 @@ export function FloorBoard({
     if (sort === "name") return a.product.name.localeCompare(b.product.name);
     return SORT_RANK[a.status] - SORT_RANK[b.status] || b.product.price - a.product.price;
   });
-
-  /* Mockup "BAG TOTAL": sum of everything the customer keeps. */
-  const bagItems = products.filter((p) => p.status === "LIKED" || p.status === "PURCHASED");
-  const bagTotal = bagItems.reduce((s, p) => s + p.product.price, 0);
-  const bagAvg = bagItems.length > 0 ? Math.round(bagTotal / bagItems.length) : 0;
-
-  /* Stat-bar inputs: decided = verdict reached; trialledTotal = ever tried on. */
-  const decided = (summary?.liked ?? 0) + (summary?.dropped ?? 0) + (summary?.purchased ?? 0);
-  const trialledTotal = (summary?.trialInProgress ?? 0) + (summary?.trialCompleted ?? 0) + decided;
-  const decidedPct = trialledTotal ? Math.round((decided / trialledTotal) * 100) : 0;
-  const likedTotal = (summary?.liked ?? 0) + (summary?.purchased ?? 0);
-
-  const suite = state.status === "ready" ? state.data.visit.suite : null;
 
   /* Combined-bill selection: only LIKED pieces can share one bill. */
   const billItems = products.filter((p) => billIds.includes(p.id) && p.status === "LIKED");
@@ -730,42 +690,6 @@ export function FloorBoard({
 
   return (
     <div className="mt-6">
-      {/* Ops-console stat cards: derived counts, never stored. Bars show
-          share-of-visit so the FC reads the funnel at a glance. */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard
-          label="Selected items"
-          value={summary?.selected ?? 0}
-          sub="in wardrobe"
-          pct={products.length ? Math.round(((summary?.selected ?? 0) / products.length) * 100) : 0}
-        />
-        <StatCard
-          label="Trials"
-          value={(summary?.trialInProgress ?? 0) + (summary?.trialCompleted ?? 0)}
-          sub={`${decidedPct}% evaluated`}
-          pct={trialledTotal ? Math.round((decided / trialledTotal) * 100) : 0}
-        />
-        <StatCard
-          label="Liked"
-          value={(summary?.liked ?? 0) + (summary?.purchased ?? 0)}
-          sub="Ready to pack"
-          tone="green"
-          pct={likedTotal ? Math.round(((summary?.purchased ?? 0) / likedTotal) * 100) : 0}
-        />
-        <StatCard
-          label="Dropped"
-          value={summary?.dropped ?? 0}
-          sub="Back on the rail"
-          tone="red"
-          pct={products.length ? Math.round(((summary?.dropped ?? 0) / products.length) * 100) : 0}
-        />
-        <div className="rounded-xl border border-[#e9e2d8] bg-white p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6b645c]">Bag total</p>
-          <p className="fp-num mt-1.5 text-[26px] font-bold leading-none tracking-tight text-[#211d18]">{formatINR(bagTotal)}</p>
-          <p className="fp-num mt-1.5 text-[12px] text-[#6b645c]">Avg per piece: {formatINR(bagAvg)}</p>
-        </div>
-      </div>
-
       {err && <div className="mt-4"><ErrorNote title={err.title} body={err.body} action={<Btn tone="quiet" onClick={() => setErr(null)}>Dismiss</Btn>} /></div>}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -922,7 +846,7 @@ export function FloorBoard({
                     }
                   }}
                   onLike={() => void run(`like-${card.id}`, () => callApi(visitId, "like", { visitProductId: card.id }), { title: "Liked", body: card.product.name })}
-                  onUnlike={() => void run(`unlike-${card.id}`, () => callApi(visitId, "unlike", { visitProductId: card.id }), { title: "Like removed", body: `${card.product.name} is back where it was.` })}
+                  onUnlike={() => void rejectProduct(card)}
                   onDrop={() => { openDrop(card); }}
                   onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
@@ -973,10 +897,10 @@ export function FloorBoard({
                 <span aria-hidden className="size-2 rounded-full bg-[var(--fp-brand)]" /> Live Tag Scanner
               </p>
             }
-            meta={<span className="text-[11px] font-semibold text-[#7a736a]">{camState === "live" ? "Camera live" : camState === "denied" ? "Camera blocked" : "Manual entry"}</span>}
+            meta={<span className="text-[11px] font-semibold text-[#7a736a]">{camState === "live" ? "Camera live" : camState === "denied" ? "Camera blocked" : "Camera scan"}</span>}
           >
             <div className="relative overflow-hidden rounded-lg bg-[#23403a]">
-              <video ref={videoRef} muted playsInline aria-label="Live camera view for scanning product barcodes. Use manual entry below if the camera is unavailable." className="aspect-[16/10] max-h-[260px] w-full object-cover opacity-90 sm:aspect-[4/3] sm:max-h-none" />
+              <video ref={videoRef} muted playsInline aria-label="Live camera view for scanning product barcodes. Use SKU search if the camera is unavailable." className="aspect-[16/10] max-h-[260px] w-full object-cover opacity-90 sm:aspect-[4/3] sm:max-h-none" />
               <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
                 <div className="h-[55%] w-[72%] rounded border-2 border-dashed border-white/60" />
               </div>
@@ -1001,7 +925,7 @@ export function FloorBoard({
                     <p className="text-[13.5px] font-bold">Camera access blocked</p>
                     <p className="mt-1 text-[12.5px] text-white/80">
                       Allow the camera for this site in your browser&apos;s address-bar settings, then tap Retry.
-                      Manual entry and a handheld scanner work without it.
+                      You can still add products with SKU search.
                     </p>
                     <button
                       type="button"
@@ -1018,8 +942,7 @@ export function FloorBoard({
                   <div className="text-white">
                     <p className="text-[13.5px] font-bold">Camera unavailable</p>
                     <p className="mt-1 text-[12.5px] text-white/80">
-                      No camera on this device, or the site is not on HTTPS. Type the barcode below, or use a
-                      handheld scanner — it types into the field like a keyboard.
+                      No camera on this device, or the site is not on HTTPS. Use SKU search to add the product.
                     </p>
                   </div>
                 </div>
@@ -1049,119 +972,11 @@ export function FloorBoard({
             <p className="mt-2.5 text-center text-[12.5px] text-[#7a736a]">
               {camState === "live"
                 ? "Align tag barcode within reticle"
-                : "Type the barcode, or tap Start camera — a handheld scanner types here too."}
+                : "Tap Start camera to scan, or add products with SKU search."}
             </p>
             {scanning && <p role="status" className="mt-2 text-center text-[13px] font-semibold text-[#57534e]">Looking up…</p>}
           </SideSection>
 
-          <SideSection
-            label="Last tag read"
-            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Last tag read</p>}
-          >
-            {scanResult ? (
-              <div>
-                <p className="truncate font-mono text-[13px] font-semibold text-[#211d18]">{scanResult.product.sku}</p>
-                <p className="mt-0.5 truncate text-[13px] text-[#7a736a]">{scanResult.product.product.name}</p>
-                <div className="mt-2.5">
-                  {scanResult.alreadyAdded ? (
-                    <p className="text-[13.5px] font-semibold text-[#9a5b00]">Already on this visit.</p>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy === `add-${scanResult.product.id}`}
-                      onClick={() => addVariant(scanResult.product.id, scanResult.product.product.name)}
-                      className="inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-[#23403a] px-4 text-[14px] font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
-                    >
-                      {busy === `add-${scanResult.product.id}` ? "Adding…" : "Instant Add"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <p className="text-[13.5px] text-[#7a736a]">No tag read yet — scan or enter a code below.</p>
-            )}
-          </SideSection>
-
-          <SideSection
-            label="Manual SKU entry"
-            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Manual SKU entry</p>}
-          >
-            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void lookup(identifier); }}>
-              <div className="flex min-h-[44px] flex-1 items-center gap-1.5 rounded-lg border border-[#e0d7c9] bg-white px-3">
-                <span aria-hidden className="font-mono text-[15px] text-[#a8a29e]">#</span>
-                <input
-                  ref={scanRef}
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="JP-KUR-4091-M"
-                  aria-label="Enter SKU manually"
-                  autoComplete="off"
-                  className="w-full bg-transparent font-mono text-[16px] outline-none placeholder:text-[#736c64] sm:text-[14px]"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={scanning || !identifier.trim()}
-                className="inline-flex min-h-[44px] items-center rounded-lg bg-[#23403a] px-5 text-[14px] font-bold text-white disabled:opacity-60"
-              >
-                {scanning ? "…" : "Enter"}
-              </button>
-            </form>
-          </SideSection>
-
-          <SideSection
-            label="Fitting room"
-            title={<p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">Fitting Room</p>}
-            meta={<p className="text-[11.5px] font-semibold text-[#57534e]">Active: {suiteLabelLocal(suite) ?? "—"}</p>}
-          >
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" role="group" aria-label="Assign fitting suite">
-              {SUITES.map((s) => {
-                const active = suite === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={suiteBusy}
-                    onClick={() => void assignSuite(s.id)}
-                    aria-pressed={active}
-                    className={`min-h-[44px] rounded-lg px-1 text-[12px] font-bold transition-colors disabled:opacity-60 ${
-                      active ? "bg-[#23403a] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </SideSection>
-
-          <SideSection
-            label="Runner request"
-            title={<p className="text-[14px] font-bold text-[#211d18]">Runner request</p>}
-          >
-            <p className="text-[13px] text-[#7a736a]">Size swap or steamer{suiteLabelLocal(suite) ? ` to ${suiteLabelLocal(suite)}` : ""}</p>
-            <form
-              className="mt-2.5 flex gap-2"
-              onSubmit={(e) => { e.preventDefault(); void callRunner(); }}
-            >
-              <input
-                value={runnerNote}
-                onChange={(e) => setRunnerNote(e.target.value)}
-                placeholder="What do you need?"
-                aria-label="Runner request note"
-                autoComplete="off"
-                maxLength={200}
-                className="min-h-[44px] flex-1 rounded-lg border border-[#e0d7c9] bg-white px-3 text-[16px] outline-none placeholder:text-[#736c64] sm:text-[14px]"
-              />
-              <button
-                type="submit"
-                disabled={runnerBusy}
-                className="inline-flex min-h-[44px] shrink-0 items-center rounded-lg bg-[#f1ece4] px-4 text-[13.5px] font-bold text-[#211d18] hover:bg-[#e7dfd3] disabled:opacity-60"
-              >
-                {runnerBusy ? "…" : "Call Runner"}
-              </button>
-            </form>
-          </SideSection>
         </aside>)}
       </div>
 
@@ -1418,25 +1233,6 @@ function SideSection({
   );
 }
 
-function StatCard({ label, value, sub, pct, tone }: { label: string; value: number; sub: string; pct: number; tone?: "green" | "red" }) {
-  const bar = tone === "green" ? "bg-[#2e6b4f]" : tone === "red" ? "bg-[var(--fp-drop)]" : "bg-[#23403a]";
-  const card = tone === "green" ? "bg-[#eef6f1]" : tone === "red" ? "bg-[var(--fp-drop-bg)]" : "bg-white";
-  /* Tinted cards need a darker muted: #7a736a only reaches ~4.0–4.2:1 on the
-     green/red washes. #5c564d clears 4.5:1 on every card variant. */
-  const muted = tone ? "text-[#5c564d]" : "text-[#6b645c]";
-  return (
-    <div className={`rounded-xl border border-[#e9e2d8] ${card} p-4`}>
-      <p className={`text-[11px] font-bold uppercase tracking-[0.1em] ${muted}`}>{label}</p>
-      <p className="mt-1.5 flex items-baseline gap-2">
-        <span className="fp-num text-[26px] font-bold leading-none tracking-tight text-[#211d18]">{value}</span>
-        <span className={`text-[12px] font-medium ${muted}`}>{sub}</span>
-      </p>
-      <div aria-hidden className="mt-3 h-1 overflow-hidden rounded-full bg-[#e7dfd3]">
-        <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
-      </div>
-    </div>
-  );
-}
 
 function Sum({ k, v }: { k: string; v: number }) {
   return (
@@ -1619,6 +1415,8 @@ function ProductRow({
 }) {
   const p = card.product;
   const dropped = card.status === "DROPPED";
+  const wishlisted = card.status === "LIKED" || card.status === "PURCHASED";
+  const canWishlist = !readOnly && !dropped && card.status !== "PURCHASED";
   return (
     <article className={`rounded-xl border border-[#e9e2d8] border-l-4 ${EDGE[card.status]} bg-white p-3 sm:p-4`}>
       <div className="flex gap-3 sm:gap-4">
@@ -1645,15 +1443,21 @@ function ProductRow({
             <strong className="shrink-0 font-semibold">Size {p.size}</strong>
             <span aria-hidden>·</span>
             <span className="min-w-0 flex-1 basis-16 truncate">{p.colour}</span>
-            <button
-              type="button"
-              onClick={() => { void navigator.clipboard?.writeText(p.sku).catch(() => {}); }}
-              aria-label={`Copy SKU ${p.sku}`}
-              title="Copy full SKU"
-              className="grid min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-md text-[12px] text-[#a8a094] hover:bg-[#f1ece4] hover:text-[#211d18]"
-            >
-              <span aria-hidden>⧉</span>
-            </button>
+            {canWishlist || wishlisted ? (
+              <button
+                type="button"
+                onClick={wishlisted ? onUnlike : onLike}
+                disabled={!canWishlist || busy === `like-${card.id}` || busy === `unlike-${card.id}`}
+                aria-label={wishlisted ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`}
+                aria-pressed={wishlisted}
+                title={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                className={`grid min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-md transition-colors hover:bg-[#f1ece4] disabled:cursor-not-allowed disabled:opacity-60 ${wishlisted ? "text-[#c33f5a]" : "text-[#a8a094] hover:text-[#c33f5a]"}`}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill={wishlisted ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z" />
+                </svg>
+              </button>
+            ) : null}
           </p>
           {card.status === "TRIAL_IN_PROGRESS" && card.timeline.trialStartedAt && (
             <p className="mt-1 text-[12.5px] text-[#7a736a]">Trying now · started {ago(card.timeline.trialStartedAt)}</p>

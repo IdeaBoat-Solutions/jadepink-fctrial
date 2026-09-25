@@ -163,7 +163,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const [handoffErr, setHandoffErr] = useState<string | null>(null);
   /* Header buttons drive the board: each action carries a seq so repeats fire. */
   const [boardAction, setBoardAction] = useState<BoardExternalAction | null>(null);
-  const [suiteOverride, setSuiteOverride] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -180,7 +179,7 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const fireBoard = (kind: BoardExternalAction["kind"]) =>
     setBoardAction((cur) => ({ seq: (cur?.seq ?? 0) + 1, kind }));
 
-  const suite = suiteOverride ?? visit.suite ?? null;
+  const suite = visit.suite ?? null;
   const elapsedMin = visit.startedAt ? Math.max(0, Math.floor((now - new Date(visit.startedAt).getTime()) / 60000)) : null;
   const visitCode = `#${visit.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`;
   const storedTier = customer?.tier === "Gold" || customer?.tier === "Silver" ? `${customer.tier} member` : null;
@@ -360,7 +359,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           visitId={visit.id}
           onHandoff={() => void handoff()}
           externalAction={boardAction}
-          onSuiteChange={(s) => setSuiteOverride(s)}
         />
       )}
 

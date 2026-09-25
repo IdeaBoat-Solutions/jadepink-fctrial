@@ -60,6 +60,7 @@ interface RawVisitProduct {
   note: string | null;
   staff_note: string | null;
   bill_number: string | null;
+  price_at_bill?: number | string | null;
   purchased_at: string | null;
   created_at: string;
   updated_at: string;
@@ -115,6 +116,7 @@ export function mapVisitProduct(row: RawVisitProduct): VisitProductRow {
     note: row.note,
     staff_note: row.staff_note ?? null,
     bill_number: row.bill_number ?? null,
+    price_at_bill: row.price_at_bill != null ? Number(row.price_at_bill) : null,
     purchased_at: row.purchased_at ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -222,25 +224,25 @@ export async function searchVariants(query: string, limit = 12): Promise<Product
     byProduct = (data ?? []) as RawVariant[];
   }
 
+  /* Single O(n) pass over the prefetched candidates: dedupe + score + collect
+     in one walk — no second mapping pass, and the query is normalized once.
+     (The DB LIMITs above bound n; per-candidate work is constant: a few
+     tokens × a few words, edit distance capped with early bail.) */
+  const queryNorm = normalizeSearchText(query);
   const seen = new Set<string>();
-  const rows: RawVariant[] = [];
+  const scored: Array<{ variant: ProductVariantRow; score: number; prefix: boolean }> = [];
   for (const r of [...((byCode ?? []) as RawVariant[]), ...byProduct]) {
     if (!r?.id || seen.has(r.id)) continue;
     seen.add(r.id);
-    rows.push(r);
-  }
-
-  const scored: Array<{ row: RawVariant; score: number; prefix: boolean }> = [];
-  for (const r of rows) {
     const m = mapVariant(r);
     const haystack = [m.product_name ?? "", m.colour ?? "", m.size ?? "", m.product_category ?? "", m.sku ?? "", m.barcode ?? ""].join(" ");
     const score = rankQuery(haystack, tokens);
     if (score === null) continue;
     const name = (m.product_name ?? "").toLowerCase();
-    scored.push({ row: r, score, prefix: name.startsWith(normalizeSearchText(query)) });
+    scored.push({ variant: m, score, prefix: queryNorm ? name.startsWith(queryNorm) : false });
   }
   scored.sort((a, b) => a.score - b.score || Number(b.prefix) - Number(a.prefix));
-  return scored.slice(0, cap > 12 ? 12 : cap).map((s) => mapVariant(s.row));
+  return scored.slice(0, cap > 12 ? 12 : cap).map((s) => s.variant);
 }
 
 /* ---------- Visit products ---------- */

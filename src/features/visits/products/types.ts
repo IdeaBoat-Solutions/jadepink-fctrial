@@ -76,6 +76,10 @@ export interface VisitProductRow {
   staff_note: string | null;
   /** Roadmap Stage 3 "Billed — scanned": bill number + close timestamp. */
   bill_number: string | null;
+  /** Variant price frozen when the piece was billed (migration 240). Past
+      visits must not change value when the catalogue price is edited; null for
+      rows billed before the snapshot existed. */
+  price_at_bill: number | null;
   purchased_at: string | null;
   created_at: string;
   updated_at: string;

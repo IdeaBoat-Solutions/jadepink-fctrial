@@ -113,6 +113,7 @@ drop policy if exists "authenticated insert orders" on public.orders;
 drop policy if exists "manager update orders" on public.orders;
 drop policy if exists "staff read own profile" on public.staff_profiles;
 drop policy if exists "manager read team profiles" on public.staff_profiles;
+drop policy if exists "staff read own store roster" on public.staff_profiles;
 drop policy if exists "manager write team profiles" on public.staff_profiles;
 drop policy if exists "staff read own store visits" on public.visits;
 drop policy if exists "staff insert own store visits" on public.visits;

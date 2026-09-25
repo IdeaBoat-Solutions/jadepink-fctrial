@@ -52,6 +52,7 @@ describe("computeVisitProductSummary (§43)", () => {
     note: null,
     staff_note: null,
     bill_number: null,
+    price_at_bill: null,
     purchased_at: null,
     created_at: "2026-09-22T00:00:00Z",
     updated_at: "2026-09-22T00:00:00Z",
