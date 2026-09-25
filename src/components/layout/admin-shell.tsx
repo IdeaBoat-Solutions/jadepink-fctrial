@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, ShoppingCart, Truck, Users, BarChart3,
@@ -81,7 +82,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild tooltip="JadePink dashboard">
                 <Link href="/dashboard">
-                  <img src="/logo.jpeg" alt="JadePink logo" className="h-8 w-auto shrink-0 rounded-xl object-contain" />
+                  <Image src="/logo.jpeg" alt="JadePink logo" width={32} height={32} className="h-8 w-auto shrink-0 rounded-xl object-contain" />
                   <span className="flex flex-col leading-none">
                     <span className="text-[13px] font-bold tracking-[0.14em]">JADEPINK</span>
                     <span className="mt-0.5 text-[11px] font-normal text-muted-foreground">Store OS</span>

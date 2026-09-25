@@ -10,12 +10,12 @@ export async function GET() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ user: null, profile: null });
-    const { data: row } = await supabase.from("staff_profiles").select("id, name, role, store_id").eq("id", user.id).single();
-    const profile = row
+    const { data: row } = await supabase.from("staff_profiles").select("id, name, role, store_id, active").eq("id", user.id).single();
+    const profile = row?.active
       ? { id: row.id, name: row.name, role: row.role, storeId: row.store_id }
       : null;
-    return NextResponse.json({ user: { id: user.id, email: user.email }, profile });
-  } catch (e) {
-    return NextResponse.json({ user: null, profile: null, error: String(e) });
+    return NextResponse.json({ user: profile ? { id: user.id, email: user.email } : null, profile });
+  } catch {
+    return NextResponse.json({ user: null, profile: null, error: "Could not load the staff profile." });
   }
 }

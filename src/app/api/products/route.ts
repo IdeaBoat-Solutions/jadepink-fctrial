@@ -79,6 +79,8 @@ export async function POST(req: Request) {
       brand_name: v.brandName || null,
       design_no: v.designNo || null,
       hsn_code: v.hsnCode || null,
+      size: v.size || null,
+      color: v.color || null,
       image_url: v.imageUrl || null,
       image_urls: v.imageUrls ?? [],
     })
@@ -95,5 +97,30 @@ export async function POST(req: Request) {
       { status: dup ? 409 : 500 }
     );
   }
-  return NextResponse.json({ source: "db", data: created }, { status: 201 });
+  const variant = await supabase
+    .from("product_variants")
+    .insert({
+      id: crypto.randomUUID(),
+      product_id: created.id,
+      sku: v.sku,
+      barcode: v.barcode || null,
+      size: v.size || "ONE_SIZE",
+      colour: v.color || "ONE_COLOUR",
+      price: v.price,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (variant.error) {
+    // Do not leave a product that the floor scanner cannot find. The parent is
+    // removed when the default sellable variant cannot be created.
+    await supabase.from("products").delete().eq("id", created.id);
+    return NextResponse.json(
+      { code: "DEFAULT_VARIANT_FAILED", error: "Product saved without a sellable variant could not be created. Check that the product variants migration is applied." },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ source: "db", data: created, variantId: variant.data.id }, { status: 201 });
 }

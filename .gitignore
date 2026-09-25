@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local agent settings
+/.claude/settings.local.json
+
 # production
 /build
 

@@ -30,8 +30,9 @@ const SECTIONS = [
 
 function useScrollSpy(ids: string[]): string {
   const [active, setActive] = useState(ids[0]);
+  const idsKey = ids.join("|");
   useEffect(() => {
-    const els = ids.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
+    const els = idsKey.split("|").map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
     if (els.length === 0) return;
     const obs = new IntersectionObserver(
       (entries) => {
@@ -43,7 +44,7 @@ function useScrollSpy(ids: string[]): string {
     );
     els.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
-  }, [ids.join("|")]);
+  }, [idsKey]);
   return active;
 }
 
@@ -119,7 +120,7 @@ function ProfileSection() {
                     onClick={copyId}
                     aria-label="Copy full staff ID"
                     title="Copy full ID"
-                    className="grid min-h-[32px] min-w-[32px] place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="grid min-h-11 min-w-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                   </button>

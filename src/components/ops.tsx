@@ -24,14 +24,14 @@ export function ContactIcons({ phone, name }: { phone: string; name?: string }) 
   if (!digits) return null;
   const wa = whatsAppLink(phone, name ? `Hi ${name}, this is JadePink!` : undefined);
   return (
-    <span className="inline-flex items-center gap-1.5" aria-label={`Contact options`}>
+    <span className="inline-flex shrink-0 items-center gap-1.5" aria-label="Contact options">
       <a
         href={wa}
         target="_blank"
         rel="noreferrer"
-        aria-label={`Chat on WhatsApp`}
+        aria-label="Chat on WhatsApp"
         title="Chat on WhatsApp"
-        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-[#d9efe2] bg-[#eefaf2] px-2 text-[#177245] hover:border-[#177245]"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-[#d9efe2] bg-[#eefaf2] px-2 text-[#177245] hover:border-[#177245]"
       >
         <MessageCircle className="size-4" aria-hidden />
       </a>
@@ -39,7 +39,7 @@ export function ContactIcons({ phone, name }: { phone: string; name?: string }) 
         href={`tel:+91${digits.slice(-10)}`}
         aria-label="Call customer"
         title="Call customer"
-        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full border border-[#e8dfd6] bg-white px-2 text-[#57534e] hover:border-[#1c1917] hover:text-[#1c1917]"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-[#e8dfd6] bg-white px-2 text-[#57534e] hover:border-[#1c1917] hover:text-[#1c1917]"
       >
         <Phone className="size-4" aria-hidden />
       </a>
@@ -52,11 +52,13 @@ export function ContactIcons({ phone, name }: { phone: string; name?: string }) 
 export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnapshotLive; compact?: boolean }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[18px] font-semibold tracking-tight text-[#1c1917]">{customer.name}</p>
-          <p className="tnum flex items-center gap-2 text-[14px] text-[#57534e]">
-            {customer.phone}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* min-w-0 lets the text column shrink inside the flex row, so a long
+            name/phone wraps instead of pushing the View history link out. */}
+        <div className="min-w-0 flex-1 basis-40">
+          <p className="break-words text-[18px] font-semibold tracking-tight text-[#1c1917]">{customer.name}</p>
+          <p className="tnum flex flex-wrap items-center gap-2 text-[14px] text-[#57534e]">
+            <span className="min-w-0 break-all">{customer.phone}</span>
             <ContactIcons phone={customer.phone} name={customer.name} />
           </p>
           {(customer.area || customer.budget || customer.source) && (
@@ -80,10 +82,11 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
           {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
         </p>
       )}
-      <dl className="grid grid-cols-3 gap-2 border-t border-[#e8dfd6] pt-3">
-        <div><dt className="text-[12px] font-medium text-[#78716c]">Visits</dt><dd className="tnum text-[16px] font-semibold">{customer.visitCount}</dd></div>
-        <div><dt className="text-[12px] font-medium text-[#78716c]">Purchases</dt><dd className="tnum text-[16px] font-semibold">{customer.purchaseCount}</dd></div>
-        <div>
+      {/* One column on phones — the date cell cannot fit a third of 320px. */}
+      <dl className="grid grid-cols-1 gap-2 border-t border-[#e8dfd6] pt-3 sm:grid-cols-3">
+        <div className="min-w-0"><dt className="text-[12px] font-medium text-[#78716c]">Visits</dt><dd className="tnum text-[16px] font-semibold">{customer.visitCount}</dd></div>
+        <div className="min-w-0"><dt className="text-[12px] font-medium text-[#78716c]">Purchases</dt><dd className="tnum text-[16px] font-semibold">{customer.purchaseCount}</dd></div>
+        <div className="min-w-0">
           <dt className="text-[12px] font-medium text-[#78716c]">Last visit</dt>
           <dd className="text-[13.5px] font-semibold">
             {customer.lastVisitAt ? new Date(customer.lastVisitAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "First one"}
@@ -100,7 +103,7 @@ export function CustomerSnapshot({ customer, compact }: { customer: CustomerSnap
 
 const HISTORY_PAGE = 3;
 
-export function HistoryLayers({ customerId, phone, name }: { customerId: string; phone?: string; name?: string }) {
+export function HistoryLayers({ customerId, phone, name, hideHeader }: { customerId: string; phone?: string; name?: string; hideHeader?: boolean }) {
   const [history, setHistory] = useState<PastVisitHistoryLive[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [limit, setLimit] = useState(HISTORY_PAGE);
@@ -129,7 +132,9 @@ export function HistoryLayers({ customerId, phone, name }: { customerId: string;
   const visible = history.slice(0, limit);
   return (
     <div className="flex flex-col gap-2">
-      {phone && (
+      {/* The side-by-side column supplies its own header + contact icons, so
+          this row is skipped there to avoid saying "Visit history" twice. */}
+      {phone && !hideHeader && (
         <div className="flex items-center justify-between px-1 py-1">
           <span className="text-[12.5px] font-medium text-[#78716c]">Visit history</span>
           <ContactIcons phone={phone} name={name} />
@@ -240,135 +245,168 @@ export function WhatsAppPanel({ customerId, phone, name, visitId }: { customerId
   };
 
   if (logs === null) {
-    return <p className="px-1 py-3 text-[13.5px] text-[#78716c]" aria-busy="true">Loading WhatsApp log…</p>;
+    /* Same header markup as the loaded state — otherwise the column visibly
+       jumps a row when the request resolves. */
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl border-b border-[#eef4f0] px-4 py-3">
+          <h3 className="inline-flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">
+            <MessageCircle className="size-4 text-[#1faa55]" aria-hidden /> WhatsApp history
+          </h3>
+          {phone && (
+            <a
+              href={whatsAppLink(phone, name ? `Hi ${name}, this is JadePink!` : undefined)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#1faa55] px-3.5 text-[13px] font-bold text-white hover:bg-[#177245]"
+            >
+              <MessageCircle className="size-4" aria-hidden /> Open WhatsApp
+            </a>
+          )}
+        </div>
+        <p className="p-4 text-[13.5px] text-[#78716c]" aria-busy="true">Loading WhatsApp log…</p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {phone && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-1">
-          <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#177245]">
-            <MessageCircle className="size-4" aria-hidden /> WhatsApp follow-ups
-          </span>
+    /* h-full lets this column fill the grid-stretched parent, so the log
+       composer sits at the bottom instead of floating after the last entry. */
+    <div className="flex h-full flex-col">
+      {/* Header is unconditional so this column always carries the same
+          top rule as the visit column beside it. Only the action varies:
+          without a stored mobile there is no wa.me link to offer. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-t-xl border-b border-[#eef4f0] px-4 py-3">
+        <h3 className="inline-flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">
+          <MessageCircle className="size-4 text-[#1faa55]" aria-hidden /> WhatsApp history
+        </h3>
+        {phone && (
           <a
             href={whatsAppLink(phone, name ? `Hi ${name}, this is JadePink!` : undefined)}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[#1faa55] px-3.5 text-[13px] font-bold text-white hover:bg-[#177245]"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-[#1faa55] px-3.5 text-[13px] font-bold text-white hover:bg-[#177245]"
           >
             <MessageCircle className="size-4" aria-hidden /> Open WhatsApp
           </a>
-        </div>
-      )}
-      {loadErr && <p role="alert" className="px-1 text-[13px] font-medium text-[#b4232a]">{loadErr}</p>}
-      {logs.length === 0 && !loadErr && (
-        <p className="px-1 py-2 text-[13.5px] text-[#78716c]">
-          No WhatsApp follow-ups logged yet. Chat on WhatsApp, then log the outcome here.
-        </p>
-      )}
-      {logs.length > 0 && (
-        <ul className="flex flex-col gap-1.5">
-          {logs.map((l) => (
-            <li key={l.id} className="rounded-lg border border-[#e8dfd6] bg-[#faf8f6] px-4 py-2.5">
-              <p className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-[#78716c]">
-                <span className={cn(
-                  "inline-flex items-center rounded-full px-2 py-0.5 text-[11.5px] font-bold",
-                  l.direction === "incoming" ? "bg-[#e8f0fe] text-[#1a56db]" : l.direction === "note" ? "bg-[#f1ece4] text-[#57534e]" : "bg-[#d9efe2] text-[#177245]",
-                )}>
-                  {l.direction === "incoming" ? "Received" : l.direction === "note" ? "Note" : "Sent"}
-                </span>
-                <span className="tnum">
-                  {new Date(l.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                </span>
-              </p>
-              <p className="mt-1 text-[13.5px] leading-relaxed text-[#1c1917]">{l.body}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form
-        className="mt-1 flex flex-col gap-2 rounded-lg border border-[#e8dfd6] p-3"
-        onSubmit={(e) => { e.preventDefault(); void save(); }}
-      >
-        <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Log type">
-          {WA_DIRECTIONS.map((d) => (
-            <button
-              key={d.value}
-              type="button"
-              role="radio"
-              aria-checked={direction === d.value}
-              onClick={() => setDirection(d.value)}
-              className={cn(
-                "min-h-9 rounded-full border px-3 text-[12.5px] font-semibold",
-                direction === d.value
-                  ? "border-[#1c1917] bg-[#1c1917] text-white"
-                  : "border-[#d6c9bb] text-[#57534e] hover:border-[#1c1917]",
-              )}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-        <label className="sr-only" htmlFor={`wa-log-${customerId}`}>Log WhatsApp follow-up</label>
-        <textarea
-          id={`wa-log-${customerId}`}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="e.g. Sent catalogue on WhatsApp — likes pastel lehengas"
-          rows={2}
-          maxLength={1000}
-          className="w-full rounded-lg border border-[#d6c9bb] bg-white px-3 py-2 text-[14px] text-[#1c1917] placeholder:text-[#a8a29e] focus:border-[#1c1917] focus:outline-none"
-        />
-        {saveErr && <p role="alert" className="text-[13px] font-medium text-[#b4232a]">{saveErr}</p>}
-        <button
-          type="submit"
-          disabled={!body.trim() || saving}
-          className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#1c1917] px-4 text-[13.5px] font-bold text-white disabled:opacity-40"
+        )}
+      </div>
+
+      {/* Body keeps its own padding so the header can be full-bleed; every
+          block below shares this exact inset, which is what makes the column
+          read as one aligned stack. */}
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        {loadErr && <p role="alert" className="text-[13px] font-medium text-[#b4232a]">{loadErr}</p>}
+
+        {logs.length === 0 && !loadErr && (
+          <div className="rounded-lg border border-dashed border-[#d6c9bb] bg-[#faf8f6] px-4 py-6 text-center">
+            <p className="text-[13.5px] font-medium text-[#57534e]">No follow-ups logged yet</p>
+            <p className="mx-auto mt-1 max-w-[32ch] text-[13px] leading-relaxed text-[#78716c]">
+              Open WhatsApp, then note what was said so the next FC has the context.
+            </p>
+          </div>
+        )}
+
+        {logs.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {logs.map((l) => (
+              <li key={l.id} className="rounded-lg border border-[#e8dfd6] bg-[#faf8f6] px-3.5 py-2.5">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-[#78716c]">
+                  <span className={cn(
+                    "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11.5px] font-bold uppercase tracking-wide",
+                    l.direction === "incoming" ? "bg-[#e8f0fe] text-[#1a56db]" : l.direction === "note" ? "bg-[#f1ece4] text-[#57534e]" : "bg-[#d9efe2] text-[#177245]",
+                  )}>
+                    {l.direction === "incoming" ? "Received" : l.direction === "note" ? "Note" : "Sent"}
+                  </span>
+                  <span className="tnum">
+                    {new Date(l.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                  </span>
+                </p>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#1c1917]">{l.body}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* Log composer, pinned below the list so it never floats mid-column. */}
+        <form
+          className="mt-auto flex flex-col gap-2.5 rounded-lg border border-[#e8dfd6] bg-white p-3"
+          onSubmit={(e) => { e.preventDefault(); void save(); }}
         >
-          {saving ? "Saving…" : "Log follow-up"}
-        </button>
-      </form>
+          <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Log type">
+            {WA_DIRECTIONS.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                role="radio"
+                aria-checked={direction === d.value}
+                onClick={() => setDirection(d.value)}
+                className={cn(
+                  "min-h-11 rounded-full border px-3 text-[12.5px] font-semibold transition-colors",
+                  direction === d.value
+                    ? "border-[#1c1917] bg-[#1c1917] text-white"
+                    : "border-[#d6c9bb] text-[#57534e] hover:border-[#1c1917]",
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <label className="sr-only" htmlFor={`wa-log-${customerId}`}>Log WhatsApp follow-up</label>
+          <textarea
+            id={`wa-log-${customerId}`}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="e.g. Sent catalogue on WhatsApp — likes pastel lehengas"
+            rows={2}
+            maxLength={1000}
+            className="w-full resize-y rounded-lg border border-[#d6c9bb] bg-white px-3 py-2 text-[14px] text-[#1c1917] placeholder:text-[#a8a29e] focus:border-[#1c1917] focus:outline-none"
+          />
+          {saveErr && <p role="alert" className="text-[13px] font-medium text-[#b4232a]">{saveErr}</p>}
+          <button
+            type="submit"
+            disabled={!body.trim() || saving}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-[#1c1917] px-4 text-[13.5px] font-bold text-white disabled:opacity-40"
+          >
+            {saving ? "Saving…" : "Log follow-up"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
 
-/* ---------- History tabs: visits + WhatsApp side by side ---------- */
+/* ---------- History side by side: visits (left) + WhatsApp (right) ----------
+   Two columns rather than tabs: the FC reading a customer's history almost
+   always needs both at once — what they tried in store, and what was said on
+   WhatsApp afterwards. Tabs made one of them a tap away and easy to forget.
+   Stacks to a single column on narrow screens (visit history first, since it
+   is the primary record). */
 
-export function HistoryWithWhatsApp({ customerId, phone, name, visitId }: { customerId: string; phone?: string; name?: string; visitId?: string | null }) {
-  const [tab, setTab] = useState<"visits" | "whatsapp">("visits");
+export function HistorySideBySide({
+  customerId, phone, name, visitId,
+}: {
+  customerId: string;
+  phone?: string;
+  name?: string;
+  visitId?: string | null;
+}) {
   return (
-    <div>
-      <div className="flex gap-1.5" role="tablist" aria-label="Customer history">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "visits"}
-          onClick={() => setTab("visits")}
-          className={cn(
-            "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13.5px] font-bold",
-            tab === "visits" ? "bg-[#1c1917] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]",
-          )}
-        >
-          Visit history
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "whatsapp"}
-          onClick={() => setTab("whatsapp")}
-          className={cn(
-            "inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-[13.5px] font-bold",
-            tab === "whatsapp" ? "bg-[#1faa55] text-white" : "bg-[#f1ece4] text-[#57534e] hover:bg-[#e7dfd3]",
-          )}
-        >
-          <MessageCircle className="size-4" aria-hidden /> WhatsApp
-        </button>
-      </div>
-      <div className="mt-2" role="tabpanel">
-        {tab === "visits"
-          ? <HistoryLayers customerId={customerId} phone={phone} name={name} />
-          : <WhatsAppPanel customerId={customerId} phone={phone} name={name} visitId={visitId} />}
-      </div>
+    /* items-stretch (not items-start) so both columns share a top edge and the
+       shorter one grows to match — the header rules then sit on one line. */
+    <div className="grid items-stretch gap-5 lg:grid-cols-2">
+      <section aria-label="Visit history" className="flex min-w-0 flex-col rounded-xl border border-[#e8dfd6] bg-white">
+        <header className="flex items-center justify-between gap-3 rounded-t-xl border-b border-[#f1ece4] px-4 py-3">
+          <h3 className="text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">Visit history</h3>
+          {phone && <ContactIcons phone={phone} name={name} />}
+        </header>
+        <div className="flex flex-1 flex-col p-4">
+          <HistoryLayers customerId={customerId} phone={phone} name={name} hideHeader />
+        </div>
+      </section>
+      <section aria-label="WhatsApp history" className="flex min-w-0 flex-col rounded-xl border border-[#d9efe2] bg-white">
+        <WhatsAppPanel customerId={customerId} phone={phone} name={name} visitId={visitId} />
+      </section>
     </div>
   );
 }

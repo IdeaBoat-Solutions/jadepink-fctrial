@@ -96,17 +96,26 @@ export async function getCustomerHistory(
   }
 
   const visitIds = rows.map((v) => v.id);
-  const { data: products } = await supabase
+  const { data: products, error: productsError } = await supabase
     .from("visit_products")
     .select(
-      "visit_id, status, bill_number, product_variants(size, colour, price, products(name))",
+      "visit_id, status, bill_number, price_at_bill, product_variants(size, colour, price, products(name))",
     )
     .in("visit_id", visitIds);
+
+  // Tolerant of pre-240 databases: retry without the price snapshot column.
+  const productRows = productsError && /price_at_bill/i.test(productsError.message ?? "")
+    ? ((await supabase
+        .from("visit_products")
+        .select("visit_id, status, bill_number, product_variants(size, colour, price, products(name))")
+        .in("visit_id", visitIds)).data ?? [])
+    : (products ?? []);
 
   type RawVp = {
     visit_id: string;
     status: string;
     bill_number: string | null;
+    price_at_bill?: number | string | null;
     product_variants?:
       | {
           size?: string;
@@ -124,7 +133,7 @@ export async function getCustomerHistory(
   };
 
   const byVisit = new Map<string, RawVp[]>();
-  for (const p of (products ?? []) as RawVp[]) {
+  for (const p of productRows as RawVp[]) {
     const list = byVisit.get(p.visit_id) ?? [];
     list.push(p);
     byVisit.set(p.visit_id, list);
@@ -144,7 +153,14 @@ export async function getCustomerHistory(
           ? variant.products[0]
           : variant.products
         : null;
-      const price = variant?.price != null ? Number(variant.price) : null;
+      // Frozen-at-bill price wins (migration 240): editing the catalogue price
+      // must never rewrite what a past visit was worth. Fall back to the live
+      // variant price only for rows billed before the snapshot existed.
+      const price = p.price_at_bill != null
+        ? Number(p.price_at_bill)
+        : variant?.price != null
+          ? Number(variant.price)
+          : null;
       const status = p.status;
 
       if (

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/layout/page-header";
-import { getProduct, listMovements, listPurchasesForProduct } from "@/features/catalogue/repository";
+import { getProduct, listMovements, listProductVariants, listPurchasesForProduct } from "@/features/catalogue/repository";
 import { stockStatus, stockLabel } from "@/lib/inventory";
 import type { Metadata } from "next";
 import { formatINR, formatDateIN, formatChannel } from "@/lib/utils";
@@ -16,11 +16,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const p = await getProduct(id);
   if (!p) notFound();
-  const [moves, bought] = await Promise.all([
+  const [moves, bought, variants] = await Promise.all([
     listMovements(p.id),
     listPurchasesForProduct(p.id).catch(() => ({ items: [], totalQty: 0, totalRevenue: 0 })),
+    listProductVariants(p.id).catch(() => []),
   ]);
   const s = stockStatus(p);
+  const images = [...new Set([...(p.imageUrls ?? []), p.imageUrl, p.image].filter((url): url is string => !!url))];
 
   return (
     <div className="staff-page">
@@ -31,6 +33,14 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         trail={[{ label: "Inventory", href: "/inventory" }, { label: p.name }]}
         actions={<Button variant="outline" className="group min-h-[44px] transition-all duration-150 hover:-translate-y-px active:translate-y-0" asChild><Link href="/inventory"><span aria-hidden className="transition-transform duration-150 group-hover:-translate-x-0.5">←</span> All inventory</Link></Button>}
       />
+      {images.length > 0 && (
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {images.slice(0, 4).map((url) => (
+            // eslint-disable-next-line @next/next/no-img-element -- catalogue images are external Supabase storage URLs
+            <img key={url} src={url} alt={`${p.name} product image`} className="aspect-square w-full rounded-xl border bg-muted object-cover" />
+          ))}
+        </div>
+      )}
       <div className="grid items-start gap-3 lg:grid-cols-[1fr_340px]">
         <div className="flex min-w-0 flex-col gap-3">
           <Card className="overflow-hidden">
@@ -48,6 +58,33 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 )}
                 <p>Reorder when {p.lowStockAt} or fewer are left</p>
               </div>
+            </CardContent>
+          </Card>
+          <Card className="overflow-x-auto">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle>Sellable variants</CardTitle>
+                <p className="text-[13px] text-muted-foreground">Each size/colour has its own scannable identity.</p>
+              </div>
+              <Badge variant="outline">{variants.length} variant{variants.length === 1 ? "" : "s"}</Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table className="min-w-[620px]">
+                <TableHeader><TableRow><TableHead>Size</TableHead><TableHead>Colour</TableHead><TableHead>Variant SKU</TableHead><TableHead>Barcode</TableHead><TableHead className="text-right">Price</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {variants.map((v) => (
+                    <TableRow key={v.id} className="transition-colors hover:bg-muted/40">
+                      <TableCell className="font-medium">{v.size}</TableCell>
+                      <TableCell>{v.colour}</TableCell>
+                      <TableCell className="font-mono text-[12px]">{v.sku}</TableCell>
+                      <TableCell className="tnum text-[12px]">{v.barcode || "—"}</TableCell>
+                      <TableCell className="tnum text-right font-semibold">{formatINR(v.price)}</TableCell>
+                      <TableCell><Badge variant={v.isActive ? "success" : "secondary"}>{v.isActive ? "Active" : "Inactive"}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {!variants.length && <TableRow><TableCell colSpan={6} className="py-10 text-center"><p className="text-[14px] font-semibold">No variants yet.</p><p className="text-[13px] text-muted-foreground">This product cannot be matched by SKU or barcode yet.</p></TableCell></TableRow>}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
           <Card className="overflow-x-auto">

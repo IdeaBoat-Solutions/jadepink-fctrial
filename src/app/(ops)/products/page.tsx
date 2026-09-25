@@ -146,17 +146,21 @@ function ProductsInner() {
   /* Adopt back/forward navigation. */
   useEffect(() => {
     if (syncing.current) return;
-    const get = (k: string, fb: string) => searchParams.get(k) ?? fb;
-    const uq = get("q", "");
-    const uc = get("category", "all");
-    const us = get("stock", "all");
-    const ub = get("brand", "all");
-    const uso = get("sort", "newest");
-    if (uq !== q) setQ(uq);
-    if (uc !== cat) setCat(uc);
-    if (us !== stock) setStock(us);
-    if (ub !== brand) setBrand(ub);
-    if (uso !== sort && (SORTS as string[]).includes(uso)) setSort(uso as SortKey);
+    const t = window.setTimeout(() => {
+      const get = (k: string, fb: string) => searchParams.get(k) ?? fb;
+      const uq = get("q", "");
+      const uc = get("category", "all");
+      const us = get("stock", "all");
+      const ub = get("brand", "all");
+      const uso = get("sort", "newest");
+      // URL changes are external state; apply them outside the effect body.
+      if (uq !== q) setQ(uq);
+      if (uc !== cat) setCat(uc);
+      if (us !== stock) setStock(us);
+      if (ub !== brand) setBrand(ub);
+      if (uso !== sort && (SORTS as string[]).includes(uso)) setSort(uso as SortKey);
+    }, 0);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 

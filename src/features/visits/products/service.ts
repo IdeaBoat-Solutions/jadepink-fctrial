@@ -365,7 +365,11 @@ export async function markProductPurchased(
   const { vp, visit } = await loadVisitProduct(auth, visitProductId);
   assertVisitActive(visit);
   if (vp.status === "PURCHASED") {
-    // Idempotent retry — optionally backfill a bill number that was skipped.
+    // Idempotent retry — backfill a bill number that was skipped, and freeze
+    // the price for pieces billed before migration 240 existed.
+    if (vp.price_at_bill == null && vp.product?.price != null) {
+      await patchVisitProduct(vp.id, { price_at_bill: vp.product.price });
+    }
     if (bill && !vp.bill_number) {
       await patchVisitProduct(vp.id, { bill_number: bill });
       await insertVisitEvent({
@@ -393,12 +397,15 @@ export async function markProductPurchased(
     vp.id,
     vp.status,
     "PURCHASED",
-    { purchased_at: nowIso(), bill_number: bill || null },
+    // price_at_bill freezes what the customer paid (migration 240) — a later
+    // catalogue price edit must not rewrite this visit's history.
+    { purchased_at: nowIso(), bill_number: bill || null, price_at_bill: vp.product?.price ?? null },
     "PRODUCT_PURCHASED",
     {
       product_variant_id: vp.product_variant_id,
       sku: vp.product?.sku ?? null,
       bill_number: bill || null,
+      price_at_bill: vp.product?.price ?? null,
     },
   );
   // Ledger write AFTER the state change (same ordering rule as events): if it
@@ -408,28 +415,40 @@ export async function markProductPurchased(
   return card;
 }
 
-/** markProductsPurchased(): bill 2–3 liked pieces together on ONE bill,
+/** markProductsPurchased(): bill 2–3 pieces together on ONE bill.
     Amazon-cart style. One (optional) bill number is stamped on every piece.
-    Per-item results: billable rows (LIKED, or DROPPED bought anyway) go
-    through; anything else is reported in `failed` without aborting the rest. */
+    The state machine allows direct purchase from every active product state;
+    already-purchased rows are idempotent. */
 export async function markProductsPurchased(
   auth: AuthContext,
   visitProductIds: string[],
   billNumber?: string,
+  expectedVisitId?: string,
 ) {
   const bill = (billNumber ?? "").trim();
   const billed: ProductCardDTO[] = [];
   const failed: Array<{ visitProductId: string; code: string; message: string }> = [];
-  const seen = new Set<string>();
+  const uniqueIds = [...new Set(visitProductIds)];
+  if (expectedVisitId) {
+    for (const id of uniqueIds) {
+      const { vp } = await loadVisitProduct(auth, id);
+      if (vp.visit_id !== expectedVisitId) {
+        throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "All products must belong to this visit", 403);
+      }
+    }
+  }
   let visitId: string | null = null;
-  for (const id of visitProductIds) {
-    if (seen.has(id)) continue;
-    seen.add(id);
+  for (const id of uniqueIds) {
     try {
       const { vp, visit } = await loadVisitProduct(auth, id);
       visitId = visit.id;
       assertVisitActive(visit);
       if (vp.status === "PURCHASED") {
+        // Heal the price snapshot too — a piece billed before migration 240
+        // (or before the column was applied) freezes on its next billing pass.
+        if (vp.price_at_bill == null && vp.product?.price != null) {
+          await patchVisitProduct(vp.id, { price_at_bill: vp.product.price });
+        }
         if (bill && !vp.bill_number) {
           await patchVisitProduct(vp.id, { bill_number: bill });
         }
@@ -440,7 +459,7 @@ export async function markProductsPurchased(
         failed.push({
           visitProductId: id,
           code: STAGE2_ERRORS.INVALID_PRODUCT_STATE,
-          message: `${vp.product?.name ?? "Product"} is ${vp.status} — only liked pieces can be billed together`,
+          message: `${vp.product?.name ?? "Product"} is ${vp.status} — this piece cannot be billed`,
         });
         continue;
       }
@@ -451,12 +470,13 @@ export async function markProductsPurchased(
           vp.id,
           vp.status,
           "PURCHASED",
-          { purchased_at: nowIso(), bill_number: bill || null },
+          { purchased_at: nowIso(), bill_number: bill || null, price_at_bill: vp.product?.price ?? null },
           "PRODUCT_PURCHASED",
           {
             product_variant_id: vp.product_variant_id,
             sku: vp.product?.sku ?? null,
             bill_number: bill || null,
+            price_at_bill: vp.product?.price ?? null,
           },
         ),
       );
@@ -528,6 +548,7 @@ export async function captureDropReason(
 ) {
   const { vp, visit } = await loadVisitProduct(auth, visitProductId);
   assertStoreAccess(auth, visit.store_id);
+  assertVisitActive(visit);
   if (vp.status !== "DROPPED") {
     throw new Stage2Error(STAGE2_ERRORS.PRODUCT_NOT_DROPPED, "Product has not been dropped", 422);
   }

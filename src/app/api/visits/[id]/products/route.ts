@@ -133,7 +133,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           billNumber: body.billNumber ?? "",
         });
         return NextResponse.json({
-          data: await markProductsPurchased(auth, parsed.visitProductIds, parsed.billNumber),
+          data: await markProductsPurchased(auth, parsed.visitProductIds, parsed.billNumber, id),
         });
       }
       case "drop": {

@@ -75,6 +75,9 @@ export async function attachCustomerToVisit(auth: AuthContext, visitId: string, 
   if (visit.status === "COMPLETED" || visit.status === "CANCELLED") {
     throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit already closed", 422);
   }
+  if (visit.customer_id) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "This visit already has a customer", 422);
+  }
   assertStoreAccess(auth, visit.store_id);
   const { data: customer } = await supabase.from("customers").select("id").eq("id", customerId).single();
   if (!customer) throw new Stage2Error(STAGE2_ERRORS.CUSTOMER_NOT_FOUND, "Customer not found", 404);
@@ -126,6 +129,15 @@ export async function createCustomerAndAttach(
   }
 
   const supabase = await createClient();
+  const { data: visit } = await supabase.from("visits").select("id, store_id, status, customer_id").eq("id", visitId).single();
+  if (!visit) throw new Stage2Error(STAGE2_ERRORS.VISIT_NOT_FOUND, "Visit not found", 404);
+  if (visit.status === "COMPLETED" || visit.status === "CANCELLED") {
+    throw new Stage2Error(STAGE2_ERRORS.VISIT_ALREADY_COMPLETED, "Visit already closed", 422);
+  }
+  if (visit.customer_id) {
+    throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "This visit already has a customer", 422);
+  }
+  assertStoreAccess(auth, visit.store_id);
   const { data: customer, error } = await supabase.rpc("create_customer_and_attach", {
     p_visit_id: visitId,
     p_name: cleanName,
@@ -146,14 +158,14 @@ export async function createCustomerAndAttach(
   }
 
   // Re-read the visit so the caller gets the enriched DTO (customerName, fcName).
-  const { data: visit } = await supabase.from("visits").select("*").eq("id", visitId).single();
+  const { data: updatedVisit } = await supabase.from("visits").select("*").eq("id", visitId).single();
   const cleanBudget = input.budget?.trim().slice(0, 40) || null;
   if (cleanBudget) {
     // Mirror the profile budget onto this visit only (migration 230).
     // Best-effort: ignored when the column doesn't exist yet.
     await supabase.from("visits").update({ budget: cleanBudget }).eq("id", visitId);
   }
-  const [dto] = await enrichVisits(supabase, [visit as VisitRow]);
+  const [dto] = await enrichVisits(supabase, [updatedVisit as VisitRow]);
   const c = customer as { id: string; name: string; mobile: string };
   return {
     customer: { id: c.id, name: c.name, phone: formatPhoneIN(c.mobile) },
@@ -185,15 +197,17 @@ export async function startVisit(auth: AuthContext, visitId: string) {
   if (!canTransition(visit.status, "ACTIVE")) {
     throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, `Cannot start from ${visit.status}`, 422);
   }
-  const { data: updated } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("visits")
     .update({ status: "ACTIVE", started_at: visit.started_at ?? new Date().toISOString() })
     .eq("id", visitId)
     .select("*")
     .single();
-  await supabase.from("visit_events").insert({
+  if (updateError || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not start the visit", 422);
+  const { error: eventError } = await supabase.from("visit_events").insert({
     visit_id: visitId, event_type: "VISIT_STARTED", actor_id: auth.userId, metadata: {},
   });
+  if (eventError) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Visit started, but the timeline could not be saved", 500);
   const [dto] = await enrichVisits(supabase, [(updated ?? visit) as VisitRow]);
   return dto;
 }
@@ -215,11 +229,12 @@ export async function completeVisit(auth: AuthContext, visitId: string) {
   // vendor-report field — block it with the exact count so the UI can route
   // the FC back to the floor trial. SELECTED-only rows never started a trial
   // and do not block the close.
-  const { count: outstanding } = await supabase
+  const { count: outstanding, error: outstandingError } = await supabase
     .from("visit_products")
     .select("id", { count: "exact", head: true })
     .eq("visit_id", visitId)
     .in("status", ["LIKED", "TRIAL_IN_PROGRESS", "TRIAL_COMPLETED"]);
+  if (outstandingError) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not verify outstanding items", 500);
   if ((outstanding ?? 0) > 0) {
     throw new Stage2Error(
       STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
@@ -227,15 +242,17 @@ export async function completeVisit(auth: AuthContext, visitId: string) {
       422,
     );
   }
-  const { data: updated } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("visits")
     .update({ status: "COMPLETED", completed_at: new Date().toISOString() })
     .eq("id", visitId)
     .select("*")
     .single();
-  await supabase.from("visit_events").insert({
+  if (updateError || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not complete the visit", 422);
+  const { error: eventError } = await supabase.from("visit_events").insert({
     visit_id: visitId, event_type: "VISIT_COMPLETED", actor_id: auth.userId, metadata: {},
   });
+  if (eventError) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Visit completed, but the timeline could not be saved", 500);
   const [dto] = await enrichVisits(supabase, [(updated ?? visit) as VisitRow]);
   return dto;
 }
@@ -253,11 +270,12 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
   // open would silently lose the vendor-report drop reasons. The FC must bill
   // each piece or drop it with a reason first — "End visit" stays for visits
   // with nothing trialled.
-  const { count: outstanding } = await supabase
+  const { count: outstanding, error: outstandingError } = await supabase
     .from("visit_products")
     .select("id", { count: "exact", head: true })
     .eq("visit_id", visitId)
     .in("status", ["LIKED", "TRIAL_IN_PROGRESS", "TRIAL_COMPLETED"]);
+  if (outstandingError) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not verify outstanding items", 500);
   if ((outstanding ?? 0) > 0) {
     throw new Stage2Error(
       STAGE2_ERRORS.VISIT_HAS_UNBILLED_ITEMS,
@@ -265,15 +283,17 @@ export async function cancelVisit(auth: AuthContext, visitId: string) {
       422,
     );
   }
-  const { data: updated } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("visits")
     .update({ status: "CANCELLED", cancelled_at: new Date().toISOString() })
     .eq("id", visitId)
     .select("*")
     .single();
-  await supabase.from("visit_events").insert({
+  if (updateError || !updated) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Could not cancel the visit", 422);
+  const { error: eventError } = await supabase.from("visit_events").insert({
     visit_id: visitId, event_type: "VISIT_CANCELLED", actor_id: auth.userId, metadata: {},
   });
+  if (eventError) throw new Stage2Error(STAGE2_ERRORS.INVALID_VISIT_STATE, "Visit cancelled, but the timeline could not be saved", 500);
   const [dto] = await enrichVisits(supabase, [(updated ?? visit) as VisitRow]);
   return dto;
 }

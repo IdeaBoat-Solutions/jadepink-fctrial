@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { AccessNote, Btn, EmptyNote } from "@/components/floor/ui";
@@ -96,16 +96,6 @@ export default function FloorPage() {
     return () => { if (timer) clearTimeout(timer); void supabase.removeChannel(channel); };
   }, [storeId, refresh]);
 
-  if (user && !canViewLiveFloor(user.role)) {
-    return (
-      <AccessNote
-        title="Live floor is a manager view."
-        body="Your work is the customer in front of you. Open My visits to continue a fitting."
-        action={<Btn tone="brand" onClick={() => router.push("/today")}>Back to my work</Btn>}
-      />
-    );
-  }
-
   const fcOf = (id: string | null, fallback?: string | null) => salespeople.find((s) => s.id === id)?.name || fallback || "Unassigned";
   const active = activeVisits.filter((v) => v.status === "ACTIVE" || (v.status === "ASSIGNED" && v.assignedSalespersonId));
   const urgent = awaitingAssignment.filter((v) => (now - new Date(v.arrivedAt).getTime()) / 60_000 >= URGENT_WAIT_MIN);
@@ -114,7 +104,7 @@ export default function FloorPage() {
   // Store-wide totals for the header strip — every number below reads
   // straight off live data (today's visits + this refresh's floor summaries),
   // nothing fabricated for the mockup's sake.
-  const stats = useMemo(() => {
+  const stats = (() => {
     const completedToday = visits.filter((v) => v.status === "COMPLETED").length;
     const occupiedSuites = new Set(active.map((v) => v.suite).filter((s): s is string => !!s));
     let trials = 0, liked = 0, dropped = 0;
@@ -133,8 +123,17 @@ export default function FloorPage() {
       suitesUsed: occupiedSuites.size,
       trials, liked, dropped,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visits, active, summaries, awaitingAssignment.length]);
+  })();
+
+  if (user && !canViewLiveFloor(user.role)) {
+    return (
+      <AccessNote
+        title="Live floor is a manager view."
+        body="Your work is the customer in front of you. Open My visits to continue a fitting."
+        action={<Btn tone="brand" onClick={() => router.push("/today")}>Back to my work</Btn>}
+      />
+    );
+  }
 
   return (
     <div>
@@ -145,7 +144,7 @@ export default function FloorPage() {
       </nav>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-semibold tracking-tight">Manager Command Center</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight sm:text-[26px]">Manager Command Center</h1>
           <p className="mt-1 text-[13.5px] text-[var(--fp-muted)]">
             Floor lead: <span className="font-semibold text-[var(--fp-ink)]">{user?.name}</span>
             <span className="mx-2 text-[var(--fp-line-strong)]">·</span>
@@ -311,7 +310,7 @@ function ActiveCard({ v, summary, fcName }: { v: VisitLive; summary?: FloorSumma
       )}
 
       <div className="mt-3 flex flex-col gap-2">
-        <Link href={`/visits/${v.id}`} className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg bg-[var(--fp-ink)] px-3 text-[13.5px] font-semibold text-white hover:bg-black">
+        <Link href={`/visits/${v.id}`} className="inline-flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-lg bg-[var(--fp-ink)] px-3 text-[13.5px] font-semibold text-white hover:bg-black">
           View live visit
         </Link>
         <FCQuickAssign visitId={v.id} currentSpId={v.assignedSalespersonId ?? null} />

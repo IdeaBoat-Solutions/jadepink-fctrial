@@ -29,6 +29,7 @@ alter table public.whatsapp_logs enable row level security;
 
 drop policy if exists "authenticated read whatsapp logs" on public.whatsapp_logs;
 drop policy if exists "authenticated write whatsapp logs" on public.whatsapp_logs;
+drop policy if exists "authenticated update whatsapp logs" on public.whatsapp_logs;
 
 -- Customer-scoped table with no store_id: any signed-in staff can read/write,
 -- same posture as customers (floor needs it for follow-ups).

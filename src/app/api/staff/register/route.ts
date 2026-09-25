@@ -23,6 +23,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
+    const requestedStoreId = String(body.storeId ?? caller.store_id ?? "").trim();
+    if (!requestedStoreId) return NextResponse.json({ code: "INVALID", message: "Store is required" }, { status: 422 });
+    if (caller.role === "STORE_MANAGER" && requestedStoreId !== caller.store_id) {
+      return NextResponse.json({ code: "FORBIDDEN", message: "Managers can only create staff in their own store" }, { status: 403 });
+    }
     const name = normalizeName(String(body.name ?? ""));
     const email = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
@@ -41,6 +46,14 @@ export async function POST(req: Request) {
 
     const admin = createAdminClient();
     if (!admin) return NextResponse.json({ code: "NOT_CONFIGURED", message: "Supabase service key missing" }, { status: 500 });
+    const { data: store, error: storeErr } = await admin
+      .from("stores")
+      .select("id, active")
+      .eq("id", requestedStoreId)
+      .single();
+    if (storeErr || !store?.active) {
+      return NextResponse.json({ code: "INVALID", message: "Store is unavailable" }, { status: 422 });
+    }
 
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
@@ -51,12 +64,12 @@ export async function POST(req: Request) {
     if (createErr) {
       const dup = /already|exists|duplicate/i.test(createErr.message);
       return NextResponse.json(
-        { code: dup ? "ALREADY_EXISTS" : "CREATE_FAILED", message: dup ? "That email is already registered" : createErr.message },
+        { code: dup ? "ALREADY_EXISTS" : "CREATE_FAILED", message: dup ? "That email is already registered" : "Could not create the staff account" },
         { status: dup ? 409 : 500 }
       );
     }
 
-    const storeId = String(body.storeId ?? caller.store_id ?? "store-thaltej");
+    const storeId = requestedStoreId;
     const profileRow: Record<string, unknown> = { id: created.user.id, email, name, role, store_id: storeId, active: true };
     if (phone) profileRow.phone = phone;
     const { error: upErr } = await admin.from("staff_profiles").upsert(profileRow, { onConflict: "id" });
@@ -74,7 +87,7 @@ export async function POST(req: Request) {
       { data: { id: created.user.id, email, name, role, storeId, phone } },
       { status: 201 }
     );
-  } catch (e) {
-    return NextResponse.json({ code: "INTERNAL", message: String(e) }, { status: 500 });
+  } catch {
+    return NextResponse.json({ code: "INTERNAL", message: "Could not register the staff account." }, { status: 500 });
   }
 }

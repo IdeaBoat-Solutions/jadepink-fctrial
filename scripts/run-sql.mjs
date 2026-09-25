@@ -25,6 +25,10 @@ if (!CONN) {
 }
 
 const PROBE = process.argv.includes("--probe");
+/* --rebaseline: accept the current repo file as the new checksum for anything
+   already applied. Only safe when the live DB genuinely already matches the
+   file (e.g. after a re-ordering or a no-op edit the DB already reflects). */
+const REBASELINE = process.argv.includes("--rebaseline");
 const FILES = process.argv.slice(2).filter((a) => a.endsWith(".sql"));
 
 const client = new pg.Client({ connectionString: CONN, ssl: { rejectUnauthorized: false } });
@@ -184,9 +188,51 @@ async function backup() {
   return out;
 }
 
+/* ---------- Migration ledger ----------
+   Repo .sql files and the live database drift: a file can be applied twice, or
+   a live table can already exist while the repo file has no CREATE ... IF NOT
+   EXISTS. Without a ledger, a re-run either errors on already-applied DDL or
+   silently skips changes. supabase_migrations records what actually ran, so
+   db:migrate is idempotent and a failure in one file no longer hides the rest. */
+
+const LEDGER_DDL = `
+create table if not exists public.supabase_migrations (
+  version text primary key,
+  checksum text,
+  applied_at timestamptz not null default now()
+);`;
+
+async function ensureLedger() {
+  await client.query(LEDGER_DDL);
+}
+
+async function appliedVersions() {
+  const { rows } = await client.query("select version from public.supabase_migrations");
+  return new Set(rows.map((r) => r.version));
+}
+
+function versionOf(f) {
+  return f.replace(/\\/g, "/").split("/").pop();
+}
+
+/** Cheap content hash — detects "this file changed after it was applied".
+    Newlines are normalized first: git's CRLF checkout would otherwise report
+    drift for a file nobody edited. */
+function checksumOf(sql) {
+  const text = sql.replace(/\r\n/g, "\n");
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
 /* ---------- Apply ---------- */
 let failures = 0;
+let skipped = 0;
+await ensureLedger();
+const already = await appliedVersions();
+
 for (const f of FILES) {
+  const version = versionOf(f);
   const path = isAbsolute(f) ? f : join(ROOT, f);
   let sql;
   try {
@@ -196,15 +242,39 @@ for (const f of FILES) {
     failures++;
     continue;
   }
+
+  if (already.has(version)) {
+    const { rows } = await client.query("select checksum from public.supabase_migrations where version = $1", [version]);
+    const current = checksumOf(sql);
+    const drift = rows[0]?.checksum && rows[0].checksum !== current;
+    if (drift && REBASELINE) {
+      // Operator asserted the live DB already matches this file (e.g. the edit
+      // was a re-ordering the DB already reflects). Accept the new baseline
+      // instead of demanding a re-apply.
+      await client.query("update public.supabase_migrations set checksum = $2 where version = $1", [version, current]);
+      console.log(`Rebaselined: ${version}`);
+      skipped++;
+      continue;
+    }
+    console.log(`Skipped (already applied): ${version}${drift ? "  [!] file changed since it was applied" : ""}`);
+    skipped++;
+    if (drift) failures++;
+    continue;
+  }
+
   try {
     await client.query("begin");
     // One simple-protocol query => whole file executes in the open transaction.
     await client.query(sql);
+    await client.query("insert into public.supabase_migrations (version, checksum) values ($1, $2) on conflict (version) do nothing", [version, checksumOf(sql)]);
     await client.query("commit");
-    console.log(`Applied: ${f}`);
+    console.log(`Applied: ${version}`);
   } catch (e) {
     await client.query("rollback").catch(() => {});
-    console.error(`FAILED ${f}: ${e.message}${e.position ? ` (near char ${e.position})` : ""}`);
+    // Drift signal: the live DB already has part of this file (e.g. a policy
+    // that exists but is missing from the repo's drop list). Not fatal to the
+    // rest of the run — report it and keep going.
+    console.error(`FAILED ${version}: ${e.message}${e.position ? ` (near char ${e.position})` : ""}`);
     failures++;
   }
 }
@@ -212,4 +282,5 @@ for (const f of FILES) {
 if (PROBE || FILES.length === 0) await backup();
 
 await client.end();
+if (skipped) console.log(`Ledger: ${skipped} already applied, ${failures} failure(s).`);
 process.exit(failures ? 1 : 0);

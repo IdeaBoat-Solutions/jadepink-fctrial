@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HistoryWithWhatsApp } from "@/components/ops";
-import { CUSTOMER_BUDGETS } from "@/features/customers/schemas";
 import { FloorBoard, type BoardExternalAction } from "@/components/floor/floor-board";
 import { AccessNote, Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass, StatusMark } from "@/components/floor/ui";
 import { CustomerCreateForm, type CustomerCreateData } from "@/components/floor/customer-create-form";
@@ -12,7 +10,7 @@ import { useStore } from "@/lib/store";
 import { useCustomerSearch } from "@/features/customers/use-customer-search";
 import { createCustomerSchema } from "@/features/customers/schemas";
 import { formatMobileIN, normalizeMobile } from "@/lib/domain";
-import { getVisitTimeline, type VisitLive, type VisitTimelineEventLive } from "@/lib/api";
+import { type CustomerSnapshotLive, type VisitLive } from "@/lib/api";
 import { canAssignOthers, canReassignVisit } from "@/lib/policy";
 import { roundRobinNext } from "@/lib/round-robin";
 import { clockTime, formatDateIN } from "@/lib/utils";
@@ -40,37 +38,6 @@ function FittingRoom({ suite }: { suite: string | null }) {
   if (!suite) return <>No suite assigned</>;
   const label = SUITE_LABELS_LOCAL[suite] ?? suite;
   return <>{label}</>;
-}
-
-function humanEvent(type: string): string {
-  const known: Record<string, string> = {
-    WALK_IN_RECORDED: "Walk-in recorded",
-    CUSTOMER_IDENTIFIED: "Customer identified",
-    CUSTOMER_ATTACHED: "Customer identified",
-    NEW_CUSTOMER_CREATED: "New customer created",
-    FC_ASSIGNED: "FC assigned",
-    FC_REASSIGNED: "FC reassigned",
-    VISIT_STARTED: "Visit started",
-    VISIT_COMPLETED: "Visit completed",
-    VISIT_CANCELLED: "Visit ended",
-    VISIT_ABANDONED: "Visit ended",
-    PRODUCT_ADDED: "Product added",
-    PRODUCT_REMOVED: "Product removed",
-    TRIAL_STARTED: "Trial started",
-    TRIAL_COMPLETED: "Trial completed",
-    TRIAL_REOPENED: "Trial reopened",
-    TRIAL_CANCELLED: "Trial cancelled",
-    PRODUCT_LIKED: "Liked",
-    PRODUCT_UNLIKED: "Like removed",
-    PRODUCT_DROPPED: "Dropped",
-    PRODUCT_UNDROPPED: "Drop undone",
-    DROP_REASON_CAPTURED: "Drop reason updated",
-    PRODUCT_PURCHASED: "Billed",
-    BUDGET_CAPTURED: "Budget updated",
-    SUITE_ASSIGNED: "Suite assigned",
-    RUNNER_REQUESTED: "Runner called",
-  };
-  return known[type] ?? type.replaceAll("_", " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 }
 
 export function VisitWorkspace({ visitId }: { visitId: string }) {
@@ -157,13 +124,10 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const isManager = store.user?.role === "manager";
   const [assignOpen, setAssignOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [events, setEvents] = useState<VisitTimelineEventLive[] | null>(null);
   const [billing, setBilling] = useState<"idle" | "saving" | "done" | "err">("idle");
   const [handoffErr, setHandoffErr] = useState<string | null>(null);
   /* Header buttons drive the board: each action carries a seq so repeats fire. */
   const [boardAction, setBoardAction] = useState<BoardExternalAction | null>(null);
-  const [suiteOverride, setSuiteOverride] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -180,18 +144,11 @@ function VisitBody({ visit }: { visit: VisitLive }) {
   const fireBoard = (kind: BoardExternalAction["kind"]) =>
     setBoardAction((cur) => ({ seq: (cur?.seq ?? 0) + 1, kind }));
 
-  const suite = suiteOverride ?? visit.suite ?? null;
+  const suite = visit.suite ?? null;
   const elapsedMin = visit.startedAt ? Math.max(0, Math.floor((now - new Date(visit.startedAt).getTime()) / 60000)) : null;
   const visitCode = `#${visit.id.replace(/[^a-z0-9]/gi, "").slice(0, 8).toUpperCase()}`;
   const storedTier = customer?.tier === "Gold" || customer?.tier === "Silver" ? `${customer.tier} member` : null;
   const tier = storedTier ?? (!customer || customer.visitCount <= 0 ? null : customer.visitCount >= 7 ? "Gold member" : customer.visitCount >= 3 ? "Silver member" : "Member");
-
-  const loadTimeline = async () => {
-    setTimelineOpen(true);
-    if (events) return;
-    const r = await getVisitTimeline(visit.id);
-    setEvents(r.ok ? r.data : []);
-  };
 
   const handoff = async () => {
     setBilling("saving");
@@ -280,13 +237,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
               </button>
               <button
                 type="button"
-                onClick={() => fireBoard("search")}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-[#f1ece4] px-4 text-[13.5px] font-bold text-[#211d18] transition-colors hover:bg-[#e7dfd3]"
-              >
-                <span aria-hidden>＋</span> Add by SKU
-              </button>
-              <button
-                type="button"
                 onClick={() => fireBoard("summary")}
                 className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[var(--fp-brand)] px-4 text-[13.5px] font-bold text-white transition-[transform,background-color] hover:bg-[var(--fp-brand-deep)] active:scale-[0.98]"
               >
@@ -296,7 +246,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           )}
         </div>
         <div className="mt-3 flex flex-wrap gap-2 border-t border-[#f1ece4] pt-3">
-          <Btn tone="quiet" onClick={() => void loadTimeline()}>Visit timeline</Btn>
           {isManager && visit.status !== "COMPLETED" && (
             <Btn tone="line" onClick={() => setAssignOpen(true)}>{visit.assignedSalespersonId ? "Reassign FC" : "Assign FC"}</Btn>
           )}
@@ -314,31 +263,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           </li>
         ))}
       </ol>
-
-      {/* Returning customer → their past history shows on the visit itself,
-          not only behind the History button. New customers skip this entirely. */}
-      {customer && customer.visitCount > 0 && (
-        <PastHistoryPanel
-          customerId={customer.id}
-          visitCount={customer.visitCount}
-          phone={customer.phone}
-          name={customer.name}
-          visitId={visit.id}
-        />
-      )}
-
-      {/* Per-visit budget: every new visit gets its own field, prefilled from
-          the customer profile but stored on the visit — visit #2 never
-          overwrites visit #1. */}
-      {customer && !isClosed && (
-        <VisitBudgetField
-          key={`${visit.id}:${visit.budget ?? ""}:${customer.budget ?? ""}`}
-          visitId={visit.id}
-          visitBudget={visit.budget ?? null}
-          profileBudget={customer.budget ?? null}
-          closed={isClosed}
-        />
-      )}
 
       {blocked && (
         <div className="mt-5">
@@ -360,7 +284,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
           visitId={visit.id}
           onHandoff={() => void handoff()}
           externalAction={boardAction}
-          onSuiteChange={(s) => setSuiteOverride(s)}
         />
       )}
 
@@ -400,21 +323,6 @@ function VisitBody({ visit }: { visit: VisitLive }) {
         />
       )}
 
-      {timelineOpen && (
-        <Drawer kicker="This visit" title="Timeline" onClose={() => setTimelineOpen(false)}>
-          {!events && <div className="fp-skel h-24" aria-busy="true" />}
-          {events && events.length === 0 && <EmptyNote title="No events yet." body="Arrival, identification and product steps will appear here." />}
-          <ol>
-            {events?.map((e) => (
-              <li key={e.id} className="border-b border-[var(--fp-line)] py-2.5 text-[14px]">
-                <p className="font-medium">{humanEvent(e.type)}</p>
-                {e.detail ? <p className="mt-0.5 text-[13px] text-[var(--fp-muted)]">{e.detail}</p> : null}
-              </li>
-            ))}
-          </ol>
-        </Drawer>
-      )}
-
       {billing === "saving" && <p className="mt-3 text-[13.5px] font-semibold text-[var(--fp-muted)]">Sending to billing…</p>}
       {billing === "err" && handoffErr && (
         <div className="mt-3">
@@ -431,7 +339,7 @@ function ArrivalFlow({
   onAssign,
 }: {
   visit: VisitLive;
-  customer?: { id: string; name: string; phone: string; visitCount: number; purchaseCount: number; lastVisitAt: string | null; area?: string | null; budget?: string | null; source?: string | null };
+  customer?: { id: string; name: string; phone: string; visitCount: number; purchaseCount: number; lastVisitAt: string | null; area?: string | null; budget?: string | null; source?: string | null; tier?: string | null };
   onAssign: () => void;
 }) {
   const store = useStore();
@@ -439,28 +347,32 @@ function ArrivalFlow({
     query, setQuery, results, searching, searched, submitted, error,
     search, reset, prefillMobile, prefillName,
   } = useCustomerSearch();
-  const showCreateForm = submitted && searched && results.length === 0;
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const showCreateForm = showNewCustomer || (submitted && searched && results.length === 0);
 
   // Create + attach run through the shared CustomerCreateForm below — this
   // step only owns the submit, not the fields.
   const [saving, setSaving] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [attaching, setAttaching] = useState(false);
+  /* Which customer is mid-attach (not just "an attach is running") — with
+     several name matches on screen, a plain boolean flipped every row's
+     button to "Selecting…" at once. */
+  const [attaching, setAttaching] = useState<string | null>(null);
   // Local errors for create/attach/start; search errors come from the hook.
   const [err, setErr] = useState<{ title: string; body: string } | null>(null);
 
   const fc = store.salespeople.find((s) => s.id === visit.assignedSalespersonId);
   const ready = !!visit.customerId && !!visit.assignedSalespersonId;
 
-  const attach = async (id: string, label: string): Promise<boolean> => {
-    setAttaching(true);
-    const r = await store.attachCustomerToVisit(visit.id, id);
-    setAttaching(false);
+  const attach = async (customer: CustomerSnapshotLive): Promise<boolean> => {
+    setAttaching(customer.id);
+    const r = await store.attachCustomerToVisit(visit.id, customer.id, undefined, customer);
+    setAttaching(null);
     if (!r.ok) {
       setErr({ title: "We couldn't attach this customer.", body: r.message || "Check your connection and try again." });
       return false;
     }
-    store.pushToast("Customer attached", label);
+    store.pushToast("Customer selected", `${customer.name}'s details are now on this visit.`);
     reset();
     return true;
   };
@@ -507,7 +419,7 @@ function ArrivalFlow({
         setErr({ title: "That mobile number is already registered.", body: "Search it above and continue with the existing customer." });
         return;
       }
-      const attached = await attach(found.id, found.name);
+      const attached = await attach(found);
       if (!attached) return;
     }
     if (!target) return;
@@ -544,13 +456,13 @@ function ArrivalFlow({
         {!visit.customerId && (
           <section className="mt-5" aria-label="Identify customer">
             <h2 className="text-[18px] font-semibold tracking-tight">Who&apos;s visiting?</h2>
-            <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Search by name or mobile — known customers come back with their history.</p>
+            <p className="mt-1 text-[14px] text-[var(--fp-muted)]">Search by name or mobile — select an existing customer for this visit.</p>
             <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={(e) => { e.preventDefault(); void search(); }}>
               <Field label="Name or mobile" htmlFor="lookup-q" required>
                 <input
                   id="lookup-q"
                   value={query}
-                  onChange={(e) => { setQuery(e.target.value); setErr(null); }}
+                  onChange={(e) => { setQuery(e.target.value); setShowNewCustomer(false); setErr(null); }}
                   onPaste={(e) => {
                     const text = e.clipboardData.getData("text");
                     if (text && /[0-9]/.test(text)) { e.preventDefault(); setQuery(normalizeMobile(text)); }
@@ -564,6 +476,11 @@ function ArrivalFlow({
               <Btn type="submit" tone="brand" disabled={searching} className="sm:mb-0 sm:min-w-[160px]">
                 {searching ? "Searching…" : "Search"}
               </Btn>
+              {!showCreateForm && (
+                <Btn type="button" tone="line" onClick={() => { setShowNewCustomer(true); setErr(null); }} className="sm:mb-0 sm:min-w-[150px]">
+                  New customer
+                </Btn>
+              )}
             </form>
             <p className="mt-1.5 text-[12.5px] text-[var(--fp-muted)]">Same names are common — every match shows its mobile.</p>
             {(error ?? err) && <div className="mt-4"><ErrorNote title={(error ?? err)!.title} body={(error ?? err)!.body} /></div>}
@@ -577,25 +494,40 @@ function ArrivalFlow({
               const isShared = (n: string) => (counts.get(n) ?? 0) > 1;
               return (
                 <div className="fp-rise mt-5 border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
-                  <p className="text-[13px] font-semibold text-[var(--fp-muted)]">
-                    {results.length} match{results.length > 1 ? "es" : ""}
+                  {/* Match count is the first thing the FC reads: how many
+                      people could this be? The hint below says how to tell them
+                      apart when the name is shared. */}
+                  <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                    <p className="text-[20px] font-bold leading-none text-[var(--fp-ink)]">
+                      {results.length} match{results.length > 1 ? "es" : ""}
+                    </p>
+                    <p className="text-[13px] text-[var(--fp-muted)]">
+                      for <strong className="font-semibold text-[var(--fp-ink)]">“{query.trim()}”</strong>
+                    </p>
+                  </div>
+                  <p className={`mt-2 rounded-lg px-3 py-2 text-[13px] leading-relaxed ${shared > 0 ? "bg-[var(--fp-wait-bg)] font-medium text-[var(--fp-ink)]" : "text-[var(--fp-muted)]"}`}>
                     {shared > 0
-                      ? ` — ${shared} name${shared > 1 ? "s are" : " is"} shared; the mobile number tells them apart.`
-                      : " — confirm the mobile before continuing."}
+                      ? `${shared} name${shared > 1 ? "s are" : " is"} shared between these people. Match the mobile number exactly before you select.`
+                      : "Confirm the mobile number matches the customer before you select."}
                   </p>
-                  <ul className="mt-2">
+                  <ul className="mt-3">
                     {results.map((c) => (
                       <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-3 last:border-b-0">
-                        <div className="min-w-0">
-                          <p className="text-[15px] font-semibold">{c.name}</p>
-                          <p className={`fp-num text-[13px] ${isShared(c.name) ? "font-semibold text-[var(--fp-ink)]" : "text-[var(--fp-muted)]"}`}>
-                            {isShared(c.name) ? `${formatMobileIN(c.phone)} — pick by mobile` : `${formatMobileIN(c.phone)} · ${c.visitCount} visits · ${c.purchaseCount} purchases`}
+                        <div className="min-w-0 flex-1 basis-40">
+                          <p className="break-words text-[15px] font-semibold">{c.name}</p>
+                          {/* Mobile leads for a shared name — it is the only
+                              field guaranteed to tell two people apart. */}
+                          <p className={`fp-num mt-0.5 text-[14px] ${isShared(c.name) ? "font-bold text-[var(--fp-ink)]" : "font-semibold text-[#57534e]"}`}>
+                            {formatMobileIN(c.phone)}
                           </p>
-                          {isShared(c.name) && (
-                            <p className="fp-num text-[12.5px] text-[var(--fp-muted)]">{c.visitCount} visits · {c.purchaseCount} purchases</p>
-                          )}
+                          <p className="fp-num mt-0.5 text-[12.5px] text-[var(--fp-muted)]">
+                            {c.visitCount} visit{c.visitCount === 1 ? "" : "s"} · {c.purchaseCount} purchase{c.purchaseCount === 1 ? "" : "s"}
+                            {c.lastVisitAt ? ` · last ${formatDateIN(c.lastVisitAt)}` : " · no visit yet"}
+                          </p>
                         </div>
-                        <Btn tone="brand" disabled={attaching} onClick={() => void attach(c.id, c.name)}>Continue visit</Btn>
+                        <Btn tone="brand" className="shrink-0" disabled={attaching !== null} onClick={() => void attach(c)}>
+                          {attaching === c.id ? "Selecting…" : "Select customer"}
+                        </Btn>
                       </li>
                     ))}
                   </ul>
@@ -608,7 +540,12 @@ function ArrivalFlow({
                 idPrefix="visit-nc"
                 initialName={prefillName}
                 initialPhone={prefillMobile}
-                contextLine={`No record for “${query.trim()}”. Just the name and number — the rest can wait.`}
+                /* Opened via the "New customer" button the box may be empty —
+                   claiming "no record for “”" would be a lie. Only say it when a
+                   real search came back empty. */
+                contextLine={query.trim()
+                  ? `No record for “${query.trim()}”. Just the name and number — the rest can wait.`
+                  : "New customer for this visit. Just the name and number — the rest can wait."}
                 submitLabel="Create & continue"
                 saving={saving}
                 error={err?.body}
@@ -630,7 +567,7 @@ function ArrivalFlow({
         {ready && (
           <section className="mt-6 max-w-lg border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--fp-faint)]">Visit ready</p>
-            <h2 className="fp-name mt-1 text-[28px] leading-none">{customer?.name || visit.customerName}</h2>
+            <h2 className="fp-name mt-1 break-words text-[28px] leading-none">{customer?.name || visit.customerName}</h2>
             <p className="mt-2 text-[14px] text-[var(--fp-muted)]">{(customer?.visitCount ?? 0) > 0 ? "Returning customer" : "New customer"}</p>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-[14px]">
               <div>
@@ -673,20 +610,20 @@ function ArrivalFlow({
   );
 }
 
-function Snapshot({ customer }: { customer: { name: string; phone: string; visitCount: number; purchaseCount: number; lastVisitAt: string | null; area?: string | null; budget?: string | null; source?: string | null } }) {
+function Snapshot({ customer }: { customer: { name: string; phone: string; visitCount: number; purchaseCount: number; lastVisitAt: string | null; area?: string | null; budget?: string | null; source?: string | null; tier?: string | null } }) {
   const returning = customer.visitCount > 0;
   return (
     <div className="border border-[var(--fp-line)] bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="fp-name text-[28px] leading-none">{customer.name}</h2>
+          <h2 className="fp-name break-words text-[28px] leading-none">{customer.name}</h2>
           <StatusMark value={returning ? "active" : "selected"} label={returning ? "Returning customer" : "New customer"} />
         </div>
       </div>
       <p className="fp-num mt-1.5 px-5 text-[14px] text-[var(--fp-muted)]">{formatMobileIN(customer.phone)}</p>
-      {(customer.area || customer.budget || customer.source) && (
+      {(customer.area || customer.budget || customer.source || customer.tier) && (
         <p className="mt-1.5 px-5 text-[13px] text-[var(--fp-muted)]">
-          {[customer.area, customer.budget, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
+          {[customer.area, customer.budget, customer.tier ? `${customer.tier} member` : null, customer.source ? `via ${customer.source}` : null].filter(Boolean).join(" · ")}
         </p>
       )}
       <dl className="mx-5 mb-5 mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-[var(--fp-line)] pt-3 text-[14px]">
@@ -695,110 +632,6 @@ function Snapshot({ customer }: { customer: { name: string; phone: string; visit
         <div><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="text-[15px] font-semibold">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
       </dl>
     </div>
-  );
-}
-
-/* Inline past-history panel for returning customers. Loads the real record
-   (visits + trialled/liked/billed items) from the server and defaults open to
-   the most recent visit, so an FC sees history without tapping anything.
-   Collapsible — today's trial is the task, history is supporting context. */
-function PastHistoryPanel({ customerId, visitCount, phone, name, visitId }: { customerId: string; visitCount: number; phone?: string; name?: string; visitId?: string }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <section className="mt-5 rounded-xl border border-[#e9e2d8] bg-white" aria-label="Past visit history">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex min-h-[52px] w-full flex-wrap items-center justify-between gap-2 px-5 py-3 text-left"
-      >
-        <span>
-          <span className="block text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">Past visits + WhatsApp</span>
-          <span className="block text-[12.5px] text-[#78716c]">
-            Returning customer · {visitCount} previous visit{visitCount > 1 ? "s" : ""} on record
-          </span>
-        </span>
-        <span aria-hidden className={`text-[#78716c] transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
-      </button>
-      {open && (
-        <div className="border-t border-[#f1ece4] px-5 pb-4 pt-2">
-          <HistoryWithWhatsApp customerId={customerId} phone={phone} name={name} visitId={visitId} />
-          <Link
-            href={`/customers/${customerId}`}
-            className="mt-3 inline-flex min-h-11 items-center text-[14px] font-semibold text-[var(--fp-brand)]"
-          >
-            Open full profile
-          </Link>
-        </div>
-      )}
-    </section>
-  );
-}
-
-/* Per-visit budget field: prefilled from the customer profile, saved onto the
-   visit only. Shown on every open visit with a customer — new or returning —
-   so the FC captures "today's budget" without touching the profile. */
-function VisitBudgetField({ visitId, visitBudget, profileBudget, closed }: { visitId: string; visitBudget: string | null; profileBudget: string | null; closed: boolean }) {
-  const store = useStore();
-  // Keyed by visit + profile budget above, so the initializer re-runs fresh
-  // for every new visit (prefilled from the profile) — no sync effect needed.
-  const [value, setValue] = useState(visitBudget ?? profileBudget ?? CUSTOMER_BUDGETS[1]);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState<string | null>(visitBudget);
-  const [err, setErr] = useState("");
-
-  if (closed) {
-    return visitBudget ? (
-      <p className="mt-4 text-[13.5px] text-[var(--fp-muted)]">
-        This visit budget: <strong className="font-semibold text-[var(--fp-ink)]">{visitBudget}</strong>
-      </p>
-    ) : null;
-  }
-
-  const dirty = value !== (saved ?? profileBudget ?? CUSTOMER_BUDGETS[1]);
-  const save = async () => {
-    if (saving || !dirty) return;
-    setSaving(true);
-    setErr("");
-    const r = await store.setVisitBudget(visitId, value);
-    setSaving(false);
-    if (!r.ok) {
-      setErr(r.message || "Could not save the budget. Try again.");
-      return;
-    }
-    setSaved(value);
-    store.pushToast("Visit budget saved", value);
-  };
-
-  return (
-    <section className="mt-5 rounded-xl border border-[#e9e2d8] bg-white px-5 py-4" aria-label="This visit's budget">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[13px] font-bold uppercase tracking-[0.12em] text-[#57534e]">This visit budget</p>
-          <p className="mt-0.5 text-[12.5px] text-[#78716c]">
-            Separate for every visit{profileBudget ? ` · profile default ${profileBudget}` : " · no profile default yet"}
-            {saved ? ` · saved ${saved}` : ""}
-          </p>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="sr-only" htmlFor={`visit-budget-${visitId}`}>This visit budget</label>
-        <select
-          id={`visit-budget-${visitId}`}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="min-h-[44px] flex-1 rounded-lg border border-[#d6c9bb] bg-white px-3 text-[14px] font-medium text-[#1c1917]"
-        >
-          {CUSTOMER_BUDGETS.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <Btn tone="brand" disabled={!dirty || saving} onClick={() => void save()} className="sm:min-w-[140px]">
-          {saving ? "Saving…" : saved ? "Update budget" : "Save budget"}
-        </Btn>
-      </div>
-      {err && <p role="alert" className="mt-2 text-[13px] font-medium text-[var(--fp-drop)]">{err}</p>}
-    </section>
   );
 }
 
@@ -814,7 +647,7 @@ function AssignDrawer({ visit, onClose }: { visit: VisitLive; onClose: () => voi
       {manager && (
         <p className="mb-3 text-[13.5px] leading-relaxed text-[var(--fp-muted)]">
           The FC marked Up next is the round-robin turn — fair share across the floor.
-          You can still pick anyone; reassigns are logged with who changed it (see Visit timeline).
+          You can still pick anyone; reassigns are logged with who changed it.
         </p>
       )}
       <FcRoster visit={visit} onAssigned={() => window.setTimeout(onClose, 500)} />
