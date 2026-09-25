@@ -57,6 +57,7 @@ export interface Product {
   partyName?: string | null;
   size?: string | null;
   color?: string | null;
+  /** A product can have multiple sellable variants; each has its own code. */
   salesRate?: number | null;
   updatedAt: string;
 }
@@ -79,6 +80,18 @@ export interface Order {
   channel: "walk-in" | "instagram" | "website" | "meta-lead";
   fcName?: string;
   createdAt: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sku: string;
+  barcode?: string | null;
+  size: string;
+  colour: string;
+  price: number;
+  imageKey?: string | null;
+  isActive: boolean;
 }
 
 export interface StockMovement {
@@ -123,6 +136,8 @@ export const productSchema = z.object({
   brandName: z.string().optional(),
   designNo: z.string().optional(),
   hsnCode: z.string().optional(),
+  size: z.string().optional(),
+  color: z.string().optional(),
   imageUrl: z.string().url().optional().or(z.literal("")),
   imageUrls: z.array(z.string().url()).max(10).default([]),
 });

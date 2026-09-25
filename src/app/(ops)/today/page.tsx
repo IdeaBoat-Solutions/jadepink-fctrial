@@ -48,7 +48,7 @@ export default function TodayPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="fp-display text-[32px] leading-none">{greeting()}, {first}</h1>
+          <h1 className="fp-display text-[27px] leading-none sm:text-[32px]">{greeting()}, {first}</h1>
           <p className="mt-2 text-[14px] text-[var(--fp-muted)]">
             Today&apos;s store activity
           </p>

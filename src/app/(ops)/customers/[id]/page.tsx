@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import { HistoryWithWhatsApp, ContactIcons } from "@/components/ops";
+import { HistorySideBySide, ContactIcons } from "@/components/ops";
 import { Btn, Drawer, EmptyNote, ErrorNote, Field, inputClass } from "@/components/floor/ui";
 import { formatMobileIN, isValidMobileIN, normalizeMobile } from "@/lib/domain";
 import { formatDateIN } from "@/lib/utils";
@@ -74,7 +74,7 @@ export default function CustomerDetailPage() {
       setStartErr("Could not open a walk-in. Check your connection and try again.");
       return;
     }
-    const a = await attachCustomerToVisit(v.id, customer.id);
+    const a = await attachCustomerToVisit(v.id, customer.id, undefined, customer);
     setStarting(false);
     pushToast(a.ok ? "Walk-in recorded" : "Walk-in opened", a.ok ? `${customer.name} is attached.` : "Attach them on the next screen.");
     router.push(`/visits/${v.id}`);
@@ -116,17 +116,19 @@ export default function CustomerDetailPage() {
 
         {startErr && <p role="alert" className="mt-3 text-[13.5px] font-medium text-[var(--fp-drop)]">{startErr}</p>}
 
-        <dl className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-[var(--fp-line)] bg-[var(--fp-line)] text-[14px]">
-          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.visitCount}</dd></div>
-          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.purchaseCount}</dd></div>
-          <div className="bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[13px] font-semibold leading-snug sm:text-[15px]">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
+        {/* Stacks to one column on phones: three cells at 320px leave under
+            100px each, which cannot hold a formatted date. */}
+        <dl className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-[var(--fp-line)] bg-[var(--fp-line)] text-[14px] sm:grid-cols-3">
+          <div className="min-w-0 bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Visits</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.visitCount}</dd></div>
+          <div className="min-w-0 bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Purchases</dt><dd className="fp-num mt-0.5 text-[20px] font-semibold leading-none sm:text-[22px]">{customer.purchaseCount}</dd></div>
+          <div className="min-w-0 bg-[var(--fp-surface)] px-3 py-3 sm:px-4"><dt className="text-[12px] text-[var(--fp-faint)]">Last visit</dt><dd className="mt-0.5 text-[13px] font-semibold leading-snug sm:text-[15px]">{customer.lastVisitAt ? formatDateIN(customer.lastVisitAt) : "First visit"}</dd></div>
         </dl>
       </section>
 
       <section className="mt-8">
         <h2 className="text-[13px] font-semibold uppercase tracking-[0.12em] text-[var(--fp-faint)]">History — visits + WhatsApp</h2>
         <div className="mt-3">
-          <HistoryWithWhatsApp customerId={customer.id} phone={customer.phone} name={customer.name} visitId={liveVisit?.id ?? null} />
+          <HistorySideBySide customerId={customer.id} phone={customer.phone} name={customer.name} visitId={liveVisit?.id ?? null} />
         </div>
       </section>
 

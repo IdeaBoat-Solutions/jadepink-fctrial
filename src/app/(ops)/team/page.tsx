@@ -101,13 +101,13 @@ export default function TeamPage() {
                   aria-expanded={expanded}
                   className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left"
                 >
-                  <span>
-                    <span className="block text-[17px] font-semibold">{sp.name}</span>
-                    <span className="fp-num mt-0.5 block text-[13px] text-[var(--fp-muted)]">
+                  <span className="min-w-0">
+                    <span className="block truncate text-[17px] font-semibold">{sp.name}</span>
+                    <span className="fp-num mt-0.5 block truncate text-[13px] text-[var(--fp-muted)]">
                       {todayList === null ? "Loading today…" : `${mine.length} attended today · ${live.length} with them now · ${done.length} completed`}
                     </span>
                   </span>
-                  <span className="flex items-center gap-2">
+                  <span className="flex shrink-0 items-center gap-2">
                     <StatusMark value={state} />
                     <span aria-hidden className="text-[var(--fp-faint)]">{expanded ? "▴" : "▾"}</span>
                   </span>
@@ -149,8 +149,8 @@ export default function TeamPage() {
                           {done.map((v) => (
                             <li key={v.id}>
                               <Link href={`/visits/${v.id}`} className="flex items-center justify-between gap-3 py-2">
-                                <span className="text-[14.5px]">{v.customerName || "Customer"}</span>
-                                <span className="fp-num text-[12.5px] text-[var(--fp-muted)]">{clockTime(v.completedAt || v.arrivedAt)}</span>
+                                <span className="min-w-0 flex-1 truncate text-[14.5px]">{v.customerName || "Customer"}</span>
+                                <span className="fp-num shrink-0 text-[12.5px] text-[var(--fp-muted)]">{clockTime(v.completedAt || v.arrivedAt)}</span>
                               </Link>
                             </li>
                           ))}
@@ -194,7 +194,7 @@ export default function TeamPage() {
               {roster.map((r) => (
                 <li
                   key={r.id}
-                  className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[var(--fp-line)] bg-[var(--fp-surface)] px-3.5 text-[14px]"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--fp-line)] bg-[var(--fp-surface)] px-3.5 text-[14px]"
                 >
                   <span className="font-semibold">{r.name}</span>
                   <span className="text-[12px] text-[var(--fp-muted)]">{r.role_label || r.role}</span>

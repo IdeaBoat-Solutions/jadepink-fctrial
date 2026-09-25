@@ -20,26 +20,32 @@ export async function GET(req: Request) {
     if (isSupabaseConfigured()) {
       try {
         const supabase = await createClient();
-        const view = role === "FC" ? "v_salespeople" : role === "STORE_MANAGER" ? "v_store_managers" : "v_floor_team";
-        const { data: rows, error } = await supabase.from(view).select("*");
-        if (!error && rows) {
-          const data = rows.map((r) => ({
-            ...r,
-            role_label: (r as { role_label?: string }).role_label ?? roleLabel(String((r as { role?: string }).role ?? "")),
-          }));
-          return NextResponse.json({ source: `db:view:${view}`, data });
-        }
-        // views not installed yet (020_security.sql not run) — fall back to table
-        const { data: profiles } = await supabase
-          .from("staff_profiles")
-          .select("*")
-          .eq("store_id", auth.storeId ?? "")
-          .limit(50);
-        if (profiles) {
-          return NextResponse.json({
-            source: "db:staff_profiles",
-            data: profiles.map((p) => ({ ...p, role_label: roleLabel(String(p.role ?? "")) })),
-          });
+        const crossStore = auth.role === "ADMIN" || auth.role === "MANAGEMENT";
+        if (!crossStore) {
+          let query = supabase
+            .from("staff_profiles")
+            .select("*")
+            .eq("store_id", auth.storeId ?? "")
+            .eq("active", true)
+            .limit(100);
+          if (role === "FC" || role === "STORE_MANAGER") query = query.eq("role", role);
+          const { data: profiles, error: profilesError } = await query;
+          if (!profilesError && profiles) {
+            return NextResponse.json({
+              source: "db:staff_profiles",
+              data: profiles.map((p) => ({ ...p, role_label: roleLabel(String(p.role ?? "")) })),
+            });
+          }
+        } else {
+          const view = role === "FC" ? "v_salespeople" : role === "STORE_MANAGER" ? "v_store_managers" : "v_floor_team";
+          const { data: rows, error } = await supabase.from(view).select("*");
+          if (!error && rows) {
+            const data = rows.map((r) => ({
+              ...r,
+              role_label: (r as { role_label?: string }).role_label ?? roleLabel(String((r as { role?: string }).role ?? "")),
+            }));
+            return NextResponse.json({ source: `db:view:${view}`, data });
+          }
         }
       } catch { /* fall through to the empty answer below */ }
     }

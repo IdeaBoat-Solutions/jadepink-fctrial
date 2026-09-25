@@ -76,12 +76,16 @@ function InventoryInner() {
   /* Adopt back/forward navigation: if the URL changed externally, follow it. */
   useEffect(() => {
     if (syncing.current) return;
-    const uq = searchParams.get("q") ?? "";
-    const uc = searchParams.get("category") ?? "all";
-    const us = searchParams.get("stock") ?? "all";
-    if (uq !== q) setQ(uq);
-    if (uc !== cat) setCat(uc);
-    if (us !== stock) setStock(us);
+    const t = window.setTimeout(() => {
+      const uq = searchParams.get("q") ?? "";
+      const uc = searchParams.get("category") ?? "all";
+      const us = searchParams.get("stock") ?? "all";
+      // URL changes are external state; apply them outside the effect body.
+      if (uq !== q) setQ(uq);
+      if (uc !== cat) setCat(uc);
+      if (us !== stock) setStock(us);
+    }, 0);
+    return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 

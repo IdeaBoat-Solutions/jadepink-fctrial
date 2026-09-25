@@ -3,7 +3,7 @@
    UI can map codes to human copy (§21) instead of catching JSON shape errors. */
 
 import { DEFAULT_PAGE_SIZE } from "@/lib/pagination";
-import type { Category, Order, Product, StockMovement, Supplier } from "@/lib/inventory";
+import type { Category, Order, Product, ProductVariant, StockMovement, Supplier } from "@/lib/inventory";
 
 
 export interface VisitLive {
@@ -363,9 +363,10 @@ export interface BarcodeProduct {
 export const lookupBarcode = (code: string) =>
   call<BarcodeProduct[]>(`/api/barcode?code=${encodeURIComponent(code)}`);
 
-/** One product + its stock ledger in a single round trip. */
+/** One product + its sellable variants and stock ledger in a single round trip. */
 export interface ProductDetailLive {
   product: Product;
+  variants: ProductVariant[];
   movements: StockMovement[];
 }
 

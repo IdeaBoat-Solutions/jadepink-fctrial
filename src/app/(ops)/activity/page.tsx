@@ -123,8 +123,8 @@ export default function ActivityPage() {
                 <ul className="mt-2 max-w-md">
                   {sales.data.week.byFc.map((row) => (
                     <li key={row.name} className="flex items-baseline justify-between gap-3 border-b border-[var(--fp-line)] py-2.5">
-                      <span className="text-[15px]">{row.name} <span className="fp-num text-[13px] text-[var(--fp-muted)]">· {row.orders} bills</span></span>
-                      <span className="fp-num text-[16px] font-semibold">{formatINR(row.revenue)}</span>
+                      <span className="min-w-0 flex-1 text-[15px]">{row.name} <span className="fp-num text-[13px] text-[var(--fp-muted)]">· {row.orders} bills</span></span>
+                      <span className="fp-num shrink-0 text-[16px] font-semibold">{formatINR(row.revenue)}</span>
                     </li>
                   ))}
                 </ul>
@@ -149,8 +149,8 @@ export default function ActivityPage() {
           <ul className="mt-2 max-w-md">
             {reasons.map(([label, n]) => (
               <li key={label} className="flex items-baseline justify-between border-b border-[var(--fp-line)] py-2.5">
-                <span className="text-[15px]">{label}</span>
-                <span className="fp-num text-[18px] font-semibold">{n}</span>
+                <span className="min-w-0 flex-1 break-words text-[15px]">{label}</span>
+                <span className="fp-num shrink-0 text-[18px] font-semibold">{n}</span>
               </li>
             ))}
           </ul>

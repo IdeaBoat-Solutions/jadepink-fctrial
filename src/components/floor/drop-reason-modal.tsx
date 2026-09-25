@@ -56,6 +56,8 @@ export function DropReasonModal({
   const { card, queue, index } = state;
   const [reasonId, setReasonId] = useState("");
   const [subCategory, setSubCategory] = useState<string | null>(null);
+  const [trialStarted, setTrialStarted] = useState(!!card.timeline.trialStartedAt);
+  const [trialCompleted, setTrialCompleted] = useState(!!card.timeline.trialCompletedAt);
   const [note, setNote] = useState("");
   const [listening, setListening] = useState(false);
   /* Fresh item → fresh selection. Render-phase sync (the documented pattern):
@@ -65,6 +67,8 @@ export function DropReasonModal({
     setLastCardId(card.id);
     setReasonId("");
     setSubCategory(null);
+    setTrialStarted(!!card.timeline.trialStartedAt);
+    setTrialCompleted(!!card.timeline.trialCompletedAt);
     setNote("");
   }
   const titleId = useId();
@@ -182,7 +186,7 @@ export function DropReasonModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="grid min-h-10 min-w-10 shrink-0 place-items-center rounded-lg text-[#7a736a] hover:bg-[#f1ece4] hover:text-[#211d18]"
+            className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-lg text-[#7a736a] hover:bg-[#f1ece4] hover:text-[#211d18]"
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M5 5l10 10M15 5 5 15" /></svg>
           </button>
@@ -203,6 +207,44 @@ export function DropReasonModal({
               </p>
             </div>
             <p className="fp-num shrink-0 text-[17px] font-bold text-[#211d18]">{formatINR(card.product.price)}</p>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-[#e8dfd6] bg-[#faf8f6] p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-bold text-[#211d18]">Trial checklist</p>
+                <p className="mt-0.5 text-[12.5px] text-[#78716c]">Mark the customer&apos;s fitting progress before dropping this piece.</p>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-[#78716c]">Optional</span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <label className={`flex min-h-[48px] cursor-pointer items-center gap-2.5 rounded-lg border px-3 text-[13.5px] font-semibold transition-colors ${trialStarted ? "border-[#23403a] bg-white text-[#23403a]" : "border-[#e0d7c9] bg-white text-[#57534e] hover:border-[#23403a]"}`}>
+                <input
+                  type="checkbox"
+                  checked={trialStarted}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setTrialStarted(checked);
+                    if (!checked) setTrialCompleted(false);
+                  }}
+                  className="size-4 accent-[#23403a]"
+                />
+                Trial started
+              </label>
+              <label className={`flex min-h-[48px] cursor-pointer items-center gap-2.5 rounded-lg border px-3 text-[13.5px] font-semibold transition-colors ${trialCompleted ? "border-[#23403a] bg-white text-[#23403a]" : "border-[#e0d7c9] bg-white text-[#57534e] hover:border-[#23403a]"}`}>
+                <input
+                  type="checkbox"
+                  checked={trialCompleted}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setTrialCompleted(checked);
+                    if (checked) setTrialStarted(true);
+                  }}
+                  className="size-4 accent-[#23403a]"
+                />
+                Trial completed
+              </label>
+            </div>
           </div>
 
           <p className="mt-5 text-[15px] font-bold text-[#211d18]">Why didn&apos;t the customer like this piece?</p>

@@ -37,15 +37,22 @@ export default function NewProductPage() {
   /* Draft autosave: a refresh, accidental Cancel or dead tab never wipes the
      form. Cleared on successful save or explicit Discard. */
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("jp-new-product-draft");
-      if (!raw) return;
-      const d = JSON.parse(raw) as Partial<ProductInput>;
-      if (d && typeof d === "object" && (d.name || d.sku)) {
-        form.reset({ stock: 0, lowStockAt: 5, ...d } as ProductInput);
-        setRestored(true);
-      }
-    } catch { /* corrupt draft — start fresh */ }
+    let cancelled = false;
+    const restore = () => {
+      try {
+        const raw = localStorage.getItem("jp-new-product-draft");
+        if (!raw) return;
+        const d = JSON.parse(raw) as Partial<ProductInput>;
+        if (d && typeof d === "object" && (d.name || d.sku)) {
+          form.reset({ stock: 0, lowStockAt: 5, ...d } as ProductInput);
+          if (!cancelled) {
+            setRestored(true);
+          }
+        }
+      } catch { /* corrupt draft — start fresh */ }
+    };
+    const t = window.setTimeout(restore, 0);
+    return () => { cancelled = true; window.clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -126,6 +133,14 @@ export default function NewProductPage() {
                 {form.formState.errors.sku && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.sku.message}</p>}
               </Field>
               <Field>
+                <FieldLabel htmlFor="size">Size / fit (optional)</FieldLabel>
+                <Input id="size" {...form.register("size")} placeholder="e.g. M, XL, ONE_SIZE" className="min-h-[48px] rounded-xl" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="color">Colour (optional)</FieldLabel>
+                <Input id="color" {...form.register("color")} placeholder="e.g. Maroon" className="min-h-[48px] rounded-xl" />
+              </Field>
+              <Field>
                 <FieldLabel htmlFor="stock">How many in stock</FieldLabel>
                 <Input id="stock" type="number" {...form.register("stock", { valueAsNumber: true })} className="tnum min-h-[48px] rounded-xl" aria-invalid={!!form.formState.errors.stock} />
                 {form.formState.errors.stock && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.stock.message}</p>}
@@ -163,6 +178,25 @@ export default function NewProductPage() {
                   </SelectContent>
                 </Select>
                 {form.formState.errors.supplierId && <p role="alert" className="flex items-center gap-1.5 text-[13px] font-medium text-destructive"><span aria-hidden className="inline-block size-1 rounded-full bg-destructive" />{form.formState.errors.supplierId.message}</p>}
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="mrp">MRP (₹) — optional</FieldLabel>
+                <Input id="mrp" type="number" {...form.register("mrp", { setValueAs: (value) => value === "" ? undefined : Number(value) })} className="tnum min-h-[48px] rounded-xl" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="brandName">Brand (optional)</FieldLabel>
+                <Input id="brandName" {...form.register("brandName")} placeholder="e.g. JadePink" className="min-h-[48px] rounded-xl" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="barcode">Barcode (optional)</FieldLabel>
+                <Input id="barcode" {...form.register("barcode")} placeholder="Scan or type the product barcode" className="min-h-[48px] rounded-xl" />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="imageUrl">Product image URL (optional)</FieldLabel>
+                <Input id="imageUrl" type="url" {...form.register("imageUrl")} placeholder="https://…" className="min-h-[48px] rounded-xl" />
+                {form.formState.errors.imageUrl && <p role="alert" className="text-[13px] font-medium text-destructive">{form.formState.errors.imageUrl.message}</p>}
               </Field>
             </div>
             {formErr && <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-[13.5px] font-medium text-destructive">{formErr}</p>}

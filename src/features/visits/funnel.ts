@@ -54,12 +54,13 @@ export async function getStoreFunnelToday(auth: AuthContext, storeId: string): P
   const visitIds = rows.map((v) => v.id);
   const { data: products } = await supabase
     .from("visit_products")
-    .select("visit_id, status, product_variants(price)")
+    .select("visit_id, status, price_at_bill, product_variants(price)")
     .in("visit_id", visitIds);
 
   type Raw = {
     visit_id: string;
     status: string;
+    price_at_bill?: number | string | null;
     product_variants?: { price?: number | string } | { price?: number | string }[] | null;
   };
 
@@ -83,7 +84,11 @@ export async function getStoreFunnelToday(auth: AuthContext, storeId: string): P
       billedVisits.add(p.visit_id);
       billedPieces += 1;
       const variant = Array.isArray(p.product_variants) ? p.product_variants[0] : p.product_variants;
-      const price = variant?.price != null ? Number(variant.price) : 0;
+      const price = p.price_at_bill != null
+        ? Number(p.price_at_bill)
+        : variant?.price != null
+          ? Number(variant.price)
+          : 0;
       if (!Number.isNaN(price)) billedValue += price;
     }
   }

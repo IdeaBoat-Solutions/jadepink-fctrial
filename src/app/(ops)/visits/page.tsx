@@ -72,7 +72,7 @@ function VisitCard({ v }: { v: VisitLive }) {
         </span>
         <StatusMark value={mark} label={label} />
       </div>
-      <h2 className="fp-name mt-4 text-[26px] leading-none">{name}</h2>
+      <h2 className="fp-name mt-4 break-words text-[22px] leading-none sm:text-[26px]">{name}</h2>
       <p className="fp-num mt-2 text-[13px] text-[var(--fp-muted)]">
         {active ? `On the floor · ${timeAgo(v.startedAt || v.arrivedAt)}` : `Arrived ${clockTime(v.arrivedAt)} · ${timeAgo(v.arrivedAt)} ago`}
       </p>

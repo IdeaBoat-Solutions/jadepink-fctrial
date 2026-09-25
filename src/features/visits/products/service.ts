@@ -415,23 +415,30 @@ export async function markProductPurchased(
   return card;
 }
 
-/** markProductsPurchased(): bill 2–3 liked pieces together on ONE bill,
+/** markProductsPurchased(): bill 2–3 pieces together on ONE bill.
     Amazon-cart style. One (optional) bill number is stamped on every piece.
-    Per-item results: billable rows (LIKED, or DROPPED bought anyway) go
-    through; anything else is reported in `failed` without aborting the rest. */
+    The state machine allows direct purchase from every active product state;
+    already-purchased rows are idempotent. */
 export async function markProductsPurchased(
   auth: AuthContext,
   visitProductIds: string[],
   billNumber?: string,
+  expectedVisitId?: string,
 ) {
   const bill = (billNumber ?? "").trim();
   const billed: ProductCardDTO[] = [];
   const failed: Array<{ visitProductId: string; code: string; message: string }> = [];
-  const seen = new Set<string>();
+  const uniqueIds = [...new Set(visitProductIds)];
+  if (expectedVisitId) {
+    for (const id of uniqueIds) {
+      const { vp } = await loadVisitProduct(auth, id);
+      if (vp.visit_id !== expectedVisitId) {
+        throw new Stage2Error(STAGE2_ERRORS.FORBIDDEN, "All products must belong to this visit", 403);
+      }
+    }
+  }
   let visitId: string | null = null;
-  for (const id of visitProductIds) {
-    if (seen.has(id)) continue;
-    seen.add(id);
+  for (const id of uniqueIds) {
     try {
       const { vp, visit } = await loadVisitProduct(auth, id);
       visitId = visit.id;
@@ -452,7 +459,7 @@ export async function markProductsPurchased(
         failed.push({
           visitProductId: id,
           code: STAGE2_ERRORS.INVALID_PRODUCT_STATE,
-          message: `${vp.product?.name ?? "Product"} is ${vp.status} — only liked pieces can be billed together`,
+          message: `${vp.product?.name ?? "Product"} is ${vp.status} — this piece cannot be billed`,
         });
         continue;
       }
@@ -541,6 +548,7 @@ export async function captureDropReason(
 ) {
   const { vp, visit } = await loadVisitProduct(auth, visitProductId);
   assertStoreAccess(auth, visit.store_id);
+  assertVisitActive(visit);
   if (vp.status !== "DROPPED") {
     throw new Stage2Error(STAGE2_ERRORS.PRODUCT_NOT_DROPPED, "Product has not been dropped", 422);
   }

@@ -23,7 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationControls, usePageParam } from "@/components/pagination";
 import { useApi } from "@/hooks/use-api";
-import { createOrder, listOrdersPage, listProducts, type Paged } from "@/lib/api";
+import { createOrder, listOrdersPage, listProducts } from "@/lib/api";
 import { normalizeMobile, isValidMobileIN } from "@/lib/domain";
 import type { Order, OrderStatus, Product } from "@/lib/inventory";
 import { formatINR, formatDateIN, formatChannel } from "@/lib/utils";
@@ -91,7 +91,12 @@ function OrdersInner() {
   // Debounced product search for the picker (same 250ms rhythm as the catalogue).
   useEffect(() => {
     const q = pq.trim();
-    if (q.length < 2) { setHits([]); return; }
+    if (q.length < 2) {
+      const t = window.setTimeout(() => {
+        setHits([]);
+      }, 0);
+      return () => window.clearTimeout(t);
+    }
     let cancelled = false;
     const t = window.setTimeout(() => {
       void (async () => {

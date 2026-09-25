@@ -48,7 +48,7 @@ interface StoreCtx {
   createCustomer: (input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive } | { ok: false; code: string; message?: string }>;
   updateCustomer: (id: string, input: { name?: string; phone?: string; source?: string; area?: string; budget?: string; tier?: string | null }) => Promise<{ ok: true; customer: { id: string; name: string; phone: string; tier: string | null } } | { ok: false; code: string; message?: string }>;
   deleteCustomer: (id: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
-  attachCustomerToVisit: (visitId: string, customerId: string, budget?: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
+  attachCustomerToVisit: (visitId: string, customerId: string, budget?: string, customer?: CustomerSnapshotLive) => Promise<{ ok: boolean; code?: string; message?: string }>;
   /** Atomic create-customer + attach-to-visit. One round trip, no orphaned record. */
   createCustomerAndAttach: (visitId: string, input: { name: string; mobile: string; source?: string; area?: string; budget?: string }) => Promise<{ ok: true; customer: CustomerSnapshotLive; visit: VisitLive } | { ok: false; code: string; message?: string }>;
   /** Per-visit budget (migration 230) — separate field on every new visit. */
@@ -56,7 +56,7 @@ interface StoreCtx {
   assignSalesperson: (visitId: string, spId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   startVisit: (visitId: string) => Promise<{ ok: boolean; code?: string; message?: string }>;
   completeVisit: (visitId: string) => Promise<boolean>;
-  abandonVisit: (visitId: string) => Promise<void>;
+  abandonVisit: (visitId: string) => Promise<boolean>;
   deleteVisit: (visitId: string) => Promise<{ ok: true } | { ok: false; code: string; message?: string }>;
   getVisit: (id: string) => VisitLive | undefined;
   getCustomer: (id: string) => LiveCustomer | undefined;
@@ -286,10 +286,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { ok: true as const };
   }, []);
 
-  const attachCustomerOp = useCallback(async (visitId: string, customerId: string, budget?: string) => {
+  const attachCustomerOp = useCallback(async (visitId: string, customerId: string, budget?: string, customer?: CustomerSnapshotLive) => {
     const r = await attachCustomer(visitId, customerId, budget);
     if (!r.ok) return { ok: false as const, code: r.code, message: r.message };
     setVisits((prev) => prev.map((v) => (v.id === visitId ? r.data : v)));
+    // Keep the selected search result in the shared cache immediately. The
+    // visit screen can then show the customer's profile and visit history in
+    // the same render, without waiting for a second fetch or briefly showing
+    // an unidentified customer after the attach succeeds.
+    if (customer) {
+      setCustomers((prev) => prev.some((x) => x.id === customer.id)
+        ? prev
+        : [
+            {
+              ...customer,
+              displayMobile: formatMobileIN(customer.phone),
+              visitsCount: customer.visitCount,
+              purchasesCount: customer.purchaseCount,
+            },
+            ...prev,
+          ]);
+    }
     return { ok: true as const };
   }, []);
 
@@ -371,10 +388,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const r = await cancelVisit(visitId);
     if (!r.ok) {
       pushToast("Could not end visit", r.message);
-      return;
+      return false;
     }
-    setVisits(() => visits.filter((v) => v.id !== visitId));
-  }, [visits, pushToast]);
+    setVisits((prev) => prev.filter((v) => v.id !== visitId));
+    return true;
+  }, [pushToast]);
 
   const deleteVisitOp = useCallback(async (visitId: string) => {
     const r = await deleteVisitRecord(visitId);

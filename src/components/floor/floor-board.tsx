@@ -3,8 +3,9 @@
 /* Stage 3, inside the visit workspace. Scan → trial → like / drop.
    Same visit, same API. No second application. */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import Link from "next/link";
+import { Shirt, ShoppingBag, ThumbsDown, Trash2, Undo2, Check } from "lucide-react";
 import { Btn, Drawer, EmptyNote, ErrorNote, StatusMark } from "@/components/floor/ui";
 import { DropReasonModal, type DropModalState } from "@/components/floor/drop-reason-modal";
 import { useStore } from "@/lib/store";
@@ -14,9 +15,12 @@ import type { ProductCardDTO, VisitWithProductsDTO } from "@/features/visits/pro
 import { useVisitProductsRealtime } from "@/features/visits/products/use-visit-products-realtime";
 import type { ProductVisitStatus } from "@/features/visits/products/types";
 import { clockTime, formatINR } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 type DropReason = VisitWithProductsDTO["dropReasons"][number];
-type Filter = "ALL" | "SELECTED" | "TRIAL" | "LIKED" | "DROPPED" | "BILLED";
+/* No "ALL" bucket: every product enters as SELECTED, so the board opens on
+   the new work and each filter is a distinct place a piece can be. */
+type Filter = "SELECTED" | "TRIAL" | "LIKED" | "DROPPED" | "BILLED";
 type SortKey = "priority" | "price-desc" | "price-asc" | "name";
 
 /* Header buttons (workspace) drive the board without prop-drilling every
@@ -172,7 +176,10 @@ export function FloorBoard({
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<{ title: string; body: string } | null>(null);
-  const [filter, setFilter] = useState<Filter>("ALL");
+  /* Default to SELECTED: every product arrives on the visit as SELECTED
+     (repository.insertVisitProduct), so the board opens on the new work
+     instead of burying it in an undifferentiated "All" list. */
+  const [filter, setFilter] = useState<Filter>("SELECTED");
   const [sort, setSort] = useState<SortKey>("priority");
   const [torchOn, setTorchOn] = useState(false);
   /* Camera lifecycle: permission is requested ONLY on an explicit "Start
@@ -185,6 +192,14 @@ export function FloorBoard({
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [endingVisit, setEndingVisit] = useState(false);
   const [detail, setDetail] = useState<ProductCardDTO | null>(null);
+  /* Inline trial confirm: tapping "Trial" arms a checkbox beside that button
+     instead of opening a modal. Ticking it applies the state change for that
+     card's current status (start / complete / reopen). One flag per row so
+     several pieces can be armed at once, and the row keeps its own copy of
+     the card so the checkbox disappears as soon as the real status arrives. */
+  /* Which row's Trial menu is open, if any. One at a time keeps the floor
+     calm — opening a second closes the first. */
+  const [trialMenuId, setTrialMenuId] = useState<string | null>(null);
   const [hiddenProductIds, setHiddenProductIds] = useState<Set<string>>(() => new Set());
   const [dropModal, setDropModal] = useState<DropModalState | null>(null);
   const [dropBusy, setDropBusy] = useState(false);
@@ -253,6 +268,34 @@ export function FloorBoard({
       setBusy(null);
     }
   }, [refresh, pushToast]);
+
+  /* Tapping "Trial" opens a two-option menu right under that button:
+     Trial started / Trial completed. The FC picks the verdict directly, so
+     the label always matches what actually happens — no inference from the
+     row's current state, and no extra confirm step in between. */
+  const toggleTrialMenu = useCallback((card: ProductCardDTO) => {
+    setTrialMenuId((cur) => (cur === card.id ? null : card.id));
+  }, []);
+
+  const runTrial = useCallback(async (card: ProductCardDTO, action: "start-trial" | "complete-trial" | "reopen-trial") => {
+    if (busy) return;
+    const key = `${action}-${card.id}`;
+    setBusy(key);
+    setErr(null);
+    try {
+      await callApi(visitId, action, { visitProductId: card.id });
+      await refresh();
+      setTrialMenuId((cur) => (cur === card.id ? null : cur));
+      pushToast(
+        action === "start-trial" ? "Trial started" : action === "complete-trial" ? "Trial completed" : "Trial reopened",
+        card.product.name,
+      );
+    } catch (e) {
+      setErr(friendly(e instanceof ApiError ? e.code : "INTERNAL", e instanceof Error ? e.message : ""));
+    } finally {
+      setBusy(null);
+    }
+  }, [busy, pushToast, refresh, visitId]);
 
   const rejectProduct = useCallback(async (card: ProductCardDTO) => {
     if (busy) return;
@@ -548,7 +591,7 @@ export function FloorBoard({
 
   /** Bill one — or 2–3 — liked pieces on a single bill. Bill number optional. */
   const confirmBill = () => {
-    const ids = billIds.filter((id) => products.some((p) => p.id === id && p.status === "LIKED"));
+    const ids = billIds.filter((id) => products.some((p) => p.id === id && p.status !== "PURCHASED"));
     const targets = ids.length > 0 ? ids : billIds;
     if (targets.length === 0 || busy) return;
     const bill = billNumber.trim();
@@ -594,8 +637,12 @@ export function FloorBoard({
     if (endingVisit) return;
     setEndingVisit(true);
     void (async () => {
-      await abandonVisit(visitId);
+      const ended = await abandonVisit(visitId);
       setEndingVisit(false);
+      if (!ended) {
+        setErr({ title: "Could not end this visit.", body: "Resolve the message above and try again." });
+        return;
+      }
       setConfirmEnd(false);
       setSummaryOpen(false);
       pushToast("Visit ended", "The customer left without a purchase.");
@@ -607,7 +654,6 @@ export function FloorBoard({
   const counts = useMemo(() => {
     const list = (state.status === "ready" ? state.data.products : []).filter((p) => !hiddenProductIds.has(p.id));
     return {
-      all: list.length,
       selected: list.filter((p) => p.status === "SELECTED").length,
       trial: list.filter((p) => p.status === "TRIAL_IN_PROGRESS" || p.status === "TRIAL_COMPLETED").length,
       liked: list.filter((p) => p.status === "LIKED").length,
@@ -623,7 +669,7 @@ export function FloorBoard({
     if (filter === "LIKED") return p.status === "LIKED";
     if (filter === "DROPPED") return p.status === "DROPPED";
     if (filter === "BILLED") return p.status === "PURCHASED";
-    return true;
+    return false;
   });
 
   /* Mockup "Sort: Trial Priority" — active trials surface first. */
@@ -643,7 +689,7 @@ export function FloorBoard({
   });
 
   /* Combined-bill selection: only LIKED pieces can share one bill. */
-  const billItems = products.filter((p) => billIds.includes(p.id) && p.status === "LIKED");
+  const billItems = products.filter((p) => billIds.includes(p.id) && p.status !== "PURCHASED");
   const billTotal = billItems.reduce((s, p) => s + p.product.price, 0);
 
   const dropReasons = (() => {
@@ -658,6 +704,11 @@ export function FloorBoard({
      a verdict (billed with a bill number, or dropped with a reason) before
      the visit can close. SELECTED-only rows never started a trial. Plain
      filter (no memo): visit lists are small and this must track products. */
+  /* The detail drawer mirrors the row's rule: only a piece with no verdict yet
+     can leave the visit. Anything liked/trialled-complete/billed must be
+     dropped or billed so the vendor reporting keeps its evidence. */
+  const detailCanRemove = !!detail && (detail.status === "SELECTED" || detail.status === "TRIAL_IN_PROGRESS");
+
   const outstanding = products.filter(
     (p) => p.status === "LIKED" || p.status === "TRIAL_IN_PROGRESS" || p.status === "TRIAL_COMPLETED",
   );
@@ -695,7 +746,6 @@ export function FloorBoard({
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <div role="group" aria-label="Filter products" className="flex flex-wrap items-center gap-1.5">
           {([
-            ["ALL", "All", counts.all, false],
             ["SELECTED", "Selected", counts.selected, false],
             ["TRIAL", "Trials", counts.trial, true],
             ["LIKED", "Liked", counts.liked, false],
@@ -723,6 +773,11 @@ export function FloorBoard({
             );
           })}
         </div>
+        {!readOnly && (
+          <Btn tone="line" onClick={openScan} className="shrink-0">
+            <span aria-hidden>＋</span> Add by SKU
+          </Btn>
+        )}
         <label className="inline-flex min-h-[44px] w-full items-center gap-2 text-[13px] font-medium text-[#6b645c] sm:ml-auto sm:w-auto">
           Sort:
           <select
@@ -834,22 +889,21 @@ export function FloorBoard({
                   card={card}
                   busy={busy}
                   onOpen={() => setDetail(card)}
-                  onTrial={() => {
-                    // One Trial button: tap to start, tap again to complete,
-                    // tap on a completed trial reopens it (customer tries again).
-                    if (card.status === "SELECTED") {
-                      void run(`start-${card.id}`, () => callApi(visitId, "start-trial", { visitProductId: card.id }), { title: "Trial started", body: card.product.name });
-                    } else if (card.status === "TRIAL_IN_PROGRESS") {
-                      void run(`complete-${card.id}`, () => callApi(visitId, "complete-trial", { visitProductId: card.id }), { title: "Trial completed", body: "Like it, or record why it was dropped." });
-                    } else if (card.status === "TRIAL_COMPLETED") {
-                      void run(`reopen-${card.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: card.id }), { title: "Trial reopened", body: card.product.name });
-                    }
-                  }}
+                  onTrial={() => toggleTrialMenu(card)}
+                  trialMenuOpen={trialMenuId === card.id}
+                  onTrialPick={(action) => void runTrial(card, action)}
                   onLike={() => void run(`like-${card.id}`, () => callApi(visitId, "like", { visitProductId: card.id }), { title: "Liked", body: card.product.name })}
                   onUnlike={() => void rejectProduct(card)}
                   onDrop={() => { openDrop(card); }}
                   onUndrop={() => void run(`undrop-${card.id}`, () => callApi(visitId, "undrop", { visitProductId: card.id }), { title: "Drop undone", body: `${card.product.name} is live again.` })}
                   onBill={() => openBill(card)}
+                  onRemove={() => {
+                    void run(
+                      `remove-${card.id}`,
+                      () => callApi(visitId, "remove", { visitProductId: card.id }),
+                      { title: "Removed from visit", body: `${card.product.name} is off the list. Add it again any time.` },
+                    );
+                  }}
                   selectable={!readOnly && card.status === "LIKED"}
                   checked={billIds.includes(card.id)}
                   onToggle={() => toggleBillSelect(card.id)}
@@ -867,7 +921,7 @@ export function FloorBoard({
             {billTotal > 0 && <span className="fp-num font-semibold"> · {formatINR(billTotal)}</span>}
           </p>
           <span className="flex gap-2 sm:ml-auto">
-            <ConsoleBtn disabled={busy === "bill-many"} onClick={() => { setBillNumber(""); setBillOpen(true); }}>
+            <ConsoleBtn icon={<ShoppingBag className="size-4" aria-hidden />} disabled={busy === "bill-many"} onClick={() => { setBillNumber(""); setBillOpen(true); }}>
               Bill together
             </ConsoleBtn>
             <Btn tone="quiet" onClick={() => setBillIds([])}>Clear</Btn>
@@ -881,7 +935,11 @@ export function FloorBoard({
       {products.length > 0 && visible.length === 0 && (
         <EmptyNote
           title={filter === "DROPPED" ? "No products have been dropped during this visit." : "Nothing in this filter."}
-          body="Switch back to All to see the full visit."
+          body={
+            filter === "SELECTED"
+              ? "Every piece has moved past Selected — pick a filter above to see where they are now."
+              : "Pick another filter above to see the rest of the visit."
+          }
         />
       )}
 
@@ -930,7 +988,7 @@ export function FloorBoard({
                     <button
                       type="button"
                       onClick={() => void startCamera()}
-                      className="mt-3 inline-flex min-h-[36px] items-center rounded-full bg-white px-4 text-[12.5px] font-bold text-[#23403a]"
+                      className="mt-3 inline-flex min-h-11 items-center rounded-full bg-white px-4 text-[12.5px] font-bold text-[#23403a]"
                     >
                       Retry camera
                     </button>
@@ -1022,36 +1080,54 @@ export function FloorBoard({
           <div className="mt-5 flex flex-wrap gap-2">
             {detail.status === "SELECTED" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`start-${detail.id}`, () => callApi(visitId, "start-trial", { visitProductId: detail.id }), { title: "Trial started", body: detail.product.name })}>Trial</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
-                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn tone="go" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={() => { setDetail(null); void runTrial(detail, "start-trial"); }}>Start trial</ConsoleBtn>
+                <ConsoleBtn tone="ok" disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
+                <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                {detailCanRemove && (
+                  <span className="flex w-full items-center gap-2 border-t border-[var(--fp-line)] pt-3">
+                    <ConsoleBtn
+                      tone="danger"
+                      icon={<Trash2 className="size-4" aria-hidden />}
+                      disabled={!!busy}
+                      onClick={() => {
+                        setDetail(null);
+                        void run(`remove-${detail.id}`, () => callApi(visitId, "remove", { visitProductId: detail.id }), {
+                          title: "Removed from visit",
+                          body: `${detail.product.name} is off the list. Add it again any time.`,
+                        });
+                      }}
+                    >
+                      Remove from visit
+                    </ConsoleBtn>
+                    <span className="text-[12.5px] text-[var(--fp-muted)]">Takes it off this visit. The product stays in the catalogue.</span>
+                  </span>
+                )}
               </>
             )}
             {detail.status === "TRIAL_IN_PROGRESS" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`complete-${detail.id}`, () => callApi(visitId, "complete-trial", { visitProductId: detail.id }), { title: "Trial completed", body: detail.product.name })}>Trial</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
-                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn tone="go" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={() => { setDetail(null); void runTrial(detail, "complete-trial"); }}>Complete trial</ConsoleBtn>
+                <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
               </>
             )}
             {detail.status === "TRIAL_COMPLETED" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`like-${detail.id}`, () => callApi(visitId, "like", { visitProductId: detail.id }), { title: "Liked", body: detail.product.name })}>Like</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
-                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`reopen-${detail.id}`, () => callApi(visitId, "reopen-trial", { visitProductId: detail.id }), { title: "Trial reopened", body: detail.product.name })}>Trial</ConsoleBtn>
+                <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn tone="undo" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={() => { setDetail(null); void runTrial(detail, "reopen-trial"); }}>Reopen trial</ConsoleBtn>
               </>
             )}
             {detail.status === "LIKED" && (
               <>
-                <ConsoleBtn disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
-                <ConsoleBtn onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
-                <ConsoleBtn disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>Unlike</ConsoleBtn>
+                <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} disabled={!!busy} onClick={() => openBill(detail)}>Mark billed</ConsoleBtn>
+                <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={() => { openDrop(detail); }}>Drop</ConsoleBtn>
+                <ConsoleBtn tone="undo" disabled={!!busy} onClick={() => void run(`unlike-${detail.id}`, () => callApi(visitId, "unlike", { visitProductId: detail.id }), { title: "Like removed", body: `${detail.product.name} is back where it was.` })}>Unlike</ConsoleBtn>
               </>
             )}
             {detail.status === "DROPPED" && (
-              <ConsoleBtn disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</ConsoleBtn>
+              <ConsoleBtn tone="undo" icon={<Undo2 className="size-4" aria-hidden />} disabled={!!busy} onClick={() => void run(`undrop-${detail.id}`, () => callApi(visitId, "undrop", { visitProductId: detail.id }), { title: "Drop undone", body: `${detail.product.name} is live again.` })}>Undo drop</ConsoleBtn>
             )}
           </div>)}
         </Drawer>
@@ -1074,16 +1150,16 @@ export function FloorBoard({
             <Btn tone="brand" className="w-full" onClick={() => { setSummaryOpen(false); setConfirmEnd(false); onHandoff?.(); }}>
               {outstanding.length > 0 ? "Continue to billing" : "Close visit"}
             </Btn>
-            {!confirmEnd ? (
+            {!confirmEnd && outstanding.length === 0 ? (
               <Btn tone="quiet" className="w-full" onClick={() => setConfirmEnd(true)}>End visit (no purchase)</Btn>
-            ) : (
+            ) : confirmEnd ? (
               <div className="flex gap-2">
                 <Btn tone="drop" className="flex-1" disabled={endingVisit} onClick={endVisit}>
                   {endingVisit ? "Ending…" : "Confirm — end visit"}
                 </Btn>
                 <Btn tone="line" disabled={endingVisit} onClick={() => setConfirmEnd(false)}>Keep</Btn>
               </div>
-            )}
+            ) : null}
           </div>)}>
           <dl className="grid grid-cols-2 gap-y-4">
             <Sum k="Selected" v={summary.selected} />
@@ -1379,41 +1455,175 @@ function StatePill({ status }: { status: ProductVisitStatus }) {
   );
 }
 
-/* One uniform action style for every product action (Trial, Like, Drop, Bill,
-   Complete, Cancel, Undo …) — same color for all of them, per the floor spec.
-   No per-action colors: the busy state is enough of a signal. */
-function ConsoleBtn({ children, onClick, disabled, type = "button" }: { children: ReactNode; onClick?: () => void; disabled?: boolean; type?: "button" | "submit" }) {
+/* Product actions, sized for the floor: 44px touch targets, one consistent
+   shape, but a real visual hierarchy.
+   - "go"  : the one action that moves the piece forward (filled) — only one per
+             row, so the FC's next step is obvious at a glance.
+   - "ok"  : money moves forward (Bill) — green outline, matches the Billed pill.
+   - "drop": a verdict against the piece — red outline, matches Dropped.
+   - "undo": a correction back to a live state — neutral outline.
+   - "danger": hard removal. Red text, no fill, set apart on the right so it
+             can never be confused with the one-tap "go" action.
+   Previously every action was the same solid dark green, which flattened the
+   row and read as four equally important taps. */
+const ACTION_TONE: Record<string, string> = {
+  go: "bg-[#23403a] text-white hover:bg-[#1a312c] active:scale-[0.98]",
+  ok: "border border-[#b7d8c6] bg-[var(--fp-ok-bg)] text-[var(--fp-ok)] hover:border-[var(--fp-ok)]",
+  drop: "border border-[#e4c4be] bg-[var(--fp-drop-bg)] text-[var(--fp-drop)] hover:border-[var(--fp-drop)]",
+  undo: "border border-[var(--fp-line-strong)] bg-white text-[var(--fp-muted)] hover:border-[var(--fp-ink)] hover:text-[var(--fp-ink)]",
+  danger: "border border-[#e4c4be] bg-white text-[var(--fp-drop)] hover:border-[var(--fp-drop)] hover:bg-[var(--fp-drop-bg)]",
+};
+
+function ConsoleBtn({ children, icon, onClick, disabled, type = "button", tone = "go", className, ...rest }: { children: ReactNode; icon?: ReactNode; onClick?: () => void; disabled?: boolean; type?: "button" | "submit"; tone?: keyof typeof ACTION_TONE; className?: string } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "disabled" | "type" | "className" | "children">) {
   return (
     <button
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-[#23403a] px-4 text-[13.5px] font-bold text-white transition-all hover:bg-[#1a312c] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+      {...rest}
+      className={cn(
+        "inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-3.5 text-[13.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        ACTION_TONE[tone],
+        className,
+      )}
     >
+      {icon}
       {children}
     </button>
   );
 }
 
+/* Trial menu — opens directly under the Trial button, two explicit outcomes.
+   An inline menu rather than the old full-screen drawer: the FC taps Trial,
+   reads two words, taps one. Nothing to infer, nothing to confirm twice. */
+const TRIAL_OPTIONS: Array<{
+  action: "start-trial" | "complete-trial" | "reopen-trial";
+  label: string;
+  hint: string;
+  tone: string;
+}> = [
+  { action: "start-trial", label: "Trial started", hint: "Customer is trying it on now", tone: "bg-[#23403a] text-white" },
+  { action: "complete-trial", label: "Trial completed", hint: "Done trying — like it or drop it", tone: "bg-[#2e6b4f] text-white" },
+];
+
+function TrialMenu({
+  open, onClose, onPick, busy, name,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (action: "start-trial" | "complete-trial" | "reopen-trial") => void;
+  busy: boolean;
+  name: string;
+}) {
+  const wrap = useRef<HTMLSpanElement>(null);
+  /* The board is a long scrolling list, so a row near the bottom of the
+     screen would push a downward menu off-screen. Measure once on open and
+     flip upward when there isn't room below. Deferred via setTimeout to match
+     the codebase pattern (no setState in an effect body). */
+  const [dropUp, setDropUp] = useState(false);
+  /* On a 320px phone the 264px menu can still hang past the right edge when
+     the Trial button is not at the very left. Shift it back inside the
+     viewport rather than letting the page scroll sideways. */
+  const [shiftLeft, setShiftLeft] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => {
+      const r = wrap.current?.getBoundingClientRect();
+      if (!r) return;
+      const MENU_W = 264;
+      setDropUp(window.innerHeight - r.bottom < 170);
+      const overflow = r.left + MENU_W - (window.innerWidth - 12);
+      setShiftLeft(overflow > 0 ? overflow : 0);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  /* Escape closes — the outside click-catcher only handles pointer input, so
+     without this a keyboard user can be trapped in the menu. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <span ref={wrap} className="relative inline-block">
+      {/* Click-catcher closes the menu on any outside tap without needing a
+          document listener. Not aria-hidden: it is a real button, so it needs
+          a label — tabIndex -1 keeps it out of the tab order. */}
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Close trial menu"
+        onClick={onClose}
+        className="fixed inset-0 z-20 cursor-default"
+      />
+      <span
+        role="menu"
+        aria-label={`Trial options for ${name}`}
+        /* translateX pulls the panel back inside the viewport by exactly the
+           measured overflow — anchored positioning can't do this because the
+           reference is the button, not the screen. */
+        style={shiftLeft ? { transform: `translateX(-${shiftLeft}px)` } : undefined}
+        className={cn(
+          "absolute left-0 z-30 block w-[264px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-[var(--fp-line-strong)] bg-white shadow-[0_10px_30px_-12px_rgba(33,29,24,0.35)]",
+          dropUp ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+6px)]",
+        )}
+      >
+        {TRIAL_OPTIONS.map((o) => (
+          <button
+            key={o.action}
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => onPick(o.action)}
+            className="flex w-full items-center gap-3 border-b border-[var(--fp-line)] px-3.5 py-3 text-left last:border-b-0 hover:bg-[var(--fp-ink-soft)] disabled:opacity-50"
+          >
+            <span aria-hidden className={`grid size-8 shrink-0 place-items-center rounded-lg ${o.tone}`}>
+              {o.action === "start-trial" ? <Shirt className="size-4" /> : <Check className="size-4" />}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[14px] font-bold text-[#211d18]">{o.label}</span>
+              <span className="block text-[12px] leading-snug text-[#7a736a]">{o.hint}</span>
+            </span>
+          </button>
+        ))}
+      </span>
+    </span>
+  );
+}
+
 function ProductRow({
-  card, busy, onOpen, onTrial, onLike, onUnlike, onDrop, onUndrop, onBill,
+  card, busy, onOpen, onTrial, trialMenuOpen, onTrialPick, onLike, onUnlike, onDrop, onUndrop, onBill, onRemove,
   selectable, checked, onToggle, readOnly,
 }: {
   card: ProductCardDTO;
   busy: string | null;
   onOpen: () => void;
   onTrial: () => void;
+  /** This row's Trial menu is open. */
+  trialMenuOpen?: boolean;
+  onTrialPick?: (action: "start-trial" | "complete-trial" | "reopen-trial") => void;
   onLike: () => void;
   onUnlike: () => void;
   onDrop: () => void;
   onUndrop: () => void;
   onBill: () => void;
+  onRemove: () => void;
   selectable?: boolean;
   checked?: boolean;
   onToggle?: () => void;
   readOnly?: boolean;
 }) {
   const p = card.product;
+  /* Removing a piece is a hard delete, so it takes two taps: "Remove" then
+     "Confirm". A single tap on a floor touchscreen loses real stock context. */
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const removing = busy === `remove-${card.id}`;
   const dropped = card.status === "DROPPED";
   const wishlisted = card.status === "LIKED" || card.status === "PURCHASED";
   const canWishlist = !readOnly && !dropped && card.status !== "PURCHASED";
@@ -1427,7 +1637,7 @@ function ProductRow({
           ) : (
             <span aria-hidden className="grid aspect-[3/4] w-full place-items-center rounded-lg bg-[#f1ece4] text-[28px] font-bold text-[#a8a094]">{p.name.slice(0, 1)}</span>
           )}
-          <span title={`SKU ${p.sku} — tap details to copy`} className="absolute left-1.5 top-1.5 max-w-[80px] truncate rounded bg-white/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#57534e] sm:max-w-[112px]">SKU {p.sku}</span>
+          <span title={`SKU ${p.sku}`} className="absolute left-1.5 top-1.5 max-w-[80px] truncate rounded bg-white/95 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#57534e] sm:max-w-[112px]">SKU {p.sku}</span>
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
@@ -1504,51 +1714,102 @@ function ProductRow({
         )}
         {card.status === "SELECTED" && (
           <>
-            <ConsoleBtn disabled={busy === `start-${card.id}`} onClick={onTrial}>
-              {busy === `start-${card.id}` ? "Starting…" : "Trial"}
-            </ConsoleBtn>
-            <ConsoleBtn disabled={busy === `like-${card.id}`} onClick={onLike}>
-              {busy === `like-${card.id}` ? "Saving…" : "Like"}
-            </ConsoleBtn>
-            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
+            <span className="inline-flex items-center gap-1.5">
+              <ConsoleBtn tone="go" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={onTrial}>
+                Trial
+              </ConsoleBtn>
+              <TrialMenu
+                open={!!trialMenuOpen}
+                onClose={onTrial}
+                onPick={(a) => onTrialPick?.(a)}
+                busy={busy === `start-trial-${card.id}` || busy === `complete-trial-${card.id}`}
+                name={p.name}
+              />
+            </span>
+            <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={onDrop}>Drop</ConsoleBtn>
+            {/* Spacer keeps Remove on the far right — a destructive action must
+                never sit next to the one-tap "Trial" an FC reaches for fastest. */}
+            <span aria-hidden className="mr-auto" />
+            {confirmRemove ? (
+              <span className="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  disabled={removing}
+                  aria-label={`Confirm remove ${p.name} from this visit`}
+                  className="inline-flex min-h-[44px] items-center rounded-lg bg-[var(--fp-drop)] px-3 text-[13px] font-bold text-white disabled:opacity-50"
+                >
+                  {removing ? "Removing…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemove(false)}
+                  disabled={removing}
+                  aria-label="Keep product on visit"
+                  className="inline-flex min-h-[44px] items-center rounded-lg border border-[var(--fp-line-strong)] px-3 text-[13px] font-bold text-[var(--fp-muted)]"
+                >
+                  Keep
+                </button>
+              </span>
+            ) : (
+              <ConsoleBtn
+                tone="danger"
+                icon={<Trash2 className="size-4" aria-hidden />}
+                onClick={() => setConfirmRemove(true)}
+                aria-label={`Remove ${p.name} from this visit`}
+              >
+                Remove
+              </ConsoleBtn>
+            )}
           </>
         )}
         {card.status === "TRIAL_IN_PROGRESS" && (
           <>
-            <p className="mr-auto inline-flex items-center gap-1.5 text-[13px] text-[#57534e]">Client is currently trying this on</p>
-            <ConsoleBtn disabled={busy === `complete-${card.id}`} onClick={onTrial}>
-              {busy === `complete-${card.id}` ? "Saving…" : "Trial"}
-            </ConsoleBtn>
-            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
+            <span className="inline-flex items-center gap-1.5">
+              <ConsoleBtn tone="go" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={onTrial}>
+                Trial
+              </ConsoleBtn>
+              <TrialMenu
+                open={!!trialMenuOpen}
+                onClose={onTrial}
+                onPick={(a) => onTrialPick?.(a)}
+                busy={busy === `start-trial-${card.id}` || busy === `complete-trial-${card.id}`}
+                name={p.name}
+              />
+            </span>
+            <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={onDrop}>Drop</ConsoleBtn>
           </>
         )}
         {card.status === "TRIAL_COMPLETED" && (
           <>
-            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn disabled={busy === `like-${card.id}`} onClick={onLike}>
-              {busy === `like-${card.id}` ? "Saving…" : "Like"}
-            </ConsoleBtn>
-            <ConsoleBtn onClick={onBill}>Bill</ConsoleBtn>
-            <ConsoleBtn disabled={busy === `reopen-${card.id}`} onClick={onTrial}>
-              {busy === `reopen-${card.id}` ? "Saving…" : "Trial"}
-            </ConsoleBtn>
+            <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} onClick={onBill}>Bill</ConsoleBtn>
+            <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={onDrop}>Drop</ConsoleBtn>
+            <span className="inline-flex items-center gap-1.5">
+              <ConsoleBtn tone="undo" icon={<Shirt className="size-4" aria-hidden />} disabled={!!busy} onClick={onTrial}>
+                Trial
+              </ConsoleBtn>
+              <TrialMenu
+                open={!!trialMenuOpen}
+                onClose={onTrial}
+                onPick={(a) => onTrialPick?.(a)}
+                busy={busy === `start-trial-${card.id}` || busy === `complete-trial-${card.id}`}
+                name={p.name}
+              />
+            </span>
           </>
         )}
         {card.status === "LIKED" && (
           <>
-            <ConsoleBtn onClick={onDrop}>Drop</ConsoleBtn>
-            <ConsoleBtn disabled={busy === `bill-${card.id}`} onClick={onBill}>
+            <ConsoleBtn tone="ok" icon={<ShoppingBag className="size-4" aria-hidden />} disabled={busy === `bill-${card.id}`} onClick={onBill}>
               {busy === `bill-${card.id}` ? "Saving…" : "Mark billed"}
             </ConsoleBtn>
-            <ConsoleBtn disabled={busy === `unlike-${card.id}`} onClick={onUnlike}>
-              {busy === `unlike-${card.id}` ? "Saving…" : "Unlike"}
-            </ConsoleBtn>
+            <ConsoleBtn tone="drop" icon={<ThumbsDown className="size-4" aria-hidden />} onClick={onDrop}>Drop</ConsoleBtn>
           </>
         )}
         {card.status === "DROPPED" && (
-          <ConsoleBtn disabled={busy === `undrop-${card.id}`} onClick={onUndrop}>
+          <ConsoleBtn tone="undo" icon={<Undo2 className="size-4" aria-hidden />} disabled={busy === `undrop-${card.id}`} onClick={onUndrop}>
             {busy === `undrop-${card.id}` ? "Saving…" : "Undo drop"}
           </ConsoleBtn>
         )}

@@ -52,7 +52,6 @@ console.log(`Seeding demo dataset into store=${STORE_ID}\n`);
 const riya = await staffByEmail("fc-riya@jadepink.test");
 const mehul = await staffByEmail("fc-mehul@jadepink.test");
 const aakashV = await staffByEmail("fc-aakashverma@jadepink.test");
-const nehaFC = await staffByEmail("fc-nehapatel@jadepink.test");
 
 /* ---------- 2. Categories + supplier ---------- */
 await upsert("categories", [

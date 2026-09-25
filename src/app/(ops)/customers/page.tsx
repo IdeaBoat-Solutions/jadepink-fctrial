@@ -101,7 +101,7 @@ function CustomersInner() {
     setStartingId(c.id);
     const v = await createWalkIn();
     if (!v) { setStartingId(null); setErr("Could not open a walk-in. Check your connection and try again."); return; }
-    await attachCustomerToVisit(v.id, c.id);
+    await attachCustomerToVisit(v.id, c.id, undefined, c);
     setStartingId(null);
     pushToast("Walk-in recorded", `${c.name} is attached.`);
     router.push(`/visits/${v.id}`);
@@ -122,7 +122,7 @@ function CustomersInner() {
     <div className="mx-auto max-w-2xl">
       <div className={idle ? "pt-8 sm:pt-16" : "pt-2"}>
         <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[var(--fp-faint)]">Customers</p>
-        <h1 className="fp-name mt-2 text-[30px] leading-[1.05]">Who&apos;s in front of you?</h1>
+        <h1 className="fp-name mt-2 text-[26px] leading-[1.05] sm:text-[30px]">Who&apos;s in front of you?</h1>
         <p className="mt-2 text-[14.5px] leading-relaxed text-[var(--fp-muted)]">
           Search by name or mobile. The record loads the moment it matches — no lists to scroll.
         </p>
@@ -170,7 +170,7 @@ function CustomersInner() {
                 <div className="rounded-xl border border-[#f0d48a] bg-[#fffdf5] p-3">
                   <p className="text-[13.5px] font-semibold text-[#9a5b00]">That number is already registered.</p>
                   <p className="mt-0.5 text-[12.5px] text-[#78716c]">Use the existing record instead — history stays in one place.</p>
-                  <p className="fp-name mt-2 text-[20px] leading-none">{ncExisting.name}</p>
+                  <p className="fp-name mt-2 break-words text-[20px] leading-none">{ncExisting.name}</p>
                   <p className="fp-num mt-1 text-[13px] text-[#78716c]">{formatMobileIN(ncExisting.phone)}</p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <Btn tone="brand" className="flex-1" onClick={() => { setShowCreate(false); setCreated(ncExisting); setNcExisting(null); }}>Use existing record →</Btn>
@@ -202,7 +202,7 @@ function CustomersInner() {
       {created && (
         <article className="fp-rise mt-4 rounded-xl border border-[#bfe3cd] bg-[#f2faf5] p-5">
           <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-[#177245]">Record created</p>
-          <p className="fp-name mt-1.5 text-[26px] leading-none">{created.name}</p>
+          <p className="fp-name mt-1.5 break-words text-[26px] leading-none">{created.name}</p>
           <p className="fp-num mt-1.5 text-[13.5px] text-[#43544c]">{formatMobileIN(created.phone)}</p>
           <div className="mt-3">
             <Btn tone="brand" disabled={startingId === created.id} onClick={() => void start(created)}>
@@ -214,7 +214,7 @@ function CustomersInner() {
 
       {remote && (
         <article className="fp-rise mt-1 rounded-xl border border-[var(--fp-line)] bg-[var(--fp-surface)] p-5 shadow-[var(--fp-shadow)]">
-          <p className="fp-name text-[28px] leading-none">{remote.name}</p>
+          <p className="fp-name break-words text-[28px] leading-none">{remote.name}</p>
           <p className="fp-num mt-2 text-[14px] text-[var(--fp-muted)]">{formatMobileIN(remote.phone)}</p>
           <p className="fp-num mt-1 text-[13px] text-[var(--fp-muted)]">{remote.visitCount} visits · {remote.purchaseCount} purchases</p>
           <div className="mt-4 flex items-center gap-2">
@@ -240,7 +240,7 @@ function CustomersInner() {
             {matches.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--fp-line)] py-4">
                 <div className="min-w-0">
-                  <p className="fp-name text-[20px] leading-none">{c.name}</p>
+                  <p className="fp-name break-words text-[20px] leading-none">{c.name}</p>
                   <p className={`fp-num mt-1.5 text-[13px] ${isShared(c.name) ? "font-semibold text-[var(--fp-ink)]" : "text-[var(--fp-muted)]"}`}>
                     {isShared(c.name) ? `${formatMobileIN(c.phone)} — pick by mobile` : `${formatMobileIN(c.phone)} · ${c.visitCount} visits · ${c.purchaseCount} purchases`}
                   </p>
@@ -269,7 +269,7 @@ function CustomersInner() {
               return (
                 <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-[var(--fp-line)] py-3">
                   <Link href={`/customers/${c.id}`} className="min-w-0">
-                    <span className="block text-[15.5px] font-semibold">{c.name}</span>
+                    <span className="block break-words text-[15.5px] font-semibold">{c.name}</span>
                     <span className="fp-num text-[12.5px] text-[var(--fp-muted)]">{formatMobileIN(c.phone)}</span>
                   </Link>
                   {live && <StatusMark value="active" label="In store" />}

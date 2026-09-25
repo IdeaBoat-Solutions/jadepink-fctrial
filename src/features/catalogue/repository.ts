@@ -17,6 +17,7 @@ import type {
   Order,
   OrderItem,
   Product,
+  ProductVariant,
   StockMovement,
   Supplier,
 } from "@/lib/inventory";
@@ -186,6 +187,46 @@ export async function getProduct(id: string): Promise<Product | undefined> {
   return data ? mapProduct(data as unknown as Joined<ProductRow>) : undefined;
 }
 
+interface ProductVariantRow {
+  id: string;
+  product_id: string;
+  sku: string;
+  barcode: string | null;
+  size: string;
+  colour: string;
+  price: number | string;
+  image_key: string | null;
+  is_active: boolean;
+}
+
+function mapVariant(row: ProductVariantRow): ProductVariant {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    sku: row.sku,
+    barcode: row.barcode,
+    size: row.size,
+    colour: row.colour,
+    price: Number(row.price ?? 0),
+    imageKey: row.image_key,
+    isActive: row.is_active,
+  };
+}
+
+/** All sellable variants for a product, ordered for stable staff-facing tables. */
+export async function listProductVariants(productId: string): Promise<ProductVariant[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("product_variants")
+    .select("id, product_id, sku, barcode, size, colour, price, image_key, is_active")
+    .eq("product_id", productId)
+    .order("is_active", { ascending: false })
+    .order("size", { ascending: true })
+    .order("colour", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapVariant(row as ProductVariantRow));
+}
+
 /* ---------- Categories + suppliers (counts derived, never stored) ---------- */
 
 export async function listCategories(): Promise<Category[]> {
@@ -287,7 +328,7 @@ export function mapOrder(row: OrderRow): Order {
 export async function listOrders(opts: { page?: number; pageSize?: number; status?: string } = {}) {
   const supabase = await createClient();
   const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(100, Math.max(1, opts.pageSize ?? 20));
+  const pageSize = Math.min(1000, Math.max(1, opts.pageSize ?? 20));
   let query = supabase
     .from("orders")
     .select("*, order_items(product_id, product_name, qty, price)", { count: "exact" });
@@ -341,7 +382,8 @@ export async function listRecentBilledItems(limit = 20): Promise<BilledItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("order_items")
-    .select("qty, price, product_name, orders(id, code, customer_name, channel, fc_name, created_at)")
+    .select("qty, price, product_name, orders!inner(id, code, customer_name, channel, fc_name, created_at, status)")
+    .neq("orders.status", "cancelled")
     .order("id", { ascending: false })
     .limit(Math.min(100, Math.max(1, limit)));
   if (error) throw new Error(error.message);
@@ -408,8 +450,9 @@ export async function listPurchasesForProduct(productId: string, limit = 50): Pr
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("order_items")
-    .select("qty, price, orders(id, code, customer_name, customer_phone, channel, fc_name, created_at)")
+    .select("qty, price, orders!inner(id, code, customer_name, customer_phone, channel, fc_name, created_at, status)")
     .eq("product_id", productId)
+    .neq("orders.status", "cancelled")
     .order("id", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);

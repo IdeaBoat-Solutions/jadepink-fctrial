@@ -31,7 +31,9 @@ export default function OpsProductPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setState({ status: "loading" });
+    const loadingTimer = window.setTimeout(() => {
+      setState({ status: "loading" });
+    }, 0);
     void (async () => {
       const r = await getProductDetail(id);
       if (cancelled) return;
@@ -39,7 +41,7 @@ export default function OpsProductPage() {
       else if (r.code === "PRODUCT_NOT_FOUND") setState({ status: "missing" });
       else setState({ status: "error", message: r.message });
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(loadingTimer); };
   }, [id, attempt]);
 
   if (state.status === "loading") {
@@ -93,6 +95,7 @@ export default function OpsProductPage() {
   }
 
   const p = state.data.product;
+  const variants = state.data.variants ?? [];
   const s = stockStatus(p);
   const images = (p.imageUrls ?? []).filter(Boolean);
   const stockLabel = s === "in-stock" ? `In stock · ${p.stock}` : s === "low-stock" ? `Low · ${p.stock}` : "Out of stock";
@@ -121,10 +124,10 @@ export default function OpsProductPage() {
       </div>
 
       <div className="mt-4 rounded-xl border border-[#e9e2d8] bg-white p-4 sm:p-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">
+        <p className="break-all text-[11px] font-bold uppercase tracking-[0.1em] text-[#7a736a]">
           {p.sku} · {p.categoryName || "Catalogue"}
         </p>
-        <h1 className="mt-1 text-[24px] font-bold leading-tight tracking-tight text-[#211d18]">{p.name}</h1>
+        <h1 className="mt-1 break-words text-[24px] font-bold leading-tight tracking-tight text-[#211d18]">{p.name}</h1>
         <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-[#f1ece4] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#57534e]">
           <span aria-hidden className={`size-1.5 rounded-full ${s === "out-of-stock" ? "bg-[#b23a48]" : s === "low-stock" ? "bg-[#9a5b00]" : "bg-[#1c6b46]"}`} />
           {stockLabel}
@@ -138,12 +141,29 @@ export default function OpsProductPage() {
           {facts.map(([k, v]) => (
             <div key={k} className="flex items-baseline justify-between gap-4 py-2.5 text-[14px]">
               <dt className="shrink-0 text-[#7a736a]">{k}</dt>
-              <dd className={`min-w-0 text-right font-semibold text-[#211d18] ${k === "SKU" || k === "Barcode" ? "font-mono text-[13px]" : ""}`}>
+              <dd className={`min-w-0 flex-1 break-all text-right font-semibold text-[#211d18] ${k === "SKU" || k === "Barcode" ? "font-mono text-[13px]" : ""}`}>
                 {v}
               </dd>
             </div>
           ))}
         </dl>
+        <section className="mt-5 border-t border-[#f1ece4] pt-4" aria-label="Product variants">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#57534e]">Available variants</h2>
+            <span className="text-[12px] text-[#78716c]">{variants.length} total</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {variants.map((v) => (
+              <div key={v.id} className={`min-w-0 max-w-full rounded-lg border px-3 py-2 text-[12.5px] ${v.isActive ? "border-[#d6c9bb] bg-white" : "border-[#e5e7eb] bg-[#f5f5f4] opacity-60"}`}>
+                <p className="break-words font-semibold text-[#211d18]">{v.size} · {v.colour}</p>
+                <p className="tnum mt-0.5 break-all font-mono text-[11px] text-[#78716c]">{v.sku}</p>
+                {v.barcode && <p className="tnum mt-0.5 break-all text-[11px] text-[#78716c]">{v.barcode}</p>}
+                {!v.isActive && <p className="mt-1 font-semibold">Inactive</p>}
+              </div>
+            ))}
+            {!variants.length && <p className="text-[13.5px] text-[#78716c]">No sellable variants are on file.</p>}
+          </div>
+        </section>
       </div>
     </div>
   );

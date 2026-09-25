@@ -10,7 +10,10 @@ async function api(path, opts = {}) {
   try { json = await res.json(); } catch {}
   return { status: res.status, json };
 }
-await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: "fc-aakash@jadepink.test", password: "JadePink123!" }) });
+const setupEmail = process.env.SETUP_EMAIL;
+const setupPassword = process.env.SETUP_PASSWORD;
+if (!setupEmail || !setupPassword) throw new Error("SETUP_EMAIL and SETUP_PASSWORD are required");
+await api("/api/auth/login", { method: "POST", body: JSON.stringify({ email: setupEmail, password: setupPassword }) });
 // find a customer with no live visit
 const s = await api("/api/customers/search?name=" + encodeURIComponent("riya"));
 console.log("search riya:", s.status, JSON.stringify(s.json)?.slice(0, 200));
