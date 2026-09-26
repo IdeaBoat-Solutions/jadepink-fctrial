@@ -110,20 +110,24 @@ const customers = [
 ];
 await upsert("customers", customers, "id");
 
-/* ---------- 6. Visits — reproduces each mockup's live-floor state ---------- */
+/* ---------- 6. Visits — reproduces each mockup's live-floor state ----------
+   `created_at` is set explicitly (not just left to the DB default) because
+   listTodayVisits() filters on created_at >= start of today: a re-run of
+   this script must always land the demo visits inside "today", even days
+   after the first seed, or the whole floor/dashboard goes quiet. */
 const visits = [
   // img1/img3: Priya Shah, ACTIVE trial in Suite 03 with Riya, 18m in.
-  { id: "demo-visit-priya", customer_id: "demo-cust-priya", store_id: STORE_ID, assigned_salesperson_id: riya.id, status: "ACTIVE", suite: "Suite 03", budget: "₹15,000 – ₹25,000", arrived_at: minAgo(23), identified_at: minAgo(22), assigned_at: minAgo(20), started_at: minAgo(19) },
+  { id: "demo-visit-priya", customer_id: "demo-cust-priya", store_id: STORE_ID, assigned_salesperson_id: riya.id, status: "ACTIVE", suite: "Suite 03", budget: "₹15,000 – ₹25,000", created_at: minAgo(23), arrived_at: minAgo(23), identified_at: minAgo(22), assigned_at: minAgo(20), started_at: minAgo(19) },
   // img4: Rahul Mehta, ACTIVE trial in Suite 01 with Aakash Verma, 24m in.
-  { id: "demo-visit-rahul", customer_id: "demo-cust-rahul", store_id: STORE_ID, assigned_salesperson_id: aakashV.id, status: "ACTIVE", suite: "Suite 01", arrived_at: minAgo(29), identified_at: minAgo(28), assigned_at: minAgo(26), started_at: minAgo(24) },
+  { id: "demo-visit-rahul", customer_id: "demo-cust-rahul", store_id: STORE_ID, assigned_salesperson_id: aakashV.id, status: "ACTIVE", suite: "Suite 01", created_at: minAgo(29), arrived_at: minAgo(29), identified_at: minAgo(28), assigned_at: minAgo(26), started_at: minAgo(24) },
   // img4: Kavita Reddy, floor-browsing with Mehul, suite not yet assigned.
-  { id: "demo-visit-kavita", customer_id: "demo-cust-kavita", store_id: STORE_ID, assigned_salesperson_id: mehul.id, status: "ASSIGNED", arrived_at: minAgo(13), identified_at: minAgo(12), assigned_at: minAgo(12) },
+  { id: "demo-visit-kavita", customer_id: "demo-cust-kavita", store_id: STORE_ID, assigned_salesperson_id: mehul.id, status: "ASSIGNED", created_at: minAgo(13), arrived_at: minAgo(13), identified_at: minAgo(12), assigned_at: minAgo(12) },
   // img4: Neha Patel, urgent wait — identified, no FC yet (3m12s).
-  { id: "demo-visit-neha", customer_id: "demo-cust-neha", store_id: STORE_ID, assigned_salesperson_id: null, status: "ARRIVED", arrived_at: minAgo(3) },
+  { id: "demo-visit-neha", customer_id: "demo-cust-neha", store_id: STORE_ID, assigned_salesperson_id: null, status: "ARRIVED", created_at: minAgo(3), arrived_at: minAgo(3) },
   // img6: Ananya Roy, completed today, billed ₹24,800.
-  { id: "demo-visit-ananya", customer_id: "demo-cust-ananya", store_id: STORE_ID, assigned_salesperson_id: riya.id, status: "COMPLETED", arrived_at: daysAgo(0, 12, 40), identified_at: daysAgo(0, 12, 41), assigned_at: daysAgo(0, 12, 42), started_at: daysAgo(0, 12, 45), completed_at: daysAgo(0, 13, 15) },
+  { id: "demo-visit-ananya", customer_id: "demo-cust-ananya", store_id: STORE_ID, assigned_salesperson_id: riya.id, status: "COMPLETED", created_at: daysAgo(0, 12, 40), arrived_at: daysAgo(0, 12, 40), identified_at: daysAgo(0, 12, 41), assigned_at: daysAgo(0, 12, 42), started_at: daysAgo(0, 12, 45), completed_at: daysAgo(0, 13, 15) },
   // img6: Tanvi Deshmukh, identification pending, seated in Central Salon.
-  { id: "demo-visit-tanvi", customer_id: "demo-cust-tanvi", store_id: STORE_ID, assigned_salesperson_id: null, status: "IDENTIFYING", arrived_at: minAgo(6) },
+  { id: "demo-visit-tanvi", customer_id: "demo-cust-tanvi", store_id: STORE_ID, assigned_salesperson_id: null, status: "IDENTIFYING", created_at: minAgo(6), arrived_at: minAgo(6) },
 ];
 await upsert("visits", visits, "id");
 
